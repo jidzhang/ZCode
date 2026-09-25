@@ -39,6 +39,8 @@ interface FeishuAccessTokenResponse {
   code?: number;
   msg?: string;
   tenant_access_token?: string;
+  /** token 有效期（秒）。飞书声明的标准值为 7200，但以服务端返回为准。 */
+  expire?: number;
 }
 
 interface FeishuSendMessageResponse {
@@ -1089,6 +1091,53 @@ function splitFeishuText(text: string): string[] {
   return chunks.length > 0 ? chunks : [text];
 }
 
+const FEISHU_TOKEN_CACHE_TTL_MS = 90 * 60_000;
+const FEISHU_TOKEN_EXPIRY_SAFETY_MARGIN_MS = 5 * 60_000;
+const FEISHU_TOKEN_MIN_CACHE_TTL_MS = 60_000;
+
+/** 飞书"无效 token"类业务错误码：重发同一 token 必然再败，必须驱逐缓存换新。 */
+const INVALID_FEISHU_TOKEN_CODES: ReadonlySet<number> = new Set([99991661, 99991663, 99991664]);
+
+export function isInvalidFeishuTokenCode(code: number | undefined): boolean {
+  return typeof code === "number" && INVALID_FEISHU_TOKEN_CODES.has(code);
+}
+
+/** 带 token 失效语义的错误对象形态（createFeishuMessageError 写入 feishuCode）。 */
+export interface FeishuApiError extends Error {
+  feishuCode?: number;
+}
+
+export function getFeishuErrorCode(error: unknown): number | undefined {
+  const code = (error as FeishuApiError | null | undefined)?.feishuCode;
+  return typeof code === "number" ? code : undefined;
+}
+
+export function resolveFeishuTokenCacheTtlMs(expireSeconds: number | undefined): number {
+  // 修复原因（2026-09-25 实机事故）：旧实现硬编码 90 分钟缓存、忽略飞书返回的 expire，
+  // 若服务端实际有效期短于 90 分钟，缓存会在窗口尾部持续供给临期/作废 token。
+  // TTL 取 min(90min, expire-5min) 且下限 1min；expire 缺失时保持旧行为。
+  if (typeof expireSeconds !== "number" || !Number.isFinite(expireSeconds)) {
+    return FEISHU_TOKEN_CACHE_TTL_MS;
+  }
+  const capped = Math.min(
+    FEISHU_TOKEN_CACHE_TTL_MS,
+    expireSeconds * 1_000 - FEISHU_TOKEN_EXPIRY_SAFETY_MARGIN_MS,
+  );
+  return Math.max(FEISHU_TOKEN_MIN_CACHE_TTL_MS, capped);
+}
+
+export function invalidateFeishuTenantAccessToken(bot: BotConfig): void {
+  // 修复原因：token 可能被飞书在声明的有效期内提前作废（事故中同回合 create 成功
+  // 数分钟后 update 即 99991663）。收到无效 token 错误后必须驱逐缓存，否则退避重试
+  // 继续复用同一坏 token，三连败触发熔断、最终回复被静默丢弃。
+  if (!bot.feishuAppId || !bot.credentialRef) {
+    return;
+  }
+  accessTokenCache.delete(
+    `${getFeishuDomainProvider(bot)}:${bot.feishuAppId}:${bot.credentialRef}`,
+  );
+}
+
 async function readTenantAccessToken(
   bot: BotConfig,
   deps: FeishuProviderDeps,
@@ -1124,7 +1173,7 @@ async function readTenantAccessToken(
   }
   accessTokenCache.set(cacheKey, {
     token: payload.tenant_access_token,
-    expiresAt: Date.now() + 90 * 60_000,
+    expiresAt: Date.now() + resolveFeishuTokenCacheTtlMs(payload.expire),
   });
   return payload.tenant_access_token;
 }
@@ -1150,9 +1199,15 @@ function createFeishuMessageError(
   ].filter((detail): detail is string => Boolean(detail));
   // 修复原因：飞书的 HTTP 400 会在响应体中携带业务错误码、原因和排查 log_id。
   // 旧实现先按 HTTP 状态抛错，导致这些已解析的信息永久丢失，无法区分权限、限流和卡片错误。
-  return new Error(
+  const error: FeishuApiError = new Error(
     `Feishu ${operation} failed: HTTP ${status}${details.length > 0 ? `, ${details.join(", ")}` : ""}`,
   );
+  // 修复原因：调用方需要按业务码识别"无效 token"（驱逐缓存即自愈）与权限/限流等
+  // 不可自愈错误；只拼进消息文本会让结构化信息在抛出处丢失。
+  if (typeof payload?.code === "number") {
+    error.feishuCode = payload.code;
+  }
+  return error;
 }
 
 async function sendFeishuInteractiveCard(

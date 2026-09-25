@@ -107,7 +107,12 @@ import {
   beginWeixinRegistration as beginWeixinQrRegistration,
   pollWeixinRegistration as pollWeixinQrRegistration,
 } from "./providers/weixinRegistration.js";
-import { createFeishuBotProvider } from "./providers/feishuProvider.js";
+import {
+  createFeishuBotProvider,
+  getFeishuErrorCode,
+  invalidateFeishuTenantAccessToken,
+  isInvalidFeishuTokenCode,
+} from "./providers/feishuProvider.js";
 import { formatBotMessage, type BotMessageId } from "./messages.js";
 import {
   extractBotAssistantResponseMessages,
@@ -214,6 +219,10 @@ const FEISHU_STREAMING_CARD_MIN_UPDATE_INTERVAL_MS = 1_000;
 const FEISHU_STREAMING_CARD_REQUEST_TIMEOUT_MS = 15_000;
 const FEISHU_STREAMING_CARD_FAILURE_BACKOFF_BASE_MS = 1_000;
 const FEISHU_STREAMING_CARD_FAILURE_CIRCUIT_THRESHOLD = 3;
+// 修复原因（2026-09-25 实机事故）：熔断原本没有复位路径——一次 token 失效或网络抖动
+// 三连败就让当回合卡片永久停摆，最终回复被静默丢弃（用户侧表现为永远"运行中"）。
+// 改为冷却式熔断：到期后半开放行一次尝试，成功即完全复位。
+const FEISHU_STREAMING_CARD_CIRCUIT_COOLDOWN_MS = 60_000;
 const BOT_ELICITATION_PROGRESS_BROADCAST_TIMEOUT_MS = 1_000;
 const BOT_PROVIDER_CALLBACK_ACK_TIMEOUT_MS = 3_000;
 
@@ -3658,7 +3667,7 @@ export function createBotsService(
     let streamingCardLastUpdateAt = 0;
     let streamingCardConsecutiveFailures = 0;
     let streamingCardNextAttemptAt = 0;
-    let streamingCardCircuitOpen = false;
+    let streamingCardCircuitUntil = 0;
     let streamingCardQueue: Promise<void> = Promise.resolve();
     const supportsStreamingCardReply = () => {
       const adapter = providers[bot.provider];
@@ -3757,7 +3766,7 @@ export function createBotsService(
       const now = Date.now();
       // Bugfix：旧实现只在成功后更新时间基准，Feishu 失败时每个 stream event 都会真实发请求；
       // force 路径还会绕过普通节流。失败退避和熔断必须先于 force 判断，避免单次 400 被放大成风暴。
-      if (streamingCardCircuitOpen || now < streamingCardNextAttemptAt) {
+      if (now < streamingCardCircuitUntil || now < streamingCardNextAttemptAt) {
         return;
       }
       if (
@@ -3829,20 +3838,36 @@ export function createBotsService(
             streamingCardLastUpdateAt = Date.now();
             streamingCardConsecutiveFailures = 0;
             streamingCardNextAttemptAt = 0;
+            streamingCardCircuitUntil = 0;
           } catch (error) {
             // Bugfix: 第三方卡片只是 best-effort 展示，超时/失败不能阻塞 task_complete、
             // task_error 或 typing 清理等生命周期事件。
-            streamingCardConsecutiveFailures += 1;
             const errorMessage = error instanceof Error ? error.message : String(error);
-            if (
-              streamingCardConsecutiveFailures >= FEISHU_STREAMING_CARD_FAILURE_CIRCUIT_THRESHOLD
+            if (isInvalidFeishuTokenCode(getFeishuErrorCode(error))) {
+              // 修复原因（2026-09-25 实机事故）：tenant_access_token 会被飞书在声明的
+              // 有效期内提前作废（同回合 create 成功数分钟后 update 即 99991663）。
+              // 缓存不驱逐则退避重试复用同一坏 token 必然再败，三连败熔断后最终回复
+              // 被静默丢弃。驱逐缓存让下一次同步（terminal 事件会 force 触发）取新
+              // token 自愈；此类失败换 token 即可恢复，不计入熔断计数。
+              invalidateFeishuTenantAccessToken(bot);
+              streamingCardNextAttemptAt =
+                Date.now() + FEISHU_STREAMING_CARD_FAILURE_BACKOFF_BASE_MS;
+              botsLogger.warn(
+                undefined,
+                `Feishu streaming card token invalid, evicted cached token task=${context.activeTaskId} trigger=${trigger} operation=${operation}: ${errorMessage}`,
+              );
+            } else if (
+              streamingCardConsecutiveFailures + 1 >=
+              FEISHU_STREAMING_CARD_FAILURE_CIRCUIT_THRESHOLD
             ) {
-              streamingCardCircuitOpen = true;
+              streamingCardConsecutiveFailures += 1;
+              streamingCardCircuitUntil = Date.now() + FEISHU_STREAMING_CARD_CIRCUIT_COOLDOWN_MS;
               botsLogger.warn(
                 undefined,
                 `Feishu streaming card circuit opened task=${context.activeTaskId} trigger=${trigger} operation=${operation} failures=${streamingCardConsecutiveFailures}: ${errorMessage}`,
               );
             } else {
+              streamingCardConsecutiveFailures += 1;
               const retryDelayMs =
                 FEISHU_STREAMING_CARD_FAILURE_BACKOFF_BASE_MS *
                 2 ** (streamingCardConsecutiveFailures - 1);

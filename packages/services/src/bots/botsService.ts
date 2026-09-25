@@ -705,6 +705,10 @@ export function createBotsService(
   const typingIntervals = new Map<string, ReturnType<typeof setInterval>>();
   const typingTargets = new Map<string, { bot: BotConfig; target: BotTypingTarget }>();
   const runningTasks = new Set<string>();
+  // 修复原因（2026-09-25 插话排队）：忙时纯文本改走 host 命令队列后，bot 需要知道
+  // 每个 task 还有几条排队输入将由 host drain 执行——终态事件到达时据此重建流订阅，
+  // 否则 drain 出的新回合无人观看、回复黑洞。仅记录 bot 自己的入队动作，不镜像 host 队列。
+  const queuedPromptRuns = new Map<string, number>();
   const liveStatusProgressByTaskId = new Map<
     string,
     { kind: "message" | "thought" | "tool"; text: string }
@@ -4122,6 +4126,17 @@ export function createBotsService(
         );
         streamSubscriptions.get(streamSubscriptionKey)?.dispose();
         streamSubscriptions.delete(streamSubscriptionKey);
+        const queuedRuns = queuedPromptRuns.get(event.taskId) ?? 0;
+        if (queuedRuns > 0) {
+          // 修复原因（2026-09-25 插话排队）：排队的输入由 host 在空闲时 drain 执行，
+          // 会对同一 task 开启新回合；但上面刚销毁流订阅，若不重建，drain 出的回合
+          // 没有任何流式回复与终态通知（用户只见"已排队"再无下文）。这里消耗一个
+          // 排队计数并重建订阅，让 drain 回合走既有回复路径；最后一个 drain 回合的
+          // 终态计数归零，按原语义正常清理。
+          queuedPromptRuns.set(event.taskId, queuedRuns - 1);
+          runningTasks.add(event.taskId);
+          await watchTaskStream(bot, actor, context, user);
+        }
         if (event.type === "task_error") {
           if (supportsStreamingCardReply()) {
             streamingCardStatus = "error";
@@ -4844,13 +4859,6 @@ export function createBotsService(
     if (elicitationReply) {
       return elicitationReply;
     }
-    if (
-      auth.context.mode === "task" &&
-      auth.context.activeTaskId &&
-      (await isContextActiveTaskRunning(auth.context))
-    ) {
-      return [createOutbound(message.actor, msg(auth.locale, "taskRunning"))];
-    }
     let preparedMessage: PreparedBotMessageContent;
     try {
       preparedMessage = await prepareBotMessageContent(auth.bot, message, auth.locale);
@@ -4860,6 +4868,43 @@ export function createBotsService(
           message.actor,
           msg(auth.locale, "attachmentRejected", {
             message: formatAttachmentRejectedReason(error, auth.locale),
+          }),
+        ),
+      ];
+    }
+    if (
+      auth.context.mode === "task" &&
+      auth.context.activeTaskId &&
+      (await isContextActiveTaskRunning(auth.context))
+    ) {
+      // 修复原因（2026-09-25 用户反馈"不能插话"）：忙时直接拒绝让用户无法补充
+      // 信息，只能干等或 /停止。host 本就有 per-task 命令队列（空闲时自动 drain
+      // 执行），feishu/wechat-channel 也已采用同一语义；这里把忙时纯文本改为排队。
+      const queuedTraceId = generateTraceId(auth.context.activeTaskId);
+      const zcodeTaskService = await resolveZCodeTaskServiceForContext(auth.context);
+      await zcodeTaskService.enqueueTaskCommand({
+        workspacePath: auth.context.workspacePath,
+        workspaceIdentity: auth.context.workspaceIdentity,
+        taskId: auth.context.activeTaskId,
+        commandId: queuedTraceId,
+        traceId: queuedTraceId,
+        type: "send_prompt",
+        content: preparedMessage.content,
+        attachments:
+          preparedMessage.zcodeAttachments.length > 0
+            ? preparedMessage.zcodeAttachments
+            : undefined,
+        clientId: "zcode-bot",
+      });
+      queuedPromptRuns.set(
+        auth.context.activeTaskId,
+        (queuedPromptRuns.get(auth.context.activeTaskId) ?? 0) + 1,
+      );
+      return [
+        createOutbound(
+          message.actor,
+          msg(auth.locale, "promptQueued", {
+            count: queuedPromptRuns.get(auth.context.activeTaskId) ?? 1,
           }),
         ),
       ];

@@ -105,6 +105,7 @@ const messages = {
     unknownCommand: "未知命令：**/{command}**",
     taskFailed: "任务失败：{message}",
     taskRunning: "当前任务正在运行，稍后再试，或使用 **/停止** 停止当前任务。",
+    promptQueued: "⏬ 已加入队列（待执行 {count} 条），当前回合结束后自动执行。",
     taskSelectTitle: "当前任务 {task}\n选择任务",
     noHistoryTasks: "当前 workspace 没有历史任务。",
     remoteDisconnected:
@@ -225,6 +226,8 @@ const messages = {
     taskFailed: "Task failed: {message}",
     taskRunning:
       "The current task is still running. Try again later, or use **/stop** to stop the current task.",
+    promptQueued:
+      "Queued — {count} pending input(s) will run automatically after the current turn.",
     taskSelectTitle: "Current task {task}\nSelect task",
     noHistoryTasks: "There are no history tasks in the current workspace.",
     remoteDisconnected:

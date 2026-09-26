@@ -1,0 +1,14 @@
+{
+  "name": "@arms/rum-electron",
+  "version": "0.0.3",
+  "private": true,
+  "description": "safe-zcode 空实现：替代阿里云 ARMS RUM Electron SDK，API 兼容但零网络出站。",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  }
+}

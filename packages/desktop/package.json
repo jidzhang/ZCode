@@ -27,7 +27,7 @@
     "lint:fix": "oxlint --fix"
   },
   "dependencies": {
-    "@arms/rum-electron": "^0.0.3",
+    "@arms/rum-electron": "workspace:*",
     "@babel/runtime": "^7.24.5",
     "@fiahfy/icns": "^0.0.7",
     "@larksuiteoapi/node-sdk": "1.61.1",

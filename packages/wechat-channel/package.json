@@ -1,0 +1,39 @@
+{
+  "name": "@zcode/wechat-channel",
+  "version": "0.1.0",
+  "private": true,
+  "bin": {
+    "zcode-wechat": "./dist/cli.js"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/cli.ts",
+    "start": "tsx src/cli.ts",
+    "login": "node scripts/wechat-login.mjs",
+    "clean": "node ../../scripts/clean-dist.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint src test",
+    "lint:fix": "oxlint --fix src test",
+    "test": "node --test --import tsx test/*.test.ts"
+  },
+  "dependencies": {
+    "@zcode/client": "workspace:*",
+    "@zcode/rpc": "workspace:*",
+    "@zcode/services": "workspace:*",
+    "@zcode/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsx": "^4.19.4",
+    "typescript": "^6.0.2"
+  }
+}

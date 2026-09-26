@@ -69,3 +69,9 @@ packages/desktop/.e2e-artifacts/
 packages/desktop/.e2e-cache/
 packages/desktop/.e2e-network-capture/
 .zcode-runtime/
+
+# feishu-channel 本地凭据（勿提交）
+packages/feishu-channel/.env.local
+
+# wechat-channel 本地凭据（勿提交）
+packages/wechat-channel/.env.local

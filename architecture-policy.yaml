@@ -52,6 +52,22 @@ modules:
   - id: formal-proof
     roots: [packages/formal-proof/src]
     managed: false
+  - id: feishu-channel
+    roots: [packages/feishu-channel/src]
+    managed: true
+    requires: [shared, rpc, services, client]
+    publicEntrypoints: [packages/feishu-channel/src/contract.ts]
+    layers: { domain: domain, app: app, adapters: adapters }
+    layerOrder: [domain, app, adapters]
+    owner: feishu-channel
+  - id: wechat-channel
+    roots: [packages/wechat-channel/src]
+    managed: true
+    requires: [shared, rpc, services, client]
+    publicEntrypoints: [packages/wechat-channel/src/contract.ts]
+    layers: { domain: domain, app: app, adapters: adapters }
+    layerOrder: [domain, app, adapters]
+    owner: wechat-channel
   - id: zcode-cli
     roots: [apps/zcode-cli]
     managed: false

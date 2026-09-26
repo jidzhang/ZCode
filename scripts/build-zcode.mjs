@@ -103,6 +103,9 @@ function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: root,
     stdio: "inherit",
+    // Windows 下 spawnSync 不带 shell 无法解析 pnpm.CMD（CreateProcess 只认可执行映像，
+    // 新版 Node 对 .cmd/.bat 直接 EINVAL）。参数均为无空格的简单 token，shell 合并是安全的。
+    ...(process.platform === "win32" ? { shell: true } : {}),
     ...options,
   });
   if (result.error) {
@@ -226,7 +229,10 @@ async function createTarball({ packageParent, releaseDir, tarballName }) {
   await rm(tarball, {
     force: true,
   });
-  run("tar", ["-czf", tarball, "-C", packageParent, packageDirName]);
+  // GNU tar 把 "D:\..." 的盘符冒号解释成远程主机名（rsh 协议），Windows 必须加
+  // --force-local 关闭该解释，否则打包在 Windows 上必然失败（上游仅 macOS/Linux 开发）。
+  const tarArgs = ["-czf", tarball, "-C", packageParent, packageDirName];
+  run("tar", process.platform === "win32" ? ["--force-local", ...tarArgs] : tarArgs);
   return tarball;
 }
 

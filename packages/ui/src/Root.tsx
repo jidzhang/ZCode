@@ -1,5 +1,14 @@
 /* eslint-disable max-lines -- Root 当前集中编排启动和 workspace shell wiring，先保持入口收口避免跨层状态拆散。 */
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SetStateAction,
+} from "react";
 import { LucideProvider, RefreshCw } from "lucide-react";
 import {
   APP_RUNTIME_PREFERENCES_CHANGED_BROADCAST_CHANNEL,
@@ -33,6 +42,10 @@ import {
   shouldShowRootStartupLoading,
   shouldOpenFallbackWorkspaceAfterCreate,
 } from "@/lib/rootStartupGate.js";
+import {
+  filterWelcomeScreenOpenReason,
+  isWelcomeScreenOpenReasonAllowed,
+} from "@/lib/localUiOverrides.js";
 import { StoreProvider, useZCodeStore } from "@/store/StoreProvider.js";
 import { setMcpStorePlatform } from "@/store/mcpStore.js";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
@@ -202,10 +215,30 @@ function RootInner({
     refresh: refreshAppSettings,
     update: updateAppSettings,
   } = useSettings();
-  const [welcomeScreenOpenReason, setWelcomeScreenOpenReason] =
+  const [welcomeScreenOpenReason, setWelcomeScreenOpenReasonState] =
     useState<WelcomeScreenOpenReason | null>(() =>
-      consumeZcodeJwtInvalidRestartMarker() ? "session-expired" : null,
+      // safe-zcode：重启时的 JWT 失效标记仍要消费（清除标记），但 session-expired
+      // 不再放行开屏——登录推送白名单见 lib/localUiOverrides.ts 头注释。
+      filterWelcomeScreenOpenReason(
+        consumeZcodeJwtInvalidRestartMarker() ? "session-expired" : null,
+      ),
     );
+  // safe-zcode 登录推送门控（2026-09-27）：WelcomeScreen 的全部主动打开路径都
+  // 收敛在本 setter（启动守卫、session-expired、登出、模型请求、手动登录），这里
+  // 按白名单放行用户主动触发的 reason，吞掉上游强推的开屏（启动强推、过期全屏
+  // 重登）；白名单外的新 reason 默认维持现状（默认静默）。关闭请求（null）永远
+  // 放行；白名单外的开屏请求保持当前状态不折叠为 null，避免吞掉用户已手动打开
+  // 的登录页（如启动守卫晚于手动登录完成时）。被动入口不经此 setter，不受影响。
+  const setWelcomeScreenOpenReason = useCallback(
+    (update: SetStateAction<WelcomeScreenOpenReason | null>) => {
+      setWelcomeScreenOpenReasonState((current) => {
+        const next = typeof update === "function" ? update(current) : update;
+        if (next === null) return null;
+        return isWelcomeScreenOpenReasonAllowed(next) ? next : current;
+      });
+    },
+    [],
+  );
   const [providerFamilyDomainMigrationComplete, setProviderFamilyDomainMigrationComplete] =
     useState(false);
   const loginEntryRequest = useZCodeStore((state) => state.loginEntryRequest);

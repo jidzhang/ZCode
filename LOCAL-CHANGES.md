@@ -12,7 +12,7 @@ safe-zcode = **zai-org/ZCode 开源快照 + 个人优化**（Edge 之于 Chrome 
 - upstream = https://github.com/zai-org/ZCode （同步基准，只 fetch 不 push）
 - 基线 tag：v3.14.3（29628c9，2026-09-23）
 
-当前栈（自下而上）：v3.14.3 → ecc4cbc → a62caf1 → 7847d57 → 1771466 → 19052e1 → e6d54a4 → 遥测对齐修订（2026-09-27，见 2.x e6d54a4 条目末尾）。
+当前栈（自下而上）：v3.14.3 → ecc4cbc → a62caf1 → 7847d57 → 1771466 → 19052e1 → e6d54a4 → 遥测对齐修订 → 登录推送门控（均 2026-09-27，后两笔见 2.x 末尾）。
 
 ## 2. 已提交优化（按提交）
 
@@ -52,13 +52,20 @@ safe-zcode = **zai-org/ZCode 开源快照 + 个人优化**（Edge 之于 Chrome 
 
 ### e6d54a4 — 严格 opt-in 遥测 + ARMS 桩包；分享发布默认关闭（2026-09-26）
 
-- **内容**：①CLI 模型遥测在 bootstrap.ts 加 `isTelemetryExplicitlyEnabled`（仅 `ZCODE_TELEMETRY=on` 放行 OTLP 端点解析）；②telemetryCore.ts sendReport 同语义门控；③`@arms/rum-electron` 从外部依赖+pnpm patch 改为本地 arms-stub 桩包（workspace:*）；④ConversationShareMenu.tsx 分享发布默认关闭。
+- **内容**：①CLI 模型遥测在 bootstrap.ts 加 `isTelemetryExplicitlyEnabled`（仅 `ZCODE_TELEMETRY=on` 放行 OTLP 端点解析）；②telemetryCore.ts sendReport 同语义门控；③`@arms/rum-electron` 从外部依赖+pnpm patch 改为本地 arms-stub 桩包（workspace:\*）；④ConversationShareMenu.tsx 分享发布默认关闭。
 - **2026-09-27 修订（已作为独立提交落地）**：①②两个门控 hunk **撤回**，两文件恢复 upstream/main 原样；改为在 `packages/desktop/src/main/desktopRuntimeEnv.ts` 打包分支追加上游自带开关默认值 `ZCODE_MODEL_TELEMETRY_ENABLED: "false"`（纯增量一行）。
   - 依据（三方审计，详见 D:\work\github\zcode-debug\3.14.3.7762-official\REPORT.md）：官方 3.14.3.7762 二进制同样认 `ZCODE_MODEL_TELEMETRY_ENABLED`（opt-out：0/false/off/disabled 均关，未设即开）；ARMS 端点不在上游仓库源码里（`proj-xtrace` 零匹配），是官方 CI 经 `__ZCODE_ENV__` 构建注入的，上游设计即"端点不内嵌、缺端点不上报"，fork 自构建产物天然无端点；上游 `upstream/main` 仍与基线 29628c9 重合，无新版语义可跟。
-  - 语义对照：CLI 默认关，与原 hunk 等价（默认值压得住环境残留 OTEL_*——开关看值、不看端点是否存在）；services 上报上游本就 `!ZCODE_TELEMETRY_REPORT_ENDPOINT → return`，fork 构建从不注入该端点，默认死；唯一行为差异是"用户显式配 REPORT_ENDPOINT"场景从"仍被 =on 锁死"变为"视为显式 opt-in 放行"，与 CLI 开关语义对齐。main 进程 local-ttft（5s 间隔指标导出）与 renderer-action traces（服务端 rollout 可远程开启，审计本机实测已 enabled:true/ttft-2026-09-18）**没有本地禁用开关**，出站仅取决于 OTEL 端点是否存在——fork 产物无端点故默认死。
+  - 语义对照：CLI 默认关，与原 hunk 等价（默认值压得住环境残留 OTEL\_\*——开关看值、不看端点是否存在）；services 上报上游本就 `!ZCODE_TELEMETRY_REPORT_ENDPOINT → return`，fork 构建从不注入该端点，默认死；唯一行为差异是"用户显式配 REPORT_ENDPOINT"场景从"仍被 =on 锁死"变为"视为显式 opt-in 放行"，与 CLI 开关语义对齐。main 进程 local-ttft（5s 间隔指标导出）与 renderer-action traces（服务端 rollout 可远程开启，审计本机实测已 enabled:true/ttft-2026-09-18）**没有本地禁用开关**，出站仅取决于 OTEL 端点是否存在——fork 产物无端点故默认死。
   - 合并收益：bootstrap.ts / telemetryCore.ts 回到 pristine，上游活跃遥测文件的冲突点消失；遥测域仅剩 desktopRuntimeEnv.ts 一处纯增量默认值。
   - ARMS 桩包与分享门控**不动**。
 - **上游处置**：上游若默认关闭 OTLP、或给 renderer-action/TTFT 加本地禁用开关，重新评估这行默认值是否可删；端点注入机制如上游改为仓库内配置，同步时检查 desktopRuntimeEnv 打包分支。
+
+### 登录推送门控 — 全屏登录页仅限用户主动触发（2026-09-27）
+
+- **背景**：上游把账号登录做成强推送：①启动守卫在"未登录且无可用 provider 或从未绑定账号域"时全屏拦截（`startup-provider-required`，且阻塞 workspace 恢复）；②上游未实现 refresh token（`oauthService.refreshToken` 直接抛"请重新登录"），OAuth token 隔夜过期后 `session-expired` 全屏重登页反复出现。用户要求登录"不明显但可用"（3.11.2 体验），登录调研结论（见记忆/出站加固）为保留链路、只隐藏推送。
+- **方案**：WelcomeScreen 全部主动打开路径收敛于 `Root.tsx` 的 `setWelcomeScreenOpenReason`（5 值枚举）。新增 `packages/ui/src/lib/localUiOverrides.ts` 白名单谓词：放行用户主动三类（manual-login / provider-request / logout-provider-required），吞掉上游强推两类（startup-provider-required / session-expired）；白名单外的新 reason 默认吞掉。`Root.tsx` 仅改 state 初始化块一处（包装 setter，其余读写点零改动；白名单外的开屏请求保持当前状态而非折叠 null，避免吞掉用户已手动打开的登录页）。被动入口（侧栏账号区、/login、设置 API key 表单）不经此 setter，不受影响；登录链路本体（OAuth/凭据/套餐）不动。测试 `packages/ui/test/loginPromptGate.test.ts`。
+- **代价（已接受）**：token 过期不再全屏拦截，账号型模型（Coding Plan/Start Plan/off-peak）请求 401 报错，重登走侧栏手动入口；未配模型可进工作区，发消息时模型层报错——与 codex/claude CLI 的"报错后自行换 key"体验一致。
+- **上游处置**：上游若新增**不走 setWelcomeScreenOpenReason** 的推送面（独立引导弹窗/新 onboarding 组件），本门控不会自动覆盖，同步时 grep `setWelcomeScreenOpenReason` 与 WelcomeScreen 挂载点复查；上游若给推送加官方开关或实现 refresh token，评估删除本笔。
 
 ## 3. 未提交的本地工作（2026-09-27 更新）
 

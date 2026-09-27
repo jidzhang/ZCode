@@ -155,7 +155,16 @@ export function loadHostProcessEnvFromLocalFiles(): Record<string, string> {
   if (isElectronAppPackaged()) {
     // 安装包不内嵌 OTLP 端点或鉴权，避免 CI 凭据随产物公开；连接配置由运行时环境提供。
     // 只保留打包身份元数据，缺少端点时不会启用上报。
-    return { ZCODE_TELEMETRY_RUNTIME_DISTRIBUTION: "packaged" };
+    // safe-zcode：用上游自带的 opt-out 开关把 CLI 模型遥测默认关闭（官方构建同样认这个
+    // 开关，语义见 apps/zcode-cli/packages/telemetry/src/bootstrap.ts 的
+    // isExplicitlyDisabled）。环境残留 OTEL_* 端点时也保持不出站；只有显式设置
+    // ZCODE_MODEL_TELEMETRY_ENABLED 为非 false 值并配置端点才恢复上报，行为可审计。
+    // 此前 e6d54a4 在 bootstrap.ts/telemetryCore.ts 里加的 ZCODE_TELEMETRY=on 门控
+    // 已撤回，避免在上游活跃改动的遥测文件里维护分叉逻辑。
+    return {
+      ZCODE_TELEMETRY_RUNTIME_DISTRIBUTION: "packaged",
+      ZCODE_MODEL_TELEMETRY_ENABLED: "false",
+    };
   }
 
   const desktopRoot = resolve(import.meta.dirname, "../..");

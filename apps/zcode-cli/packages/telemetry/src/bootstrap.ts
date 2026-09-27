@@ -18,17 +18,6 @@ type EnvRecord = Record<string, string | undefined>;
 const TELEMETRY_STATE_LOCK_STALE_MS = 5 * 60_000;
 const TELEMETRY_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/u;
 const BUILD_COMMIT_PATTERN = /^[0-9a-f]{7,64}$/iu;
-
-/**
- * safe-zcode 遥测语义：默认严格禁用，只有 ZCODE_TELEMETRY=on 显式开启才允许 OTLP 导出。
- * 修复原因：上游默认是"没设 OTEL_* 环境变量即不上报"——这是隐式安全，靠运维恰好没配，
- * 不可审计；环境残留 OTEL_EXPORTER_OTLP_* 配置时仍会出站。改为显式 opt-in 后，
- * 不设置 ZCODE_TELEMETRY=on 时任何 OTEL 配置都不会产生出站上报。
- * 与桌面侧 ARMS 门控（packages/desktop/src/main/appARMSBootstrap.ts）保持同一语义。
- */
-export function isTelemetryExplicitlyEnabled(env: EnvRecord): boolean {
-  return env.ZCODE_TELEMETRY?.trim().toLowerCase() === "on";
-}
 const pendingStandaloneDeviceMidByStateFile = new Map<string, Promise<string | undefined>>();
 let preparedOwner: AgentTelemetryRuntimeOwner | undefined;
 let preparingOwner: Promise<AgentTelemetryRuntimeOwner | undefined> | undefined;
@@ -84,7 +73,6 @@ export interface PrepareModelTelemetryOptions {
 }
 
 export function resolveOtlpTraceEndpoint(env: EnvRecord): string | undefined {
-  if (!isTelemetryExplicitlyEnabled(env)) return undefined;
   const traceEndpoint = env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?.trim();
   if (traceEndpoint) return validHttpUrl(traceEndpoint);
   const commonEndpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim();
@@ -97,7 +85,6 @@ export function resolveOtlpTraceEndpoint(env: EnvRecord): string | undefined {
 }
 
 export function resolveOtlpMetricEndpoint(env: EnvRecord): string | undefined {
-  if (!isTelemetryExplicitlyEnabled(env)) return undefined;
   const metricEndpoint = env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT?.trim();
   if (metricEndpoint) return validHttpUrl(metricEndpoint);
   const commonEndpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim();
@@ -134,11 +121,7 @@ export async function prepareModelTelemetryEnv(
   env: EnvRecord,
   options: PrepareModelTelemetryOptions = {},
 ): Promise<EnvRecord> {
-  if (
-    !resolveOtlpTraceEndpoint(env) ||
-    !isTelemetryExplicitlyEnabled(env) ||
-    isExplicitlyDisabled(env.ZCODE_MODEL_TELEMETRY_ENABLED)
-  ) {
+  if (!resolveOtlpTraceEndpoint(env) || isExplicitlyDisabled(env.ZCODE_MODEL_TELEMETRY_ENABLED)) {
     return env;
   }
   const existingInstallationId = normalizeTelemetryDeviceMid(env.ZCODE_TELEMETRY_DEVICE_MID);

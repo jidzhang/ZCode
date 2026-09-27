@@ -364,14 +364,8 @@ export function createTelemetryCore(dependencies: TelemetryCoreDependencies = {}
     userId: string,
     deviceMid: string,
   ): Promise<void> {
-    // safe-zcode 遥测语义：默认严格禁用，显式 ZCODE_TELEMETRY=on 才允许出站；
-    // 与 CLI OTLP / 桌面 ARMS 门控保持同一语义（原逻辑仅靠"端点未配置"隐式停用）。
-    const telemetryExplicitlyOptedIn = process.env.ZCODE_TELEMETRY?.trim().toLowerCase() === "on";
-    if (
-      !telemetryExplicitlyOptedIn ||
-      !ZCODE_TELEMETRY_ENABLED ||
-      !ZCODE_TELEMETRY_REPORT_ENDPOINT
-    ) {
+    // 总开关关闭或上报端点未配置时，事件到此终止。
+    if (!ZCODE_TELEMETRY_ENABLED || !ZCODE_TELEMETRY_REPORT_ENDPOINT) {
       return;
     }
     let marketingParams: OAuthLoginAttribution | null = null;

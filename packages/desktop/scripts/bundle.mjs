@@ -256,12 +256,14 @@ function printHelp() {
   --arch, -a <x64|arm64>       目标 CPU 架构，默认 arm64
   --skip-prepare               跳过 prepare:runtime-assets
   --skip-build                 跳过 pnpm build
+  --publish <always|never>     透传给 electron-builder（发版时用 always，需 GH_TOKEN）
   --dry-run                    只打印最终命令，不执行打包
   -h, --help                   查看帮助
 
 环境变量:
   ZCODE_TARGET_OS              与 --os 等价
   ZCODE_TARGET_ARCH            与 --arch 等价
+  ZCODE_PUBLISH                与 --publish 等价
 `);
 }
 
@@ -287,6 +289,7 @@ function parseArgs(argv) {
     arch: process.env.ZCODE_TARGET_ARCH ?? null,
     skipPrepare: process.env.ZCODE_SKIP_PREPARE === "1",
     skipBuild: process.env.ZCODE_SKIP_BUILD === "1",
+    publish: process.env.ZCODE_PUBLISH ?? null,
     dryRun: false,
     positionals: [],
   };
@@ -305,6 +308,17 @@ function parseArgs(argv) {
 
     if (arg === "--dry-run") {
       options.dryRun = true;
+      continue;
+    }
+
+    if (arg === "--publish") {
+      options.publish = argv[index + 1] ?? null;
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--publish=")) {
+      options.publish = arg.slice("--publish=".length) || null;
       continue;
     }
 
@@ -362,6 +376,7 @@ function parseArgs(argv) {
     arch: resolvedArch,
     skipPrepare: options.skipPrepare,
     skipBuild: options.skipBuild,
+    publish: options.publish,
     dryRun: options.dryRun,
   };
 }
@@ -702,7 +717,7 @@ function verifyPackagedRuntimeDependencies(os, arch) {
 }
 
 async function main() {
-  const { os, arch, skipPrepare, skipBuild, dryRun } = parseArgs(process.argv.slice(2));
+  const { os, arch, skipPrepare, skipBuild, publish, dryRun } = parseArgs(process.argv.slice(2));
   const buildArgs = [
     "exec",
     "electron-builder",
@@ -711,6 +726,10 @@ async function main() {
     osBuilderFlagMap[os],
     archBuilderFlagMap[arch],
   ];
+  // 发版时透传 --publish always（github 通道需 GH_TOKEN）；默认不传即只构建不发布。
+  if (publish) {
+    buildArgs.push("--publish", publish);
+  }
 
   console.log(`[bundle] target=${os}/${arch}`);
   console.log(`[bundle] skipPrepare=${skipPrepare} skipBuild=${skipBuild}`);

@@ -8,6 +8,7 @@ import {
   getDesktopMenuMessage,
   PlatformChannels,
   resolveRuntimeZCodeEndpointOrigin,
+  ZCODE_UPDATE_CHANNEL,
   ZCODE_VERSION,
   type ElectronReleaseChannel,
   type Locale,
@@ -717,6 +718,10 @@ export function resolveUpdateFeedSourceFromStartupConfig(
 async function resolveUpdateReleaseChannel(
   settingService: SettingServiceLike | undefined,
 ): Promise<ElectronReleaseChannel> {
+  // 本地加固：自有通道只对外发 stable（preview 通道不发布），忽略预览偏好。
+  if (ZCODE_UPDATE_CHANNEL === "github") {
+    return "stable";
+  }
   if (!settingService) {
     return "stable";
   }
@@ -770,6 +775,12 @@ async function syncAutoUpdateCheckChannelFromSettings(
 }
 
 function applyManifestUpdateProvider(options: InitAutoUpdaterOptions): void {
+  // 本地加固：github 通道用烘焙进包的 app-update.yml（github provider），不再用官方 manifest 覆盖。
+  // 上游若重构 publish/更新源，按语义重落本分支。
+  if (ZCODE_UPDATE_CHANNEL === "github") {
+    logger.info("[auto-update] self-hosted github channel; keep baked app-update.yml provider");
+    return;
+  }
   const manifestUrl = options.updateFeedSource?.url.trim();
   autoUpdater.setFeedURL({
     provider: "custom",

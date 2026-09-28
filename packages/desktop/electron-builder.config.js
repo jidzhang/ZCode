@@ -20,6 +20,7 @@ import {
   resolveDesktopArtifactSuffix,
   resolveDesktopProductIdentity,
 } from "./scripts/desktop-product-identity.mjs";
+import { resolveDesktopPublishConfig } from "./scripts/desktop-update-channel.mjs";
 import { verifyStagedKoffi } from "./scripts/koffi-package-assets.mjs";
 const ELECTRON_BUILDER_ARCH = {
   1: "x64",
@@ -208,6 +209,9 @@ function resolveElectronDownloadMirror(env = process.env) {
 const commandStdoutMaxBuffer = 64 * 1024 * 1024;
 // 产物后缀只标记后端环境（_TEST）；身份靠 productName 区分，生产后端的 Preview 包没有后缀。
 const desktopArtifactEnvSuffix = resolveDesktopArtifactSuffix(process.env);
+// 自有更新通道：github 时 publish 指向自有仓库（electron-builder 自动传安装包 + latest.yml）；
+// official 返回 null，下方保持现有占位。缺 repo 时这里直接失败，避免坏包。
+const desktopUpdatePublish = resolveDesktopPublishConfig(process.env);
 
 // Preview 是内部签名测试包。CI 明确打开 macOS 签名时若没有身份，必须在生成未签名包前失败，
 // 避免“产物存在”被误认为已经走完和生产版相同的签名链路。
@@ -756,7 +760,9 @@ export default {
     installerHeaderIcon: "build/icon_installer.ico",
   },
   detectUpdateChannel: false,
-  publish: {
+  // 自有更新通道：github 时 publish 指向自有仓库（electron-builder 自动传安装包 +
+  // latest.yml）；official 保持现有占位（运行时仍被 ManifestUpdateProvider 覆盖）。
+  publish: desktopUpdatePublish ?? {
     provider: "generic",
     // 当前 OSS/CDN 对多 Range 请求返回 206，但 Content-Type 仍是 application/x-msdownload，
     // electron-updater 会因缺少 multipart/byteranges 直接回退整包下载。关闭 multiple range 后仍走差分，

@@ -3,11 +3,14 @@ import type { ZCodeRuntimeEnv } from "./runtimeEnv.js";
 export type ZCodeEnv = "test" | "production";
 /** 安装包身份：决定应用名、app id、Electron 数据目录与更新策略；与后端环境 `ZCodeEnv` 是两个轴。 */
 export type ZCodeProductFlavor = "production" | "preview";
+/** 自有更新通道：official 走官方 manifest，github 走自有 GitHub Releases；默认 official。 */
+export type DesktopUpdateChannel = "official" | "github";
 export type ArmsRumEnv = "local" | "prod";
 
 // 非构建环境（如 e2e 测试的 mocha）下 define 不存在，用 typeof 检查 + fallback 避免 ReferenceError
 declare const __ZCODE_ENV__: string;
 declare const __ZCODE_PRODUCT_FLAVOR__: string;
+declare const __ZCODE_UPDATE_CHANNEL__: string;
 
 export function normalizeZCodeEnv(value: string | undefined): ZCodeEnv {
   return value?.trim().toLowerCase() === "production" ? "production" : "test";
@@ -36,6 +39,15 @@ export function normalizeZCodeProductFlavor(
 export const ZCODE_PRODUCT_FLAVOR = normalizeZCodeProductFlavor(
   typeof __ZCODE_PRODUCT_FLAVOR__ !== "undefined" ? __ZCODE_PRODUCT_FLAVOR__ : undefined,
   ZCODE_ENV,
+);
+
+/** 自有更新通道缺省 official；非法取值同样回落，避免坏包把更新指向未知源。 */
+export function normalizeDesktopUpdateChannel(value: string | undefined): DesktopUpdateChannel {
+  return value?.trim().toLowerCase() === "github" ? "github" : "official";
+}
+
+export const ZCODE_UPDATE_CHANNEL = normalizeDesktopUpdateChannel(
+  typeof __ZCODE_UPDATE_CHANNEL__ !== "undefined" ? __ZCODE_UPDATE_CHANNEL__ : undefined,
 );
 export const ZCODE_APP_VERSION_ENV = "ZCODE_APP_VERSION" as const;
 export const ZCODE_BUILD_COMMIT_ID_ENV = "ZCODE_BUILD_COMMIT_ID" as const;

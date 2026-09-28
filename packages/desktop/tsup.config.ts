@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { defineConfig } from "tsup";
 import { getBuildMetadata } from "./scripts/build-metadata.mjs";
 import { resolveDesktopProductFlavor } from "./scripts/desktop-product-identity.mjs";
+import { resolveDesktopUpdateChannel } from "./scripts/desktop-update-channel.mjs";
 // tsup 会先打包配置文件；动态加载构建工具，避免其 import.meta.dirname 被重定位到 desktop。
 const { loadBuiltinProviderConfig } = await import(
   pathToFileURL(resolve(import.meta.dirname, "../../scripts/builtin-provider-config.mjs")).href
@@ -110,6 +111,9 @@ function createSharedDefines() {
     ),
     // 客户端只有一个 CDN 配置，与发布端 OSS 目标列表分离。
     __ZCODE_CDN_BASE_URL__: JSON.stringify(env.ZCODE_CDN_BASE_URL?.trim() || ""),
+    // 自有更新通道（github|official，缺省 official）：决定运行时更新走官方 manifest
+    // 还是烘焙进包的 app-update.yml（github provider）。
+    __ZCODE_UPDATE_CHANNEL__: JSON.stringify(resolveDesktopUpdateChannel(process.env)),
   };
 }
 

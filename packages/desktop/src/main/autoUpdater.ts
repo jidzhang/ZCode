@@ -735,24 +735,6 @@ async function resolveUpdateReleaseChannel(
   }
 }
 
-async function shouldEnableUpdateAutoCheck(
-  settingService: SettingServiceLike | undefined,
-): Promise<boolean> {
-  // 本地加固（2026-09-28）：启动更新检查默认关闭，用户需在 settings.json 显式打开。
-  // 上游默认启动即查；若上游新增官方开关，对照后可直接 drop 本函数与下方的门控。
-  if (!settingService) {
-    return false;
-  }
-
-  try {
-    const settings = await settingService.get();
-    return settings.enableUpdateAutoCheck === true;
-  } catch (error) {
-    logger.warn("[auto-update] read update auto-check setting failed:", error);
-    return false;
-  }
-}
-
 async function syncAutoUpdateCheckChannelFromSettings(
   checkId: number,
   settingService: SettingServiceLike | undefined,
@@ -1782,11 +1764,11 @@ export async function initAutoUpdater(options: InitAutoUpdaterOptions = {}): Pro
     await skipAvailableUpdateVersion(validatedVersion, options.settingService);
   });
 
-  // 本地加固（2026-09-28）：启动检查与轮询共用 enableUpdateAutoCheck 开关，默认关闭。
-  // 强制更新、设置页预览通道刷新不受影响（手动检查在 checkForUpdateMenuClick 用同一开关另行门控）；
+  // 本地规则（2026-09-29）：official 通道到不了这里（init 已整体禁用）；github 通道下，
+  // 启动检查与轮询只在“自动下载安装”打开时运行，认 UI 设置。手动检查不受本门控影响。
   // 上游若新增官方开关，本门控可直接 drop。
-  if (!(await shouldEnableUpdateAutoCheck(options.settingService))) {
-    logger.info("[auto-update] update auto-check disabled by setting; skip startup check and poll");
+  if (!(await shouldAutoDownloadAndInstallUpdates(options.settingService))) {
+    logger.info("[auto-update] auto-download disabled; skip startup check and poll");
     return;
   }
 
@@ -1871,7 +1853,7 @@ export function requestForceAutoUpdate(
   };
 }
 
-export async function checkForUpdateMenuClick(originWindow?: BrowserWindow | null) {
+export function checkForUpdateMenuClick(originWindow?: BrowserWindow | null) {
   logger.info("[auto-update] user clicked Check for Updates");
 
   const targetWindow =
@@ -1896,22 +1878,19 @@ export async function checkForUpdateMenuClick(originWindow?: BrowserWindow | nul
 
   if (autoUpdaterDisabledForProductFlavor) {
     // 入口本应已按产品身份隐藏；这里是最后一道闸，不让未初始化的 updater 实例向占位 feed 发请求。
-    logger.info("[auto-update] skip manual check: updater disabled for this product flavor");
-    targetWindow.webContents.send(PlatformChannels.UpdateCheckResult, {
-      kind: "dev-skipped",
-    } satisfies UpdateCheckResultPayload);
-    return;
-  }
-
-  // 本地加固（2026-09-28）：手动检查与启动检查共用 enableUpdateAutoCheck 开关，默认关闭。
-  // 关闭时零网络直接报最新版，不碰 menuState/下载态/强制更新监听；开关打开后手动检查恢复正常。
-  // 上游若新增官方开关，本短路可直接 drop。
-  if (!(await shouldEnableUpdateAutoCheck(autoUpdaterSettingService))) {
-    logger.info("[auto-update] manual check disabled by setting; report up-to-date without network");
-    targetWindow.webContents.send(PlatformChannels.UpdateCheckResult, {
-      kind: "up-to-date",
-      currentVersion: getCurrentAppVersionForUpdate(),
-    } satisfies UpdateCheckResultPayload);
+    // 本地规则（2026-09-29）：official 通道更新器整体禁用，手动直接报最新版
+    //（不暴露 dev-skipped 内部语义）；未打包 dev 保持原样。上游若新增官方开关，本分支可直接 drop。
+    if (app.isPackaged && ZCODE_UPDATE_CHANNEL === "official") {
+      logger.info("[auto-update] manual check: updater disabled (official channel); report up-to-date");
+      targetWindow.webContents.send(PlatformChannels.UpdateCheckResult, {
+        kind: "up-to-date",
+        currentVersion: getCurrentAppVersionForUpdate(),
+      } satisfies UpdateCheckResultPayload);
+    } else {
+      targetWindow.webContents.send(PlatformChannels.UpdateCheckResult, {
+        kind: "dev-skipped",
+      } satisfies UpdateCheckResultPayload);
+    }
     return;
   }
 

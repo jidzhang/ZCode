@@ -434,7 +434,12 @@ import {
 } from "./runtime-tools/agentProxyEnv.js";
 import { ensureAppCaCert } from "./runtime-tools/appCaCert.js";
 import { buildHelperOpenArgs, isCuaLocalDevelopmentRuntime } from "@zcode/zcode-cua/broker/server";
-import { createServiceLogger, type ServiceLogger } from "#src/logger/serviceLogger.js";
+import {
+  createServiceLogger,
+  normalizeServiceLogLevel,
+  setServiceLogLevel,
+  type ServiceLogger,
+} from "#src/logger/serviceLogger.js";
 import { IOffPeakTaskService } from "./session/offPeakTask.js";
 import { OffPeakTaskService } from "./session/offPeakTaskService.js";
 import { OffPeakTaskRepo } from "./session/offPeakTaskRepo.js";
@@ -1397,6 +1402,20 @@ export function createLocalServices(options: {
   const settingService = createObservableSettingService(
     options?.settingService ?? localSettings!.service,
   );
+  // 本地（2026-09-29）：settings.json 日志级别作用到 services 日志；读不到保持默认 info。
+  // Host 启动极早的日志仍用默认值；改动重启生效（设置变更也会即时跟随）。
+  // 上游若新增官方日志级别开关，本块可直接 drop。
+  const applyServiceLogLevelFromSettings = (): Promise<void> =>
+    settingService
+      .get()
+      .then((settings) => setServiceLogLevel(normalizeServiceLogLevel(settings.logLevel)))
+      .catch(() => undefined);
+  void applyServiceLogLevelFromSettings();
+  settingService.onDidUpdate((event) => {
+    if (event.keys.includes("logLevel")) {
+      void applyServiceLogLevelFromSettings();
+    }
+  });
   const resolveCurrentZCodeEndpointOrigin = async () =>
     resolveRuntimeZCodeEndpointOrigin(process.env, {
       overrideOrigin: (await settingService.get()).zcodeEndpointOrigin,
@@ -1528,14 +1547,25 @@ export function createLocalServices(options: {
           providerConfigLog.info(undefined, "ZCode Built-in CDN 配置已更新", event);
         else providerConfigLog.debug(undefined, "ZCode Built-in 刷新检查", event);
       },
-      fetchRelease: (endpointOrigin, signal) =>
-        fetchZCodeBuiltinRemoteRelease({
+      fetchRelease: async (endpointOrigin, signal) => {
+        // 本地加固（2026-09-28）：开关关闭时跳过远端刷新，返回 null 即沿用随包/本地快照。
+        // 上游若新增官方开关，本门控可直接 drop。
+        try {
+          const startupSettings = await settingService.get();
+          if (startupSettings.enableStartupOutbound !== true) {
+            return null;
+          }
+        } catch {
+          return null;
+        }
+        return fetchZCodeBuiltinRemoteRelease({
           apiClient,
           endpointOrigin,
           signal,
           appVersion: ZCODE_VERSION,
           platform: clientConfigPlatform,
-        }),
+        });
+      },
     },
     onZCodeBuiltinRefreshError: (error) => {
       providerConfigLog.warn(undefined, "ZCode Built-in Config 远端刷新失败", { error });

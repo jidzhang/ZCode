@@ -30,7 +30,7 @@ export type { WorkspacePurpose } from "./workspacePurpose.js";
 export { DEFAULT_LOCALE } from "./protocol.js";
 export { ZCODE_VERSION, ZCODE_COMMIT, ZCODE_BUILD_TIME } from "./version.js";
 export type { HelloMessage, HelloAckMessage } from "./handshake.js";
-export type { ArmsRumEnv, ZCodeEnv, ZCodeProductFlavor } from "./env.js";
+export type { ArmsRumEnv, ZCodeEnv, ZCodeProductFlavor, DesktopUpdateChannel } from "./env.js";
 export type { RemoteAssetInstallMode } from "./remoteAssetInstallMode.js";
 export type {
   RemoteResourcePackageId,
@@ -71,6 +71,8 @@ export {
   mapZCodeEnvToArmsRumEnv,
   normalizeZCodeEnv,
   normalizeZCodeProductFlavor,
+  ZCODE_UPDATE_CHANNEL,
+  normalizeDesktopUpdateChannel,
 } from "./env.js";
 export * from "./errors.js";
 export type { SessionCreateSource } from "./sessionCreateSource.js";
@@ -161,6 +163,7 @@ export {
   TELEMETRY_SAFE_BUILTIN_MODEL_IDS,
   TELEMETRY_TEXT_MAX_LENGTH,
   redactTelemetryText,
+  redactSecretsInDisplayText,
   redactTelemetryUrl,
   resolveTelemetryModelId,
   resolveTelemetryProviderScope,

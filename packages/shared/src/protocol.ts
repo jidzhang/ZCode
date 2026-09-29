@@ -360,12 +360,16 @@ export interface AppSettings {
   receivePreviewUpdates?: boolean;
   /** 设置页/更新弹窗“以后自动下载并安装更新”偏好；仅桌面端自动更新读取。 */
   autoDownloadAndInstallUpdates?: boolean;
-  /** settings.json“自动检查更新”总开关（启动检查+轮询+手动检查），默认关闭；仅桌面端自动更新读取。强制更新不受影响。 */
-  enableUpdateAutoCheck?: boolean;
+  /** settings.json“启动出站”总开关，默认关闭；仅桌面端读取。关闭时强制门检查、灰度/帮助/内置配置远端刷新、市场目录自动刷新、远端图标全部停用（各回落到本地默认/手动触发）。更新检查另按通道规则（official 全禁；github 认自动下载设置与手动触发）。 */
+  enableStartupOutbound?: boolean;
   /** 用户跳过的 Electron 自动更新版本；按通道隔离，避免 stable / preview 互相遮挡。 */
   skippedElectronUpdateVersions?: Partial<Record<ElectronReleaseChannel, string>>;
   /** 首次启动设置同步提示是否已消费；只表示弹窗不再出现，不代表导入成功。 */
   settingsSyncFirstRunPromptHandled?: boolean;
   /** 设置页里的临时 endpoint override；正式/测试默认 base url 由 ZCODE_BASE_URL env 管理。 */
   zcodeEndpointOrigin?: string;
+  /** settings.json 日志级别（默认 info）：error 只记错误，warn 以上，info 全量；debug 仅开发版。 */
+  logLevel?: "error" | "warn" | "info";
+  /** 日志保留天数（默认 14，0=仅当天，最大 365）。 */
+  logRetentionDays?: number;
 }

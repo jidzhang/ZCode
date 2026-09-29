@@ -6,6 +6,7 @@ import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { Button } from "@/components/ui/button.js";
 import { toast } from "@/components/ui/toast.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { useSettings } from "@/hooks/useSettingService.js";
 import { useServices } from "@/hooks/useServices.js";
 import { usePluginStoreOrder } from "@/hooks/usePluginStoreOrder.js";
 import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
@@ -128,7 +129,13 @@ export function PluginStorePage({
   // 目录自动刷新（Catalog Auto-Refresh）：只针对 ZCode 官方市场。每次进入商店页都刷新 CDN 目录，
   // 否则新上架插件要等用户手动点刷新才可见；以 10 分钟窗口节流，并在发起时占位防抖（失败/在飞不重复），
   // 判据见 officialMarketplaceAutoRefresh。状态放模块级而非组件 ref，因为每次进入都是重新挂载。
+  // 本地加固：开关关闭时不自动刷 CDN 目录，展示内置市场；手动刷新按钮不受影响。
+  const { settings: storeSharedSettings } = useSettings();
+  const allowMarketplaceAutoRefresh = storeSharedSettings?.enableStartupOutbound === true;
   useEffect(() => {
+    if (!allowMarketplaceAutoRefresh) {
+      return;
+    }
     const official = marketplaces.find((item) => item.id === ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID);
     if (
       official &&
@@ -136,7 +143,7 @@ export function PluginStorePage({
     ) {
       void updateMarketplace(ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID, pluginManagementService);
     }
-  }, [marketplaces, pluginManagementService, updateMarketplace]);
+  }, [allowMarketplaceAutoRefresh, marketplaces, pluginManagementService, updateMarketplace]);
 
   const items = useMemo(
     () =>

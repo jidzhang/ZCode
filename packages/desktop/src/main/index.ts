@@ -69,6 +69,7 @@ import {
   PlatformChannels,
   ZCODE_ENV,
   ZCODE_PRODUCT_FLAVOR,
+  ZCODE_UPDATE_CHANNEL,
   DEFAULT_ZCODE_ENDPOINT_ORIGIN,
   DEFAULT_LOCALE,
   ZCODE_VERSION,
@@ -81,7 +82,7 @@ import {
   type TelemetryEventPayload,
   HostMessageTypes,
 } from "@zcode/shared";
-import { logger } from "./logger.js";
+import { applyLogSettingsFromSettings, logger } from "./logger.js";
 import { markMainLaunchAppReady } from "./desktopLaunchMarks.js";
 import { createCuaPipFocusRouter, resolveCuaPipWindowKey } from "./cuaPipFocusRouter.js";
 import { createDesktopTelemetryFetch } from "./desktopTelemetryFetch.js";
@@ -790,18 +791,45 @@ const remoteSessionManager = createRemoteWorkspaceSessionManager({
 
 const deviceMid = ensureDesktopDeviceMidSync();
 // 帮助配置是公开读取，不能复用下面附带账号鉴权的灰度响应缓存。
-const readHelpConfig = createDesktopHelpConfigReader({
+const baseReadHelpConfig = createDesktopHelpConfigReader({
   appVersion: ZCODE_VERSION || app.getVersion(),
   deviceMid,
   resolveEndpointOrigin: resolveCurrentZCodeEndpointOrigin,
 });
+// 本地加固：开关关闭时直接抛错，各调用方（CanOpenCommunity/openFeedback/openCommunity）
+// 按既有 catch 逻辑回落到本地 default.json，零出站；开关打开后恢复远端。
+// isStartupOutboundAllowed 定义在下方（函数声明提升，调用时才求值，无时序问题）。
+const readHelpConfig = async (): Promise<unknown> => {
+  if (!(await isStartupOutboundAllowed())) {
+    throw new Error("startup outbound disabled by setting");
+  }
+  return baseReadHelpConfig();
+};
 // 同一个 /api/v1/client/configs fetcher 供两个灰度 rollout 共用（请求参数与鉴权完全一致，
 // 各自独立缓存/去重，服务端按 data.configs.<key> 区分功能）。
-const electronClientConfigsFetcher = createElectronDesktopContextPromptConfigFetcher({
+async function isStartupOutboundAllowed(): Promise<boolean> {
+  // 本地加固（2026-09-28）：启动出站总开关，settings.json enableStartupOutbound，默认关闭。
+  // fetcher 按次读取，开关切换即时生效，无需重启；读取失败同样视为关闭。
+  // 上游若新增官方开关，本函数与各门控可直接 drop。
+  try {
+    const settings = await mainSettingService.get();
+    return settings.enableStartupOutbound === true;
+  } catch {
+    return false;
+  }
+}
+const baseElectronClientConfigsFetcher = createElectronDesktopContextPromptConfigFetcher({
   appVersion: ZCODE_VERSION || app.getVersion(),
   deviceMid,
   resolveEndpointOrigin: resolveCurrentZCodeEndpointOrigin,
 });
+// 本地加固：开关关闭时直接抛错，rollout 按“缓存快照/默认值”（均为禁用态）处理，零出站。
+const electronClientConfigsFetcher = async (signal: AbortSignal): Promise<unknown> => {
+  if (!(await isStartupOutboundAllowed())) {
+    throw new Error("startup outbound disabled by setting");
+  }
+  return baseElectronClientConfigsFetcher(signal);
+};
 desktopContextPromptRollout = createDesktopContextPromptRollout({
   fetchConfig: electronClientConfigsFetcher,
   logger,
@@ -1954,6 +1982,8 @@ app.whenReady().then(async () => {
   } catch {
     // 读取失败不影响启动，使用默认 homedir
   }
+  // 本地（2026-09-29）：settings.json 日志控制（级别+保留天数）生效；改动重启生效。
+  applyLogSettingsFromSettings(bootstrapSettings ?? {});
 
   // scheduler 也会打开 tasks-index；等 Host 完成统一准备，避免在启动页出现前抢先迁移。
   configureDatabaseStartupQuit(() => {
@@ -2012,8 +2042,10 @@ app.whenReady().then(async () => {
   // 启动自动更新检查（后台执行，不阻塞主界面）
   // Preview 身份无论连接哪个后端都不自动更新：stable feed 上只分发正式 ZCode 安装包，
   // 不向 Preview 渠道提供更新。
+  // 本地规则（2026-09-29）：official 通道彻底禁用更新器（启动/轮询/手动全无网络，
+  // 手动报 dev-skipped）；github 通道才初始化，检查行为再按自动下载设置与手动触发区分。
   void initAutoUpdater({
-    enabled: ZCODE_PRODUCT_FLAVOR === "production",
+    enabled: ZCODE_PRODUCT_FLAVOR === "production" && ZCODE_UPDATE_CHANNEL === "github",
     onBeforeQuitAndInstall: async () => {
       notifyStabilityLifecycle("update_install");
       await prepareAppQuit("auto-update quitAndInstall", "update-install");
@@ -2255,8 +2287,12 @@ app.whenReady().then(async () => {
   // 是面向打包发布客户端的安全门，对未打包 dev 运行时无意义。打包版 app.isPackaged === true，
   // gate 照常生效，对真实用户零影响。
   const skipForceUpdateForLocalDevRuntime = !app.isPackaged;
+  // 本地加固：强制门检查与启动出站共用 enableStartupOutbound 开关；关闭时等价于既有断网放行。
+  const startupOutboundAllowed = await isStartupOutboundAllowed();
   const forceUpdateGuardResult =
-    ZCODE_PRODUCT_FLAVOR === "production" && !skipForceUpdateForLocalDevRuntime
+    ZCODE_PRODUCT_FLAVOR === "production" &&
+    !skipForceUpdateForLocalDevRuntime &&
+    startupOutboundAllowed
       ? await maybeBlockStartupForForceUpdate({
           locale: currentApplicationLocale,
           logger,
@@ -2270,6 +2306,8 @@ app.whenReady().then(async () => {
     logger.info("[force-update] Preview 跳过远端强制升级检查");
   } else if (skipForceUpdateForLocalDevRuntime) {
     logger.info("[force-update] 本地 dev 构建（未打包）跳过远端强制升级检查");
+  } else if (!startupOutboundAllowed) {
+    logger.info("[force-update] 启动出站已关闭，跳过远端强制升级检查");
   }
   if (forceUpdateGuardResult.blocked) {
     return;

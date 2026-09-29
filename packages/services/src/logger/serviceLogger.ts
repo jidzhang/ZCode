@@ -15,6 +15,26 @@ export interface ServiceLogger {
   error: (traceId: TraceId | undefined, ...args: unknown[]) => void;
 }
 
+/** settings.json 日志级别在 services 侧的投影；Host 启动后由 node.ts 按设置刷新，默认 info。 */
+export type ServiceLogLevelSetting = "error" | "warn" | "info";
+
+const SERVICE_LOG_SEVERITY: Record<"debug" | "info" | "warn" | "error", number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+};
+
+let configuredServiceLogLevel: ServiceLogLevelSetting = "info";
+
+export function normalizeServiceLogLevel(value: unknown): ServiceLogLevelSetting {
+  return value === "error" || value === "warn" || value === "info" ? value : "info";
+}
+
+export function setServiceLogLevel(level: ServiceLogLevelSetting): void {
+  configuredServiceLogLevel = level;
+}
+
 export function createServiceLogger(
   scope: string,
   options?: {
@@ -42,6 +62,10 @@ export function createServiceLogger(
     // 服务层日志过去常被复用到 ZCode Agent 命名 logger，导致新 ZCode 路径继续依赖 ZCode Agent 目录。
     // 这里把通用分级日志抽到独立模块，后续删除 ZCode Agent runtime 时不会牵连非 ZCode Agent 服务。
     if (level === "debug" && !resolveDebugEnabled()) {
+      return;
+    }
+    // 本地（2026-09-29）：settings.json logLevel 阈值；Host 启动后由 node.ts 刷新。
+    if (SERVICE_LOG_SEVERITY[level] < SERVICE_LOG_SEVERITY[configuredServiceLogLevel]) {
       return;
     }
     const source = traceId ? `${scope}][trace:${traceId}` : scope;

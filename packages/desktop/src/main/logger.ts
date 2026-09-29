@@ -29,6 +29,13 @@ if (logRetentionResult.failedFiles.length > 0) {
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 
+/** settings.json 日志级别；main/渲染器/Host 中继日志共用本阈值，默认 info。 */
+export type MainLogLevelSetting = "error" | "warn" | "info";
+
+const MAIN_LOG_SEVERITY: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
+
+let configuredMainLogLevel: MainLogLevelSetting = "info";
+
 function isBrokenPipeError(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -71,6 +78,10 @@ function formatDate(date: Date): string {
 }
 
 function write(level: LogLevel, source: string, ...args: unknown[]) {
+  // 本地（2026-09-29）：settings.json logLevel 阈值；低于阈值的文件与 console 记录都跳过。
+  if (MAIN_LOG_SEVERITY[level] < MAIN_LOG_SEVERITY[configuredMainLogLevel]) {
+    return;
+  }
   const now = new Date();
   const ts = formatTimestamp(now);
   const pid = process.pid;
@@ -109,3 +120,38 @@ export const logger = {
   /** renderer 日志通过 IPC 传入后调用此方法写入同一文件 */
   fromRenderer: (level: LogLevel, args: unknown[]) => write(level, "renderer", ...args),
 };
+
+function normalizeLogRetentionDays(value: unknown): number {
+  if (typeof value === "number" && Number.isInteger(value)) {
+    return Math.min(Math.max(value, 0), 365);
+  }
+  return LOG_RETENTION_DAYS;
+}
+
+/**
+ * 本地（2026-09-29）：settings.json 日志控制生效入口。
+ * main 启动读到设置后调用一次；改动重启生效。非法值回落到默认，不抛错。
+ * 上游若新增官方日志级别开关，本函数及调用方可直接 drop。
+ */
+export function applyLogSettingsFromSettings(settings: {
+  logLevel?: unknown;
+  logRetentionDays?: unknown;
+}): void {
+  if (
+    settings.logLevel === "error" ||
+    settings.logLevel === "warn" ||
+    settings.logLevel === "info"
+  ) {
+    configuredMainLogLevel = settings.logLevel;
+  }
+  const retentionDays = normalizeLogRetentionDays(settings.logRetentionDays);
+  const result = cleanupExpiredLogFiles(getLogDir(), { retentionDays });
+  if (result.failedFiles.length > 0) {
+    safeConsoleWrite(
+      "warn",
+      `[log-retention] failed to delete expired logs from ${getLogDir()}:`,
+      result.failedFiles,
+      `retentionDays=${retentionDays}`,
+    );
+  }
+}

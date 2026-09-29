@@ -43,6 +43,9 @@ export { type SettingsSectionId };
 export { createSettingsPageConfig, resolveSettingsSectionForPlatform };
 
 const TASK_AUTO_ARCHIVE_DAY_OPTIONS = [3, 7, 14, 30] as const;
+// 本地（2026-09-29）：自有通道只发 stable，不提供 preview 版本，该开关隐藏；
+// 上游若调整通道策略可恢复（handler/state/props 保留不动）。
+const SHOW_RECEIVE_PREVIEW_UPDATES_ROW = false;
 const ZCODE_INTERACTION_BEHAVIOR_OPTIONS: readonly ZCodeInteractionBehavior[] = ["queue", "guide"];
 
 export function GeneralSectionContent({
@@ -574,21 +577,24 @@ export function GeneralSectionContent({
                 />
               }
             />
-            <SettingsRow
-              label={intl.formatMessage({ id: "settings.receivePreviewUpdates" })}
-              description={intl.formatMessage({
-                id: "settings.receivePreviewUpdatesDescription",
-              })}
-              control={
-                <Switch
-                  aria-label={intl.formatMessage({ id: "settings.receivePreviewUpdates" })}
-                  checked={receivePreviewUpdates}
-                  onCheckedChange={(checked) => {
-                    void onReceivePreviewUpdatesChange(checked);
-                  }}
-                />
-              }
-            />
+            {/* 本地：自有通道只发 stable，preview 开关隐藏（见 SHOW_RECEIVE_PREVIEW_UPDATES_ROW）。 */}
+            {SHOW_RECEIVE_PREVIEW_UPDATES_ROW ? (
+              <SettingsRow
+                label={intl.formatMessage({ id: "settings.receivePreviewUpdates" })}
+                description={intl.formatMessage({
+                  id: "settings.receivePreviewUpdatesDescription",
+                })}
+                control={
+                  <Switch
+                    aria-label={intl.formatMessage({ id: "settings.receivePreviewUpdates" })}
+                    checked={receivePreviewUpdates}
+                    onCheckedChange={(checked) => {
+                      void onReceivePreviewUpdatesChange(checked);
+                    }}
+                  />
+                }
+              />
+            ) : null}
             <SettingsRow
               label={intl.formatMessage({
                 id: "settings.autoDownloadAndInstallUpdates",

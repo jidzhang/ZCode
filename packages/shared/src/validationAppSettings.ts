@@ -469,10 +469,12 @@ const appSettingsObjectSchema = z.object({
   pendingPostUpdateReleaseNotes: postUpdateReleaseNotesPayloadSchema.optional(),
   receivePreviewUpdates: z.boolean().default(false),
   autoDownloadAndInstallUpdates: z.boolean().default(false),
-  enableUpdateAutoCheck: z.boolean().default(false),
+  enableStartupOutbound: z.boolean().default(false),
   skippedElectronUpdateVersions: skippedElectronUpdateVersionsSchema,
   settingsSyncFirstRunPromptHandled: z.boolean().optional(),
   zcodeEndpointOrigin: zcodeEndpointOriginSchema.optional(),
+  logLevel: z.enum(["error", "warn", "info"]).default("info"),
+  logRetentionDays: z.number().int().min(0).max(365).default(14),
 });
 
 export const appSettingsSchema = z.preprocess(
@@ -555,10 +557,12 @@ export const appSettingsPatchSchema = z.object({
   pendingPostUpdateReleaseNotes: postUpdateReleaseNotesPayloadSchema.optional(),
   receivePreviewUpdates: z.boolean().optional(),
   autoDownloadAndInstallUpdates: z.boolean().optional(),
-  enableUpdateAutoCheck: z.boolean().optional(),
+  enableStartupOutbound: z.boolean().optional(),
   skippedElectronUpdateVersions: z
     .partialRecord(electronReleaseChannelSchema, nonEmptyStringSchema)
     .optional(),
   settingsSyncFirstRunPromptHandled: z.boolean().optional(),
   zcodeEndpointOrigin: zcodeEndpointOriginSchema.optional(),
+  logLevel: z.enum(["error", "warn", "info"]).optional(),
+  logRetentionDays: z.number().int().min(0).max(365).optional(),
 });

@@ -11,7 +11,13 @@
   简体中文 | <a href="README.en.md">English</a>
 </p>
 
-> safe-zcode 个人优化说明，见 [SAFE-ZCODE.md](SAFE-ZCODE.md)。
+> ## Safe ZCode：安静、可控的 ZCode
+>
+> - **默认零上报**：遥测、埋点全关，安装包不带上报地址；
+> - **默认零后台联网**：启动 7 类官方请求全停，更新器整个拿掉，日常包永远不自己更新；
+> - **默认不外发**：会话分享关闭，发往飞书/微信的内容先脱敏再发。
+>
+> 发版包更新只从本仓库 Releases 来。完整说明见 [SAFE-ZCODE.md](SAFE-ZCODE.md)。
 
 
 

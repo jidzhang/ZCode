@@ -11,7 +11,13 @@
   <a href="README.md">简体中文</a> | English
 </p>
 
-> safe-zcode personal hardening notes: [SAFE-ZCODE.en.md](SAFE-ZCODE.en.md).
+> ## Safe ZCode: quiet, controllable ZCode
+>
+> - **Zero reporting by default**: telemetry and tracing off, no reporting endpoints shipped;
+> - **Zero background chatter**: 7 categories of startup calls to official servers disabled, updater removed from daily builds;
+> - **Nothing leaves silently**: sharing off by default, credentials masked before reaching Feishu/WeChat.
+>
+> Release builds update only from this repo's Releases. Full notes: [SAFE-ZCODE.en.md](SAFE-ZCODE.en.md).
 
 ZCode is an AI coding workspace with desktop, browser, and terminal interfaces. This repository contains the clients, backend services, shared UI, and Agent CLI and runtime source code.
 

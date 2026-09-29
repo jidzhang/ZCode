@@ -76,5 +76,8 @@ packages/feishu-channel/.env.local
 # 本地工作文档（出站加固记录、上游对照笔记），只存本机、不提交。
 local-notes/
 
+# 本地优化台账，只存本机、不提交。
+LOCAL-CHANGES.md
+
 # wechat-channel 本地凭据（勿提交）
 packages/wechat-channel/.env.local

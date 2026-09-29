@@ -4,6 +4,7 @@ import {
   type ZCodeStreamEvent,
   type ZCodeTaskMeta,
 } from "@zcode/shared";
+import { redactSecretsInDisplayText } from "@zcode/shared";
 import { buildPerTurnChangeSummaries } from "../session/taskChangeSummary.js";
 
 const MS_IN_SECOND = 1_000;
@@ -131,20 +132,22 @@ function formatStatusToolProgress(tool: ZCodePersistedToolCall | undefined): str
     return null;
   }
   const title = normalizeStatusProgressText(tool.title ?? tool.toolName ?? tool.kind ?? "tool");
-  const detail =
+  const rawDetail =
     readStatusStringField(tool.input, ["command", "path", "file_path", "filePath", "prompt"]) ??
     readStatusStringField(tool.output, ["command", "path", "file_path", "filePath", "prompt"]) ??
     readStatusStringField(tool.raw, ["command", "path", "file_path", "filePath", "prompt"]);
+  const detail = rawDetail ? redactSecretsInDisplayText(rawDetail) : null;
   const status = tool.status ? ` [${tool.status}]` : "";
   return detail ? `${title}${status}: ${detail}` : `${title}${status}`;
 }
 
 export function formatStatusStreamToolProgress(event: Extract<ZCodeStreamEvent, { type: "tool_call" | "tool_call_update" }>): string | null {
   const title = normalizeStatusProgressText(event.title ?? event.kind ?? "tool");
-  const detail =
+  const rawDetail =
     readStatusStringField(event.input, ["command", "path", "file_path", "filePath", "prompt"]) ??
     ("content" in event ? readStatusStringField(event.content, ["command", "path", "file_path", "filePath", "prompt"]) : null) ??
     readStatusStringField(event.raw, ["command", "path", "file_path", "filePath", "prompt"]);
+  const detail = rawDetail ? redactSecretsInDisplayText(rawDetail) : null;
   const status = "status" in event && event.status ? ` [${event.status}]` : "";
   return detail ? `${title}${status}: ${detail}` : `${title}${status}`;
 }

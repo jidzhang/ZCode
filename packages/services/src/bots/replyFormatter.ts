@@ -8,6 +8,7 @@ import type {
 import {
   getCompactToolCallSummary,
   getPermissionRequestPreview,
+  redactSecretsInDisplayText,
 } from "@zcode/shared";
 import { normalizeBotMessageLocale } from "./messages.js";
 
@@ -261,7 +262,7 @@ function formatToolStatus(
   locale?: Locale,
 ): string {
   if (status === "completed") return t(locale, "completed");
-  if (status === "failed") return `${t(locale, "failed")}${error ? `: ${truncateText(normalizeInlineText(error))}` : ""}`;
+  if (status === "failed") return `${t(locale, "failed")}${error ? `: ${truncateText(normalizeInlineText(redactSecretsInDisplayText(error)))}` : ""}`;
   if (status === "denied") return t(locale, "denied");
   if (status === "in_progress") return t(locale, "inProgress");
   return t(locale, "pending");
@@ -316,7 +317,7 @@ export function formatBotPermissionRequestSummary(
   const preview = getPermissionRequestPreview(request);
   const header = formatPermissionRequestHeader(request, options);
   if (preview.command) {
-    return `${header}\n${formatMarkdownInlineCode(truncateMiddleText(preview.command))}`;
+    return `${header}\n${formatMarkdownInlineCode(truncateMiddleText(redactSecretsInDisplayText(preview.command)))}`;
   }
   const previewFilePaths = preview.filePaths.length > 0
     ? preview.filePaths

@@ -1,3 +1,5 @@
+import { redactSecretsInDisplayText } from "./telemetryRedaction.js";
+
 export type CompactToolCallState =
   | "input-available"
   | "input-streaming"
@@ -164,7 +166,12 @@ function getChangeStat(
 function getInputSummary(input: unknown): string | undefined {
   if (typeof input === "string") {
     const summary = normalizeDisplayText(input);
-    return summary.length > 0 ? summary : undefined;
+    if (summary.length === 0) {
+      return undefined;
+    }
+    // 修复原因：bot 通道把工具调用摘要原样发进第三方聊天，command/prompt 里带的
+    // 凭据会直接泄漏；读出原文后、返回消息文本前在此收口脱敏。
+    return redactSecretsInDisplayText(summary);
   }
 
   if (!isRecord(input)) {
@@ -179,7 +186,7 @@ function getInputSummary(input: unknown): string | undefined {
 
     const summary = normalizeDisplayText(candidate);
     if (summary.length > 0) {
-      return summary;
+      return redactSecretsInDisplayText(summary);
     }
   }
 

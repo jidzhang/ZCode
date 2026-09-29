@@ -77,6 +77,55 @@ export function redactTelemetryText(
   return redacted.slice(0, maxLength);
 }
 
+/** 显示层凭据 key 口径（遥测 KV 口径 + refresh_token；api[_-]?key 已覆盖 apiKey 大小写形态）。 */
+const DISPLAY_SECRET_KV_KEYS =
+  "api[_-]?key|token|access[_-]?token|refresh[_-]?token|password|passwd|secret|client[_-]?secret|cookie|set-cookie|session";
+
+/** 显示层 URL query 凭据 key 口径（KV 口径 + authorization，与遥测 query 口径对齐并补 refresh/client）。 */
+const DISPLAY_SECRET_QUERY_KEYS =
+  "api[_-]?key|token|access[_-]?token|refresh[_-]?token|authorization|password|passwd|secret|client[_-]?secret|cookie|set-cookie|session";
+
+const DISPLAY_AUTHORIZATION_HEADER_PATTERN =
+  /(\bauthorization\b["']?\s*[:=])\s*(?:(?:Bearer|Basic)\s+)?[^\s,"'};]+/giu;
+const DISPLAY_SECRET_QUERY_PATTERN = new RegExp(
+  `([?&](?:${DISPLAY_SECRET_QUERY_KEYS})=)[^&\\s"'<>;,)]+`,
+  "giu",
+);
+const DISPLAY_SECRET_KV_PATTERN = new RegExp(
+  `(["']?(?:${DISPLAY_SECRET_KV_KEYS})["']?\\s*[:=]\\s*["']?)(?!\\{redacted\\})[^\\s,"'};]+`,
+  "giu",
+);
+const DISPLAY_BEARER_SCHEME_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/giu;
+const DISPLAY_SK_PATTERN = /\b(?:sk|rk|pk)-[A-Za-z0-9_-]{12,}\b/giu;
+const DISPLAY_GH_PATTERN = /\bgh[pousr]_[A-Za-z0-9]{20,}\b/gu;
+const DISPLAY_AKIA_PATTERN = /\bAKIA[A-Z0-9]{16}\b/gu;
+const DISPLAY_AIZA_PATTERN = /\bAIza[0-9A-Za-z_-]{30,}\b/gu;
+/** opencode 会话令牌形态（长串才视为凭据，避免误伤短词）。 */
+const DISPLAY_ST_TOKEN_PATTERN = /\bst_[A-Za-z0-9_-]{20,}\b/gu;
+
+/**
+ * 显示文本的凭据脱敏（bot 消息链路用）：只清凭据类内容，不碰本机路径、URL 本体和邮箱。
+ *
+ * 与 redactTelemetryText 的差别：显示场景面向用户本人、可用性优先——URL 保留（仅打码
+ * query 里 key=token 类参数值）、路径/邮箱原样保留；不做长度截断与空白归一化，只做模式替换。
+ * 凭据正则与遥测口径并排复用同一形状，占位符沿用 `{redacted}` / `{secret}`。
+ */
+export function redactSecretsInDisplayText(value: string | undefined | null): string {
+  if (typeof value !== "string" || !value) {
+    return "";
+  }
+  return value
+    .replace(DISPLAY_AUTHORIZATION_HEADER_PATTERN, "$1 {redacted}")
+    .replace(DISPLAY_SECRET_QUERY_PATTERN, "$1{redacted}")
+    .replace(DISPLAY_SECRET_KV_PATTERN, "$1{redacted}")
+    .replace(DISPLAY_BEARER_SCHEME_PATTERN, "$1 {redacted}")
+    .replace(DISPLAY_SK_PATTERN, "{secret}")
+    .replace(DISPLAY_GH_PATTERN, "{secret}")
+    .replace(DISPLAY_AKIA_PATTERN, "{secret}")
+    .replace(DISPLAY_AIZA_PATTERN, "{secret}")
+    .replace(DISPLAY_ST_TOKEN_PATTERN, "{secret}");
+}
+
 /**
  * 把 URL 清洗成 `protocol//host` 加归一化路由；丢弃 query 与 fragment。
  *

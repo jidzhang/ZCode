@@ -11,6 +11,8 @@
   <a href="README.md">简体中文</a> | English
 </p>
 
+> safe-zcode personal hardening notes: [SAFE-ZCODE.en.md](SAFE-ZCODE.en.md).
+
 ZCode is an AI coding workspace with desktop, browser, and terminal interfaces. This repository contains the clients, backend services, shared UI, and Agent CLI and runtime source code.
 
 ## Updates

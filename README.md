@@ -11,6 +11,8 @@
   简体中文 | <a href="README.en.md">English</a>
 </p>
 
+> safe-zcode 个人优化说明，见 [SAFE-ZCODE.md](SAFE-ZCODE.md)。
+
 
 
 ZCode 是 AI 编程工作台，提供桌面应用、浏览器界面和终端 Agent。本仓库包含客户端、后端服务、共享 UI，以及 Agent CLI 与运行时源码。

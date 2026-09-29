@@ -73,5 +73,8 @@ packages/desktop/.e2e-network-capture/
 # feishu-channel 本地凭据（勿提交）
 packages/feishu-channel/.env.local
 
+# 本地工作文档（出站加固记录、上游对照笔记），只存本机、不提交。
+local-notes/
+
 # wechat-channel 本地凭据（勿提交）
 packages/wechat-channel/.env.local

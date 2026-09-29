@@ -3,6 +3,8 @@ import { loadEndpointEnv } from "./load-endpoint-env.mjs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmod, cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import {
@@ -195,6 +197,20 @@ async function stageZCodePackage({ packageRoot, version }) {
   );
   await chmod(resolve(packageRoot, "agent", "zcode.cjs"), 0o755);
 
+  // 本地 fork 加固：vite "hidden" sourcemap 仍会把 .map 文件本体（含 sourcesContent
+  // 源码全文）写进 web 产物并随包发布。"hidden" 只是不写 sourceMappingURL 引用，
+  // 防不了拿到安装包的人解包直读。这里只删 .map，JS/CSS 资产全部保留；
+  // node_modules 里第三方库自带的 map 不在 web/assets 下，不受影响。
+  const webAssetsDir = resolve(packageRoot, "web", "assets");
+  if (existsSync(webAssetsDir)) {
+    for (const entry of await readdir(webAssetsDir)) {
+      if (entry.endsWith(".map")) {
+        await rm(resolve(webAssetsDir, entry), { force: true });
+      }
+    }
+  }
+
+
   await stageTuiRuntime(packageRoot);
   await copyRuntimeNodeModules(packageRoot);
   await patchNodePtyPrebuilds(packageRoot);
@@ -231,8 +247,26 @@ async function createTarball({ packageParent, releaseDir, tarballName }) {
   });
   // GNU tar 把 "D:\..." 的盘符冒号解释成远程主机名（rsh 协议），Windows 必须加
   // --force-local 关闭该解释，否则打包在 Windows 上必然失败（上游仅 macOS/Linux 开发）。
-  const tarArgs = ["-czf", tarball, "-C", packageParent, packageDirName];
-  run("tar", process.platform === "win32" ? ["--force-local", ...tarArgs] : tarArgs);
+  // Windows System32 自带 bsdtar 不认 --force-local（且无此问题），所以按 tar 实现自适应：
+  // 优先用 GNU tar（Git for Windows 自带），找不到再用系统 tar 裸参数。
+  let tarArgs = ["-czf", tarball, "-C", packageParent, packageDirName];
+  let tarBin = "tar";
+  let tarOptions = {};
+  if (process.platform === "win32") {
+    const gitUsrBin = "C:/Program Files/Git/usr/bin";
+    if (existsSync(`${gitUsrBin}/tar.exe`)) {
+      // 三个坑一次说清：
+      // 1. run() 在 Windows 走 shell:true，路径含空格必须自带引号；
+      // 2. GNU tar 需要 --force-local 处理盘符冒号（bsdtar 不认也不用）；
+      // 3. GNU tar 的 -z 会调外部 gzip，按 PATH 查找——从 cmd 启动时
+      //    PATH 里没有 Git 的 usr/bin，gzip 找不到导致 Broken pipe，
+      //    所以把 Git 的 usr/bin 前置到子进程 PATH。
+      tarBin = `"${gitUsrBin}/tar.exe"`;
+      tarArgs = ["--force-local", ...tarArgs];
+      tarOptions.env = { ...process.env, PATH: `${gitUsrBin};${process.env.PATH}` };
+    }
+  }
+  run(tarBin, tarArgs, tarOptions);
   return tarball;
 }
 

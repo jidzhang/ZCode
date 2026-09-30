@@ -52,6 +52,9 @@ const telegramCommandDescriptions = {
   mode: "Select mode",
   thoughtLevel: "Select thinking level",
   reply: "Select reply detail",
+  task: "Switch to an existing task",
+  stop: "Stop the current generation",
+  reconnect: "Reconnect a remote workspace",
 } as const;
 
 const telegramCommandNames = {
@@ -64,6 +67,9 @@ const telegramCommandNames = {
   mode: "mode",
   thoughtLevel: "think",
   reply: "reply",
+  task: "task",
+  stop: "stop",
+  reconnect: "reconnect",
 } as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -310,7 +316,16 @@ function decodeTelegramCallbackData(data: string): string {
 
 function buildTelegramCommands(bot: BotConfig): TelegramBotCommand[] {
   return BOT_MENU_COMMAND_ORDER
-    .filter((command) => command === "help" || command === "bind" || bot.allowedCommands[command] !== false)
+    // task/stop/reconnect 不在 BotCommandPolicy，与 help/bind 同样跳过策略过滤。
+    .filter(
+      (command) =>
+        command === "help" ||
+        command === "bind" ||
+        command === "task" ||
+        command === "stop" ||
+        command === "reconnect" ||
+        bot.allowedCommands[command] !== false,
+    )
     .map((command) => ({
       command: telegramCommandNames[command],
       description: telegramCommandDescriptions[command],

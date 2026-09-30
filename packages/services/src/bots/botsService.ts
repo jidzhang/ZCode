@@ -246,6 +246,9 @@ const helpMessageByCommand = {
   mode: "helpMode",
   thoughtLevel: "helpThoughtLevel",
   reply: "helpReply",
+  task: "helpTask",
+  stop: "helpStop",
+  reconnect: "helpReconnect",
 } as const satisfies Record<(typeof BOT_MENU_COMMAND_ORDER)[number], BotMessageId>;
 
 function validateBotConfig(config: BotsConfigFile, candidate: BotConfig): void {
@@ -4777,7 +4780,8 @@ export function createBotsService(
   ): string {
     const lines = [msg(locale, "helpTitle")];
     for (const command of BOT_MENU_COMMAND_ORDER) {
-      if (command === "help" || command === "bind") {
+      // task/stop/reconnect 不在 BotCommandPolicy（allowedCommands 无这些键），与 help/bind 一样跳过策略检查。
+      if (command === "help" || command === "bind" || command === "task" || command === "stop" || command === "reconnect") {
         lines.push(msg(locale, helpMessageByCommand[command]));
         continue;
       }

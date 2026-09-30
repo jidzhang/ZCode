@@ -29,6 +29,10 @@ const messages = {
     helpMode: "**/模式 或 /mode** — 切换运行模式",
     helpThoughtLevel: "**/思考 或 /think** — 切换思考级别",
     helpReply: "**/回复 或 /reply** — 切换回复详细程度",
+    // 中文帮助同时列中文+英文别名（7847d57 惯例）；任务/停止/重连此前只在解析器实现、帮助漏列。
+    helpTask: "**/任务 或 /task** — 切换到已有任务（客户端左侧列表的会话）",
+    helpStop: "**/停止 或 /stop** — 停止当前任务生成",
+    helpReconnect: "**/重连 或 /reconnect** — 重连远端工作区",
     webhookSecretInvalid: "Webhook secret 校验失败。",
     // Bugfix: 这条错误由通用 provider callback 处理路径触发，微信/飞书失败时不能误显示 Telegram。
     callbackFailed: "处理机器人回调失败：{message}",
@@ -148,6 +152,9 @@ const messages = {
     helpMode: "**/mode** — Switch run mode",
     helpThoughtLevel: "**/think** — Switch thought level",
     helpReply: "**/reply** — Switch reply detail",
+    helpTask: "**/task** — Switch to an existing task (conversation)",
+    helpStop: "**/stop** — Stop the current generation",
+    helpReconnect: "**/reconnect** — Reconnect a remote workspace",
     webhookSecretInvalid: "Webhook secret verification failed.",
     callbackFailed: "Failed to process bot callback: {message}",
     sessionExpiredNewTaskHint:

@@ -32,7 +32,8 @@ rem A corrupted global pnpm native exe can exit silently with no output (build
 rem phase looks green but actually did nothing), so require a printed version.
 rem NOTE: keep this file ASCII-only; cmd parses .bat in the ANSI codepage (GBK)
 rem and UTF-8 Chinese comments corrupt line parsing.
-pnpm --version >nul 2>&1
+rem NOTE: pnpm is pnpm.cmd on Windows; without CALL control never returns here.
+call pnpm --version >nul 2>&1
 if errorlevel 1 goto :no_pnpm
 
 node packages/desktop/scripts/bundle.mjs --os %~1 --arch %~2 --publish always

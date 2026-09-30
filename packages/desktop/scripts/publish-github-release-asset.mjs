@@ -184,7 +184,9 @@ function discoverArtifacts({ os, arch }) {
       continue;
     }
     const lowerName = entry.name.toLowerCase();
-    const extension = extensions.find((candidate) => lowerName.endsWith(candidate));
+    // Bugfix: 扩展名含大写（.AppImage）时必须忽略大小写，否则 lowerName 永远匹配不上，
+    // linux 发布直接报找不到 updater 安装包（修复依据：与 bundle.mjs findBuiltArtifact 同口径）。
+    const extension = extensions.find((candidate) => lowerName.endsWith(candidate.toLowerCase()));
     if (!extension || !archHints.some((hint) => artifactNameMatchesArch(lowerName, hint))) {
       continue;
     }
@@ -201,7 +203,8 @@ function discoverArtifacts({ os, arch }) {
     size,
   }));
   const updaterExtension = resolveUpdaterArtifactExtension(os);
-  const updaterArtifact = artifacts.find((file) => file.assetName.toLowerCase().endsWith(updaterExtension));
+  // Bugfix: 同上，updater 扩展名（.AppImage）按小写比较，否则 linux 必进 fail 分支。
+  const updaterArtifact = artifacts.find((file) => file.assetName.toLowerCase().endsWith(updaterExtension.toLowerCase()));
   if (!updaterArtifact) {
     fail(`dist 中未找到 ${os}/${arch} 的 updater 安装包 (${updaterExtension})，请先完成打包`);
   }

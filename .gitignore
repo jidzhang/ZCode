@@ -78,6 +78,7 @@ local-notes/
 
 # 本地优化台账，只存本机、不提交。
 LOCAL-CHANGES.md
+LOCAL-PLAN-*.md
 
 # wechat-channel 本地凭据（勿提交）
 packages/wechat-channel/.env.local

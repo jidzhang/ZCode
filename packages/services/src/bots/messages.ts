@@ -23,7 +23,8 @@ const messages = {
     helpHelp: "**/帮助 或 /help** — 查看这份说明",
     helpBind: "**/bind <code>** — 绑定当前聊天",
     helpStatus: "**/状态 或 /status** — 查看工作区、模型和任务状态",
-    helpNew: "**/新建 或 /new 或 /clear** — 开始新的任务草稿",
+    // /clear 别名沿用 Claude Code 肌肉记忆（上游设计），但它不删除任何东西——只切到新草稿，旧任务保留、/任务 可切回。说明里写清楚，避免被误读成“清理对话”。
+    helpNew: "**/新建 或 /new 或 /clear** — 开始新任务；旧任务保留，发 /任务 可切回",
     helpWorkspace: "**/项目 或 /workspace 或 /project** — 切换工作区",
     helpModel: "**/模型 或 /model** — 切换模型",
     helpMode: "**/模式 或 /mode** — 切换运行模式",
@@ -146,7 +147,7 @@ const messages = {
     helpHelp: "**/help** — Show this guide",
     helpBind: "**/bind <code>** — Bind this chat",
     helpStatus: "**/status** — Show workspace, model, and task status",
-    helpNew: "/new or /clear — Start a new task draft",
+    helpNew: "**/new or /clear** — Start a new task; previous tasks are kept, /task switches back",
     helpWorkspace: "**/project** — Switch workspace",
     helpModel: "**/model** — Switch model",
     helpMode: "**/mode** — Switch run mode",

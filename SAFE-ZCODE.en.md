@@ -16,10 +16,20 @@ One goal: quiet by default, online only when it should be.
 - Smaller installer: ~143MB vs ~170MB official for the same version — Alibaba telemetry
   removed entirely, and sourcemaps and other non-runtime files stripped.
 
-## Bugs fixed
+## Feishu / WeChat channels
 
-Expired tokens in the Feishu channel heal themselves; the circuit breaker
-half-opens automatically after a minute. No restart needed.
+The channel is a **direct connection** between the client and Feishu / WeChat:
+messages travel only between your client and each provider's own official
+servers — no intermediary domains, nothing in between.
+
+- **Resilient**: Feishu tokens invalidated early by the server are refreshed
+  and retried automatically, and the circuit breaker half-opens after a minute.
+  Replies are never silently dropped.
+- **No lost input**: messages sent while a task is running are queued instead
+  of rejected; `/stop` interrupts when you'd rather not wait.
+- **Easy switching**: `/task` jumps to a recent conversation, `/project`
+  switches workspaces, and `/reconnect` revives a dropped remote workspace.
+- **Discoverable**: help lists every command with its Chinese aliases.
 
 ## Opt in (settings file, restart to apply)
 

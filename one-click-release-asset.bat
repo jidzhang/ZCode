@@ -28,8 +28,10 @@ if errorlevel 1 goto :no_auth
 for /f "tokens=*" %%t in ('gh auth token') do set GH_TOKEN=%%t
 if "%GH_TOKEN%"=="" goto :no_token
 
-rem pnpm 全局原生 exe 损坏时会静默退出且无输出（构建阶段看似通过实际什么都没做），
-rem 这里要求 pnpm 能报出版本号，把环境问题挡在构建之前。
+rem A corrupted global pnpm native exe can exit silently with no output (build
+rem phase looks green but actually did nothing), so require a printed version.
+rem NOTE: keep this file ASCII-only; cmd parses .bat in the ANSI codepage (GBK)
+rem and UTF-8 Chinese comments corrupt line parsing.
 pnpm --version >nul 2>&1
 if errorlevel 1 goto :no_pnpm
 

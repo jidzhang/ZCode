@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Release one more platform asset to the existing Release (no tagging, no pushing).
+# Release one more platform asset to the existing Release (created as published if missing; no tagging, no pushing).
 # Usage: ./one-click-release-asset.sh <win|linux|mac> <x64|arm64>
 #   ./one-click-release-asset.sh linux x64      (Debian x64)
 #   ./one-click-release-asset.sh mac x64        (Intel Mac)
 # Tree must already be checked out at the release tag on this machine.
 # Publishing machine needs: gh auth login (once), same env below.
+# Upload goes through gh CLI (honors HTTPS_PROXY for GitHub); build itself stays offline.
 set -u
 cd "$(dirname "$0")"
 
@@ -23,6 +24,14 @@ export ZCODE_UPDATE_GITHUB_REPO="${ZCODE_UPDATE_GITHUB_REPO:-jidzhang/ZCode}"
 command -v gh >/dev/null 2>&1 || { echo "GitHub CLI (gh) not found in PATH."; exit 1; }
 gh auth status >/dev/null 2>&1 || { echo "gh is not logged in. Run: gh auth login"; exit 1; }
 
+# pnpm 全局原生 exe 损坏时会静默退出且无输出（构建阶段看似通过实际什么都没做），
+# 这里要求 pnpm 能报出版本号，把环境问题挡在构建之前。
+pnpm --version >/dev/null 2>&1 || {
+  echo "pnpm is not usable (missing from PATH or exits silently)."
+  echo "If \"pnpm --version\" prints nothing, reinstall the repo-pinned version: npm i -g pnpm@10.33.2"
+  exit 1
+}
+
 GH_TOKEN="$(gh auth token)" || true
 export GH_TOKEN
 if [ -z "${GH_TOKEN}" ]; then
@@ -35,5 +44,5 @@ node packages/desktop/scripts/bundle.mjs --os "$1" --arch "$2" --publish always 
   exit 1
 }
 
-echo "DONE. Asset uploaded to the existing Release; no new Release created."
+echo "DONE. Assets uploaded to the Release and verified by name+size; Release is created when missing."
 echo "Check the Release page, then install and verify on that platform."

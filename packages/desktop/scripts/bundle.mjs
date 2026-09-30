@@ -256,7 +256,7 @@ function printHelp() {
   --arch, -a <x64|arm64>       目标 CPU 架构，默认 arm64
   --skip-prepare               跳过 prepare:runtime-assets
   --skip-build                 跳过 pnpm build
-  --publish <always|never>     透传给 electron-builder（发版时用 always，需 GH_TOKEN）
+  --publish <always|never>     always=构建后用 gh 直传 GitHub Release（需 gh 登录/GH_TOKEN）；never=只构建
   --dry-run                    只打印最终命令，不执行打包
   -h, --help                   查看帮助
 
@@ -726,8 +726,13 @@ async function main() {
     osBuilderFlagMap[os],
     archBuilderFlagMap[arch],
   ];
-  // 发版时透传 --publish always（github 通道需 GH_TOKEN）；默认不传即只构建不发布。
-  if (publish) {
+  // 发版（--publish always）时 electron-builder 以 never 运行：它的 GitHub publisher 在目标
+  // Release 已是 published 状态时会静默跳过全部上传且退出码仍为 0（v3.14.3-safe.1 win-arm64 踩中），
+  // 且多架构会互相覆盖 channel yml。发布改由 publish-github-release-asset.mjs 用 gh 直传，
+  // 上传后按名称+字节数机械校验。显式 never / 不传 publish 仍只构建不发布。
+  if (publish === "always") {
+    buildArgs.push("--publish", "never");
+  } else if (publish) {
     buildArgs.push("--publish", publish);
   }
 
@@ -770,6 +775,18 @@ async function main() {
       artifactPath,
     ]),
   );
+
+  if (publish === "always") {
+    runTimedSync("bundle:publish-release-asset", () =>
+      run(process.execPath, [
+        resolve(desktopRoot, "scripts", "publish-github-release-asset.mjs"),
+        "--os",
+        os,
+        "--arch",
+        arch,
+      ]),
+    );
+  }
 }
 
 const entryHref = process.argv[1] ? pathToFileURL(process.argv[1]).href : null;

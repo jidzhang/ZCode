@@ -1,9 +1,31 @@
 # 桌面端发版步骤（GitHub Release 通道）
 
-> 行为与设计依据见 [specs/release-asset-publish.md](../specs/release-asset-publish.md)。
+> 行为与设计依据见 [specs/release-asset-publish.md](../specs/release-asset-publish.md)、
+> [specs/ci-release-workflow.md](../specs/ci-release-workflow.md)。
 > 本文档描述操作流程；脚本自动处理的部分标注了"自动"。
 
-## 一次性准备（每台发布机）
+## 方式一：GitHub Actions 自动发布（推荐）
+
+`.github/workflows/release.yml`（公开仓库 runner 免费）：
+
+1. **bump 版本并提交**：版本唯一来源是根 `package.json`。
+2. **打 tag 并推送**：
+   ```bat
+   git tag -a v3.14.4 -m "safe-zcode self release v3.14.4"
+   git push origin main
+   git push origin v3.14.4
+   ```
+   push `v*` tag 即触发：预建 Release → windows/linux/mac 三平台并行构建
+   （win job 内串行 x64/arm64）→ 自动上传资产并合并 channel yml → 上传后回读校验。
+3. **确认 Actions 全绿**，到 Release 页面核对资产；失败平台可只重跑该 job，
+   或用方式二本地补发该平台（幂等）。
+- **不发布的构建演练**：Actions 页面手动运行（`workflow_dispatch`，默认不勾 publish），
+  三平台只构建并把安装包作为 workflow artifacts 上传（保留 7 天）供装机验证，不写 Release。
+- 日常提交想跑 lint/typecheck 的话另行添加 CI workflow，本 workflow 只在 tag/手动触发时运行。
+
+## 方式二：本机手动发布（CI 兜底/补发平台）
+
+### 一次性准备（每台发布机）
 
 1. **gh 登录**：`gh auth login`（选 GitHub.com → HTTPS → 浏览器设备码登录）。
    国内网络需要在同一个命令行窗口先设代理：
@@ -18,7 +40,7 @@
    ```
 3. **仓库根目录的 `.npmrc`** 使用 `node-linker=hoisted` 与腾讯/npmmirror 镜像，勿改动。
 
-## 每个版本的发布步骤
+### 每个版本的发布步骤
 
 以下假设版本号为 `v3.14.4`，Windows 发布机；mac/linux 见第 4 步替换。
 

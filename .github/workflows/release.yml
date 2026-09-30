@@ -1,0 +1,156 @@
+# 桌面端自动发布：push tag v* 触发全平台构建并直传 GitHub Release。
+# 行为与设计依据见 specs/ci-release-workflow.md；构建/校验/上传的唯一所有者是
+# packages/desktop/scripts/bundle.mjs 与 publish-github-release-asset.mjs，本文件只做编排。
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "构建后上传 GitHub Release（必须以发布 tag 作为 ref 运行）"
+        type: boolean
+        default: false
+
+# tag 推送 = 自动发布；手动触发默认只构建（产物作为 workflow artifacts 上传供装机验证）。
+# ZCODE_PUBLISH 是 bundle.mjs 的既有环境变量入参（与 --publish 等价）。必须始终显式给值：
+# electron-builder 26 在 CI=true 且缺省 --publish 时默认 onTagOrDraft，
+# 手动构建演练若 ref 恰好在 tag 上会触发它自家 GitHub publisher 的缺陷路径（draft 语义/yml 覆盖）。
+env:
+  ZCODE_ENV: production
+  ZCODE_PREVIEW_IDENTITY: "0"
+  ZCODE_UPDATE_CHANNEL: github
+  ZCODE_UPDATE_GITHUB_REPO: jidzhang/ZCode
+  ZCODE_PUBLISH: ${{ (github.event_name == 'push' || inputs.publish == true) && 'always' || 'never' }}
+  PUBLISH: ${{ github.event_name == 'push' || inputs.publish == true }}
+  # runner 在海外，覆盖本地默认的 npmmirror 镜像直连官方源（覆盖路径由 bundle.mjs 既有 env 解析提供）。
+  ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/v
+  ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+permissions:
+  contents: write
+
+# 同一 ref 的运行不并发互踩（资产上传依赖 --clobber 幂等）；绝不自动取消进行中的发布。
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # 预建 Release（已发布状态），消除三个平台 job 并发时"查无则建"的竞态窗口。
+  # job 本身必须无条件运行（needs 链不能因条件跳过而断掉），是否真正创建由步骤内 if 决定；
+  # 预建失败不阻断后续——平台 job 的发布脚本仍会按"不存在则建"兜底。
+  create-release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create release if missing
+        if: env.PUBLISH == 'true'
+        run: |
+          TAG="v$(node -p "require('./package.json').version")"
+          gh release create "$TAG" --repo "$ZCODE_UPDATE_GITHUB_REPO" \
+            --title "$TAG" --notes "ZCode Desktop $TAG" \
+            || echo "[create-release] $TAG 已存在或 tag 尚未创建，交由平台 job 的发布脚本兜底"
+
+  build-windows:
+    needs: create-release
+    runs-on: windows-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        shell: bash
+      # 同一 job 内串行两个架构：win 所有架构共用 latest.yml，发布脚本对 yml 是
+      # "下载-合并-上传"且无锁，并行会互相覆盖（specs/release-asset-publish.md）。
+      - run: node packages/desktop/scripts/bundle.mjs --os win --arch x64
+        shell: bash
+      - run: node packages/desktop/scripts/bundle.mjs --os win --arch arm64
+        shell: bash
+      - name: Upload artifacts (win x64)
+        if: env.PUBLISH != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-win-x64
+          path: packages/desktop/dist/*-win-x64.exe
+          retention-days: 7
+          if-no-files-found: error
+      - name: Upload artifacts (win arm64)
+        if: env.PUBLISH != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-win-arm64
+          path: packages/desktop/dist/*-win-arm64.exe
+          retention-days: 7
+          if-no-files-found: error
+
+  build-linux:
+    needs: create-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        shell: bash
+      - run: node packages/desktop/scripts/bundle.mjs --os linux --arch x64
+        shell: bash
+      # - run: node packages/desktop/scripts/bundle.mjs --os linux --arch arm64
+      #   shell: bash
+      - name: Upload artifacts (linux x64)
+        if: env.PUBLISH != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-linux-x64
+          path: |
+            packages/desktop/dist/*-linux-x86_64.AppImage
+            packages/desktop/dist/*-linux-amd64.deb
+            packages/desktop/dist/*-linux-x86_64.rpm
+          retention-days: 7
+          if-no-files-found: error
+
+  build-mac:
+    needs: create-release
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        shell: bash
+      # macos-15 是 arm64 runner，交叉构建 x64 目标与本地跨 arch 打包同一链路；
+      # 新增 mac arm64 时在下方追加一行（同一 job 内串行，共用 latest-mac.yml）。
+      - run: node packages/desktop/scripts/bundle.mjs --os mac --arch x64
+        shell: bash
+      - name: Upload artifacts (mac x64)
+        if: env.PUBLISH != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-mac-x64
+          path: |
+            packages/desktop/dist/*-mac-x64.dmg
+            packages/desktop/dist/*-mac-x64.zip
+          retention-days: 7
+          if-no-files-found: error

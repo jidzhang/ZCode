@@ -5,6 +5,7 @@ import type { Locale } from "@zcode/shared";
 const MENU_KEY_NAME = "ZCode.OpenInZCode";
 const DIRECTORY_MENU_KEY = `HKCU\\Software\\Classes\\Directory\\shell\\${MENU_KEY_NAME}`;
 const DRIVE_MENU_KEY = `HKCU\\Software\\Classes\\Drive\\shell\\${MENU_KEY_NAME}`;
+const DIRECTORY_BACKGROUND_MENU_KEY = `HKCU\\Software\\Classes\\Directory\\Background\\shell\\${MENU_KEY_NAME}`;
 const MENU_LABELS: Record<Locale, string> = {
   "zh-CN": "在ZCode中打开",
   "en-US": "Open in ZCode",
@@ -30,12 +31,13 @@ function quoteWindowsCommandArg(value: string): string {
 function buildWindowsOpenFolderCommand(
   executablePath: string,
   appArgs: readonly string[] = [],
+  workspacePlaceholder = '"%1"',
 ): string {
   return [
     quoteWindowsCommandArg(executablePath),
     ...appArgs.map(quoteWindowsCommandArg),
     "--open-workspace",
-    '"%1"',
+    workspacePlaceholder,
   ].join(" ");
 }
 
@@ -44,16 +46,54 @@ function buildWindowsOpenFolderRegistryOperations(options: {
   appArgs?: readonly string[];
   locale: Locale;
 }): WindowsOpenFolderRegistryOperation[] {
-  const command = buildWindowsOpenFolderCommand(options.executablePath, options.appArgs ?? []);
   const menuName = getWindowsOpenFolderMenuName(options.locale);
-  const menuKeys = [DIRECTORY_MENU_KEY, DRIVE_MENU_KEY];
+  // 空白处右键没有选中项，%1 不会被替换成目录；Background 场景必须用 Explorer 的
+  // 当前目录占位符 %V（系统 cmd/Powershell 与 VS Code 同此），一处键同时覆盖
+  // 文件夹内、桌面与驱动器根目录的空白右键。
+  const menuKeys: Array<{ menuKey: string; workspacePlaceholder: string }> = [
+    { menuKey: DIRECTORY_MENU_KEY, workspacePlaceholder: '"%1"' },
+    { menuKey: DRIVE_MENU_KEY, workspacePlaceholder: '"%1"' },
+    { menuKey: DIRECTORY_BACKGROUND_MENU_KEY, workspacePlaceholder: '"%V"' },
+  ];
 
-  return menuKeys.flatMap((menuKey) => [
-    { args: ["add", menuKey, "/ve", "/d", menuName, "/f"] },
-    { args: ["add", menuKey, "/v", "MUIVerb", "/t", "REG_SZ", "/d", menuName, "/f"] },
-    { args: ["add", menuKey, "/v", "Icon", "/t", "REG_SZ", "/d", options.executablePath, "/f"] },
-    { args: ["add", `${menuKey}\\command`, "/ve", "/d", command, "/f"] },
-  ]);
+  return menuKeys.flatMap(({ menuKey, workspacePlaceholder }) => {
+    const command = buildWindowsOpenFolderCommand(
+      options.executablePath,
+      options.appArgs ?? [],
+      workspacePlaceholder,
+    );
+
+    return [
+      { args: ["add", menuKey, "/ve", "/d", menuName, "/f"] },
+      {
+        args: [
+          "add",
+          menuKey,
+          "/v",
+          "MUIVerb",
+          "/t",
+          "REG_SZ",
+          "/d",
+          menuName,
+          "/f",
+        ],
+      },
+      {
+        args: [
+          "add",
+          menuKey,
+          "/v",
+          "Icon",
+          "/t",
+          "REG_SZ",
+          "/d",
+          options.executablePath,
+          "/f",
+        ],
+      },
+      { args: ["add", `${menuKey}\\command`, "/ve", "/d", command, "/f"] },
+    ];
+  });
 }
 
 function runRegAdd(args: readonly string[]): Promise<void> {

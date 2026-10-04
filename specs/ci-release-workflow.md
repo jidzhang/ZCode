@@ -17,8 +17,9 @@
     不产生任何 GitHub 写操作；勾选 `publish` 且以发布 tag 作为 ref 运行时等同自动发布。
 - **拓扑**：`create-release` → 三个平台 job 并行：
   - `build-windows`（windows-latest）：win x64 → win arm64，job 内串行；
-  - `build-linux`（ubuntu-24.04）：linux x64；
-  - `build-mac`（macos-15）：mac x64（arm64 runner 交叉构建，与本地跨 arch 打包同一链路）。
+  - `build-linux`（ubuntu-24.04）：linux x64 → linux arm64（x64 runner 交叉构建），job 内串行；
+  - `build-mac`（macos-15）：mac x64（arm64 runner 交叉构建，与本地跨 arch 打包同一链路）→ mac arm64，job 内串行。
+  - 架构矩阵与官方 zcode.z.ai 发布对齐：win/mac x64+arm64、linux x64+arm64（deb/rpm/AppImage 等）。
   - 新增架构 = 在对应 job 里加一行 bundle 调用（保持同一 OS 内串行）。
 - **竞态规避（硬约束）**：
   - win/mac 全架构共用 channel yml（`latest.yml` / `latest-mac.yml`），发布脚本对 yml 是
@@ -60,8 +61,9 @@
 
 ## 验收场景
 
-1. push tag `vX` → workflow 全绿：Release `vX` 含 win x64/arm64、linux x64、mac x64 全部资产
-   与 3 份 channel yml，上传后"名称+字节数"校验通过。
+1. push tag `vX` → workflow 全绿：Release `vX` 含 win x64/arm64、linux x64/arm64、mac x64/arm64
+   全部资产与 4 份 channel yml（latest.yml / latest-mac.yml / latest-linux.yml / latest-linux-arm64.yml），
+   上传后"名称+字节数"校验通过。
 2. workflow_dispatch 默认参数在 main 运行 → 三平台构建通过、产物出现在 artifacts，Release 无任何变化。
 3. workflow_dispatch 勾选 publish 且 ref 选 tag `vX` → 与场景 1 等价。
 4. 同一 tag 重跑 → 幂等（`--clobber` 覆盖同名资产、yml 按架构条目合并）。

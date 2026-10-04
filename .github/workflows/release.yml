@@ -113,8 +113,10 @@ jobs:
         shell: bash
       - run: node packages/desktop/scripts/bundle.mjs --os linux --arch x64
         shell: bash
-      # - run: node packages/desktop/scripts/bundle.mjs --os linux --arch arm64
-      #   shell: bash
+      # 与官方发布矩阵对齐补齐 arm64；x64 runner 交叉构建，与本地跨 arch 打包同一链路。
+      # linux channel yml 按架构分文件（latest-linux.yml / latest-linux-arm64.yml），天然隔离。
+      - run: node packages/desktop/scripts/bundle.mjs --os linux --arch arm64
+        shell: bash
       - name: Upload artifacts (linux x64)
         if: env.PUBLISH != 'true'
         uses: actions/upload-artifact@v4
@@ -124,6 +126,17 @@ jobs:
             packages/desktop/dist/*-linux-x86_64.AppImage
             packages/desktop/dist/*-linux-amd64.deb
             packages/desktop/dist/*-linux-x86_64.rpm
+          retention-days: 7
+          if-no-files-found: error
+      - name: Upload artifacts (linux arm64)
+        if: env.PUBLISH != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-linux-arm64
+          path: |
+            packages/desktop/dist/*-linux-arm64.AppImage
+            packages/desktop/dist/*-linux-arm64.deb
+            packages/desktop/dist/*-linux-aarch64.rpm
           retention-days: 7
           if-no-files-found: error
 
@@ -142,9 +155,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
         shell: bash
-      # macos-15 是 arm64 runner，交叉构建 x64 目标与本地跨 arch 打包同一链路；
-      # 新增 mac arm64 时在下方追加一行（同一 job 内串行，共用 latest-mac.yml）。
+      # macos-15 是 arm64 runner：arm64 为本机原生构建，x64 交叉构建（与本地跨 arch 打包同一链路）；
+      # 同一 job 内串行，共用 latest-mac.yml（下载-合并-上传无锁，见 specs/release-asset-publish.md）。
       - run: node packages/desktop/scripts/bundle.mjs --os mac --arch x64
+        shell: bash
+      - run: node packages/desktop/scripts/bundle.mjs --os mac --arch arm64
         shell: bash
       - name: Upload artifacts (mac x64)
         if: env.PUBLISH != 'true'
@@ -154,5 +169,15 @@ jobs:
           path: |
             packages/desktop/dist/*-mac-x64.dmg
             packages/desktop/dist/*-mac-x64.zip
+          retention-days: 7
+          if-no-files-found: error
+      - name: Upload artifacts (mac arm64)
+        if: env.PUBLISH != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-mac-arm64
+          path: |
+            packages/desktop/dist/*-mac-arm64.dmg
+            packages/desktop/dist/*-mac-arm64.zip
           retention-days: 7
           if-no-files-found: error

@@ -26,7 +26,9 @@ env:
   ZCODE_PUBLISH: ${{ (github.event_name == 'push' || inputs.publish == true) && 'always' || 'never' }}
   PUBLISH: ${{ github.event_name == 'push' || inputs.publish == true }}
   # runner 在海外，覆盖本地默认的 npmmirror 镜像直连官方源（覆盖路径由 bundle.mjs 既有 env 解析提供）。
-  ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/v
+  # ELECTRON_MIRROR 尾部不能带 v：@electron/get 会在 mirror 后拼接自带 v 前缀的 customDir（v{version}），
+  # 带尾 v 会拼出 .../download/vv41.0.3/ 的 404（首次实跑三平台同挂于此）。
+  ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
   ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

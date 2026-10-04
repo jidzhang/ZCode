@@ -109,6 +109,9 @@ jobs:
         with:
           node-version: 24.14.0
           cache: pnpm
+      # pacman target（.pkg.tar.zst）由 fpm 内部调 bsdtar 生成；ubuntu runner 缺省没有该命令
+      # （exit 127，导致 deb/rpm/AppImage 虽构建成功但整个 bundle 失败、linux 资产全部缺发）。
+      - run: sudo apt-get install -y --no-install-recommends libarchive-tools
       - run: pnpm install --frozen-lockfile
         shell: bash
       - run: node packages/desktop/scripts/bundle.mjs --os linux --arch x64

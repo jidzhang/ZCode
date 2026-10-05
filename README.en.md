@@ -15,9 +15,9 @@ ZCode is an AI coding workspace with desktop, browser, and terminal interfaces. 
 
 ## Safe ZCode: quiet, controllable ZCode
 
-- **Zero reporting by default**: telemetry and tracing off, no reporting endpoints shipped;
+- **Zero reporting**: telemetry and tracing fully disabled — no reporting endpoints shipped, no way to turn them on;
 - **Zero background chatter**: 7 categories of startup calls to official servers disabled, updater removed from daily builds;
-- **Nothing leaves silently**: sharing off by default, credentials masked before reaching Feishu/WeChat.
+- **Nothing leaves silently**: conversation sharing disabled; credentials masked before reaching Feishu/WeChat.
 
 Release builds update only from this repo's Releases. Full notes: [SAFE-ZCODE.en.md](SAFE-ZCODE.en.md).
 

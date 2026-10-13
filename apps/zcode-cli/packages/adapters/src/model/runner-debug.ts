@@ -67,16 +67,95 @@ export function shouldRecordModelIO(env: EnvRecord): boolean {
   return normalizeRuntimeEnv(env) !== "test";
 }
 
+/**
+ * model-io 记录模式，唯一事实源（generate/stream 两条 runner 共用）：
+ * - full：常规调用，成功/失败都写完整记录；
+ * - error-summary：skipTranscript 的后台调用，成功不写、失败只写摘要（防自反馈）；
+ * - none：test 环境，零磁盘副作用（shouldRecordModelIO 的既有契约）。
+ */
+export function resolveModelIORecordingMode(input: {
+  env: EnvRecord;
+  skipTranscript: boolean;
+}): "full" | "error-summary" | "none" {
+  if (!shouldRecordModelIO(input.env)) return "none";
+  return input.skipTranscript ? "error-summary" : "full";
+}
+
 // 判定当前是否开发态,用于选择落盘目录(debug vs rollout)。
 // 直接看 ZCODE_RUNTIME_ENV === "development";dev 桌面/CLI 启动时已注入该变量。
 export function isDevelopmentModelIOEnv(env: EnvRecord): boolean {
   return normalizeRuntimeEnv(env) === "development";
 }
 
+/**
+ * 失败摘要记录：skipTranscript 的后台调用不写完整记录（防自反馈），
+ * 但 wire 摘要 + 错误是排查必需，正文不落盘。generate/stream 两条路径共用，
+ * 避免两份手写记录漂移；raw capture 缺失时回落 AI SDK options 的真实值，
+ * 避免恰好拿不到 wire 时摘要全空。无错误时静默跳过。
+ */
+function writeModelIOErrorSummaryRecord(
+  input: {
+    attempt: number;
+    debugDir?: string;
+    error?: unknown;
+    isDev: boolean;
+    modelIoFullRetentionEnabled: boolean;
+    options: AiSdkGenerateTextOptions | AiSdkStreamTextOptions;
+    request: AiSdkModelTextRequest;
+    requestId: string;
+    resolved: ResolvedAiSdkModel;
+    startedAt: number;
+  },
+  stream: boolean,
+): void {
+  if (input.error === undefined) return;
+  const completedAt = Date.now();
+  const metadata = input.request.metadata ?? {};
+  const rawBody = input.resolved.rawRequestBodyCapture?.body;
+  const wireBody =
+    rawBody !== null && typeof rawBody === "object" && !Array.isArray(rawBody)
+      ? (rawBody as Record<string, unknown>)
+      : undefined;
+  writeModelIODebugRecord(
+    {
+      completedAt: new Date(completedAt).toISOString(),
+      durationMs: completedAt - input.startedAt,
+      error: serializeError(input.error),
+      requestId: input.requestId,
+      attempt: input.attempt,
+      model: {
+        modelId: input.resolved.modelId,
+        providerId: input.resolved.providerId,
+      },
+      request: {
+        maxOutputTokens:
+          wireBody?.["max_output_tokens"] ??
+          (typeof input.options.maxOutputTokens === "number"
+            ? input.options.maxOutputTokens
+            : undefined),
+        reasoningEffort: asRecord(wireBody?.["reasoning"])?.["effort"],
+        stream: wireBody?.["stream"] ?? stream,
+        toolNames: input.request.tools?.map((toolContract) => toolContract.name) ?? [],
+      },
+      sessionId: stringMetadata(metadata.sessionId),
+      querySource: stringMetadata(metadata.querySource),
+      startedAt: new Date(input.startedAt).toISOString(),
+      traceId: stringMetadata(metadata.traceId),
+      turnId: stringMetadata(metadata.turnId),
+      type: "model_io_error_summary",
+    },
+    input.debugDir,
+    input.isDev,
+    input.modelIoFullRetentionEnabled,
+  );
+}
+
 export function recordGenerateTextDebug(input: {
   attempt: number;
   debugDir?: string;
   error?: unknown;
+  /** 失败摘要模式：只写 querySource + wire 摘要 + 错误，不写 messages 正文。 */
+  errorSummaryOnly?: boolean;
   isDev: boolean;
   modelIoFullRetentionEnabled: boolean;
   normalizedToolCalls: ModelTextResult["toolCalls"];
@@ -88,6 +167,12 @@ export function recordGenerateTextDebug(input: {
   result?: AiSdkGenerateTextResult;
   startedAt: number;
 }): void {
+  if (input.errorSummaryOnly) {
+    // 后台辅助调用失败摘要：防自反馈，只写 wire 摘要 + 错误，不写 messages 正文。
+    writeModelIOErrorSummaryRecord(input, false);
+    return;
+  }
+
   if (!input.recordModelIO) {
     return;
   }
@@ -175,6 +260,8 @@ export async function recordStreamTextDebug(input: {
   attempt: number;
   debugDir?: string;
   error?: unknown;
+  /** 失败摘要模式：只写 querySource + wire 摘要 + 错误，不写 messages 正文。 */
+  errorSummaryOnly?: boolean;
   isDev: boolean;
   modelIoFullRetentionEnabled: boolean;
   normalizedToolCalls: ModelTextResult["toolCalls"];
@@ -186,6 +273,12 @@ export async function recordStreamTextDebug(input: {
   result?: AiSdkStreamTextResult;
   startedAt: number;
 }): Promise<void> {
+  // 失败摘要模式：不碰聚合 promise（失败流可能永不 settle），只写摘要。
+  if (input.errorSummaryOnly) {
+    writeModelIOErrorSummaryRecord(input, true);
+    return;
+  }
+
   if (!input.recordModelIO) {
     return;
   }
@@ -894,6 +987,9 @@ function serializeError(error: unknown): Record<string, unknown> {
     return {
       name: error.name,
       message: error.message,
+      // 上游 400 的结构化证据常在 cause 链上（APICallError / ProviderBusinessError 包装）；
+      // 摘要只带一层 cause message，够定位且不再递归展开。
+      ...(error.cause instanceof Error ? { cause: { message: error.cause.message } } : {}),
       stack: error.stack,
     };
   }

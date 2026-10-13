@@ -43,7 +43,7 @@ import { createStreamTextOptions } from "./runner-options.js";
 import {
   isDevelopmentModelIOEnv,
   recordStreamTextDebug,
-  shouldRecordModelIO,
+  resolveModelIORecordingMode,
 } from "./runner-debug.js";
 import { sanitizeModelNetworkHeaders } from "./runner-network-headers.js";
 import { admitAttempt, type AttemptAdmission } from "./request-admission.js";
@@ -114,7 +114,11 @@ export async function* runStreamText(input: {
     resolved: input.resolved,
     transport: ModelTransportKindValue.Sse,
   });
-  const recordModelIO = shouldRecordModelIO(input.env);
+  const recordingMode = resolveModelIORecordingMode({
+    env: input.env,
+    skipTranscript: input.request.metadata?.skipTranscript === true,
+  });
+  const recordModelIO = recordingMode === "full";
   const isDev = isDevelopmentModelIOEnv(input.env);
   let requestMessages = input.request.messages;
   let signatureRepairAttempted = false;
@@ -635,14 +639,19 @@ export async function* runStreamText(input: {
       return;
     } catch (error) {
       attemptFailed = true;
-      if (recordModelIO && options) {
+      if (options) {
         await recordStreamTextDebug({
           modelIoFullRetentionEnabled: input.modelIoFullRetentionEnabled,
           attempt,
           debugDir: input.debugDir,
           error,
+          // skipTranscript 的后台调用失败时仍留摘要（见 generate 路径同名标记）。
+          errorSummaryOnly: recordingMode === "error-summary",
           isDev,
-          normalizedToolCalls: toolCallAssembler.snapshotNormalizedToolCalls(),
+          // 摘要模式用不到归一化工具调用，别在失败路径白算快照。
+          normalizedToolCalls: recordModelIO
+            ? toolCallAssembler.snapshotNormalizedToolCalls()
+            : undefined,
           options,
           recordModelIO,
           request: attemptRequest,

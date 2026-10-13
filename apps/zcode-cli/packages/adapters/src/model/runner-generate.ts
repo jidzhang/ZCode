@@ -23,7 +23,7 @@ import {
 import {
   isDevelopmentModelIOEnv,
   recordGenerateTextDebug,
-  shouldRecordModelIO,
+  resolveModelIORecordingMode,
 } from "./runner-debug.js";
 import {
   getGenerateTextResultMetadata,
@@ -85,8 +85,11 @@ export async function runGenerateText(input: {
     resolved: input.resolved,
     transport: ModelTransportKindValue.Http,
   });
-  const recordModelIO =
-    input.request.metadata?.skipTranscript !== true && shouldRecordModelIO(input.env);
+  const recordingMode = resolveModelIORecordingMode({
+    env: input.env,
+    skipTranscript: input.request.metadata?.skipTranscript === true,
+  });
+  const recordModelIO = recordingMode === "full";
   const isDev = isDevelopmentModelIOEnv(input.env);
   let requestMessages = input.request.messages;
   let signatureRepairAttempted = false;
@@ -395,6 +398,9 @@ export async function runGenerateText(input: {
           attempt,
           debugDir: input.debugDir,
           error,
+          // skipTranscript 的后台调用失败时仍留摘要：完整记录会自反馈，
+          // 但 querySource + wire 摘要 + 错误是排查必需。
+          errorSummaryOnly: recordingMode === "error-summary",
           isDev,
           normalizedToolCalls: undefined,
           options,

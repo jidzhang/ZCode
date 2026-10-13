@@ -5,6 +5,7 @@ import {
   traceContextToLogContext,
 } from "../deps.js";
 import type {
+  Model,
   ModelInputMessage,
   ModelSelection,
   ModelRequest,
@@ -18,11 +19,14 @@ import type { AgentRuntimeInternal } from "../internal.js";
 import { createRefreshRuntimeHeadersBeforeModelAttempt } from "./model-runtime-headers.js";
 import { recordModelUsageFact } from "./usage-observability.js";
 import { createRuntimeModel } from "./runtime-model.js";
+import { resolveNormalRequestMaxOutputTokens } from "./model-token-limits.js";
 import { normalizeStreamError } from "../helpers/index.js";
 import { auxiliaryModelOptions } from "../../model/auxiliary-model-options.js";
 
 const WORKSPACE_GENERATE_TEXT_TIMEOUT_MS = 60_000;
-const CONNECTIVITY_PROBE_MAX_OUTPUT_TOKENS = 1;
+// 探针预算沿用目标模型的有效 maxOutputTokens（用户填写值；留空时为内置/继承默认值）。
+// 曾用 1 token 硬编码，落到 openai-responses wire 上为 max_output_tokens=1，
+// 被要求 max_output_tokens>=16 的上游网关直接 400，导致"对话可用、测试必失败"。
 // 探测请求使用固定最小 prompt，避免多余推理开销；不可改写角色、文本或混入会话历史。
 const CONNECTIVITY_PROBE_SYSTEM = "You are ZCode connectivity probe.";
 const CONNECTIVITY_PROBE_USER = "hi";
@@ -55,12 +59,50 @@ export async function testModelConnectivity(
   options?: { abortSignal?: AbortSignal; traceContext?: TraceContext },
 ): Promise<void> {
   const baseModel = createRuntimeModel(this, { selection: input.selection });
-  // 连接探测不需要生成正文；复用辅助生成的 5,000 预算会等待多余推理和输出。
-  // 独立限制为 1 Token，仍使用最低公开档位，不改变其他辅助调用的预算。
-  const model = baseModel.bind({
-    reasoningLevel: baseModel.optionSpecs.reasoningLevel.values[0]!,
-    maxOutputTokens: CONNECTIVITY_PROBE_MAX_OUTPUT_TOKENS,
+  // 连接探测不需要生成正文，但预算必须沿用目标模型的有效 maxOutputTokens：
+  // 用户填写值经 Registry 合并后已在 optionSpecs.maxOutputTokens.max 中，留空时为
+  // 内置/继承默认值（如默认档 32000）；硬编码小预算会被上游最小值校验拒绝。
+  // 不另设 16 下限：高于 spec.max 的 wire 值会被 bind 本地校验拒绝，虚报低于
+  // spec.max 的配置也会掩盖"配置与网关不兼容"的事实，按原值发送、400 如实透出。
+  const probeMaxOutputTokens = resolveNormalRequestMaxOutputTokens({
+    modelMaxOutputTokens: baseModel.optionSpecs.maxOutputTokens.max,
   });
+  // 逐档验证：values 每一档各打一枪最小探针，坏档当场暴露（如下游不支持 none），
+  // 而不是等到对话中的辅助调用才以 400 爆出。见 specs/reasoning-degrade-retry.md。
+  const levels = baseModel.optionSpecs.reasoningLevel.values;
+  const failures: Array<{ level: string; message: string }> = [];
+  for (const level of levels) {
+    // 取消检查只在 catch 里会漏掉成功路径：用户取消后剩余档位不应继续打枪。
+    if (options?.abortSignal?.aborted) throw new Error("模型连通性测试已取消");
+    try {
+      await probeConnectivityLevel.call(this, baseModel, level, probeMaxOutputTokens, options);
+    } catch (error) {
+      // 取消不是档位失败，先于记录判断，避免把中止记成坏档。
+      if (options?.abortSignal?.aborted) throw error;
+      failures.push({
+        level,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      // 档位被拒是配置问题不是瞬态故障：C 的降档重试不适用于探针（探针要如实
+      // 报告每档状态，不能用下一档的成功掩盖本档的失败），直接记下一档。
+    }
+  }
+  if (failures.length > 0) {
+    const detail = failures.map((item) => `${item.level}（${item.message}）`).join("；");
+    throw new Error(
+      `模型连通性测试 ${failures.length}/${levels.length} 个档位失败：${detail}`,
+    );
+  }
+}
+
+async function probeConnectivityLevel(
+  this: AgentRuntimeInternal,
+  baseModel: Model,
+  level: string,
+  maxOutputTokens: number,
+  options?: { abortSignal?: AbortSignal; traceContext?: TraceContext },
+): Promise<void> {
+  const model = baseModel.bind({ reasoningLevel: level, maxOutputTokens });
   const traceContext = createChildTraceContext(options?.traceContext ?? this.rootTraceContext, {
     attributes: {
       providerId: String(model.providerId),

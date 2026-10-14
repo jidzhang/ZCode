@@ -637,15 +637,15 @@ describe("hostResponseMessageSchema", () => {
     expect(patch.computerUseComposerEntryHidden).toBe(false);
   });
 
-  it("defaults ZCode interaction behavior to queue and accepts guide patches", () => {
+  it("defaults ZCode interaction behavior to guide and accepts queue patches", () => {
     const parsed = appSettingsSchema.parse({});
     const patch = appSettingsPatchSchema.parse({
-      zcodeInteractionBehavior: "guide",
+      zcodeInteractionBehavior: "queue",
     });
 
-    expect(parsed.zcodeInteractionBehavior).toBe("queue");
+    expect(parsed.zcodeInteractionBehavior).toBe("guide");
     expect(patch).toMatchObject({
-      zcodeInteractionBehavior: "guide",
+      zcodeInteractionBehavior: "queue",
     });
   });
 

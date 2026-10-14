@@ -7,7 +7,9 @@
 - 队列：把后续输入作为待发送消息，等上一轮结束后自动发送。
 - 引导：交给 ZCode CLI 的 turn steering，在下一次合法 model-step 边界注入当前轮。
 
-`AppSettings.zcodeInteractionBehavior` 控制这个偏好，默认值是 `queue`。Composer
+`AppSettings.zcodeInteractionBehavior` 控制这个偏好。safe-zcode：默认值取 `guide`
+（团队全员安装后都会手动改成 guide，默认应匹配真实使用模式；上游面向大众保守取
+`queue`，偏好保守的用户可在设置页切回）。Composer
 不再暴露会话级“追加模式”切换；会话投影里的 `config.followupMode` 只是 CLI/runtime
 对这份 app 偏好的当前同步结果。用户在设置页切换后，已打开的 v4 session 通过
 `setFollowupMode` 命令同步到 CLI；新建或预热 session 通过 `createSession.config.followupMode`
@@ -15,7 +17,7 @@
 
 ## 行为
 
-`queue` 是默认行为。桌面和手机已提交的 busy/running 输入都由 CLI/runtime 的
+`guide` 是 safe-zcode 的默认行为（上游默认 `queue`，两种语义的运行规则一致）。桌面和手机已提交的 busy/running 输入都由 CLI/runtime 的
 `CommandInbox` 串行 admission；renderer、host、relay 和 desktop main 都不维护第二份权威
 conversation queue。桌面通过 `desktop-continuous` 直接接收事实，手机 Web 远控通过
 `web-remote-replayable` snapshot/gap 恢复同一组 CLI 事实，两种 delivery profile 不改变消费规则。

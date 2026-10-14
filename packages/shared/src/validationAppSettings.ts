@@ -495,7 +495,9 @@ const appSettingsObjectSchema = z.object({
   toolGroupingExploreEnabled: z.boolean().default(true),
   toolGroupingTerminalEnabled: z.boolean().default(true),
   toolGroupingChangesEnabled: z.boolean().default(false),
-  zcodeInteractionBehavior: zcodeInteractionBehaviorSchema.default("queue"),
+  // safe-zcode：默认插话行为取 guide（运行中发言直接引导当前任务）。团队全员安装后
+  // 都会手动改成 guide，默认值应匹配真实使用模式；上游面向大众保守取 queue。
+  zcodeInteractionBehavior: zcodeInteractionBehaviorSchema.default("guide"),
   askUserQuestionAutoResolutionEnabled: z.boolean().default(true),
   modelIoFullRetentionEnabled: z.boolean().default(false),
   dynamicWorkflowMode: dynamicWorkflowModeSettingSchema,

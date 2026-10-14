@@ -5,7 +5,9 @@ export function resolveAppFollowupMode(
   settings: AppSettings | null | undefined,
 ): SessionConfigState["followupMode"] | null {
   if (!settings) return null;
-  return settings.zcodeInteractionBehavior === "guide" ? "guide" : "queue";
+  // safe-zcode：默认插话行为是 guide（见 validationAppSettings 的默认值说明），
+  // 只有显式 queue 才排队。
+  return settings.zcodeInteractionBehavior === "queue" ? "queue" : "guide";
 }
 
 export function resolveOppositeFollowupDelivery(

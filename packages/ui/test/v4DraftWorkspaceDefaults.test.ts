@@ -26,7 +26,7 @@ describe("resolveDraftDisplayedConfig", () => {
       model: "GLM-5.2",
       thought: "",
       thoughtLevels: [],
-      followupMode: "queue",
+      followupMode: "guide",
       mode: "build",
     });
   });

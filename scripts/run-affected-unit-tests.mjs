@@ -20,11 +20,16 @@ const CODE_EXTENSIONS = new Set([
 ]);
 const CHANGED_DIFF_FILTER = "ACMRTUXB";
 const ZERO_SHA = /^0{40}$/u;
+// 只有 JS CLI 才能交给 process.execPath 执行；@pnpm/exe 独立版的 npm_execpath
+// 指向 pnpm.exe，误传给 node 会按源码解析 MZ 头直接 SyntaxError（2026-10-14 实踩）。
+const PNPM_JS_CLI_NAMES = ["pnpm.cjs", "pnpm.mjs"];
+const PNPM_JS_CLI_EXT = /\.(?:cjs|mjs|js)$/iu;
 
 function resolvePnpmCliPath(env) {
   const npmExecPath = env.npm_execpath;
   if (
     npmExecPath &&
+    PNPM_JS_CLI_EXT.test(npmExecPath) &&
     (npmExecPath.toLowerCase().includes("\\pnpm\\") ||
       npmExecPath.toLowerCase().includes("/pnpm/"))
   ) {
@@ -36,9 +41,11 @@ function resolvePnpmCliPath(env) {
     .map((entry) => entry.trim())
     .filter(Boolean);
   for (const pathEntry of pathEntries) {
-    const candidate = join(pathEntry, "node_modules", "pnpm", "bin", "pnpm.cjs");
-    if (existsSync(candidate)) {
-      return candidate;
+    for (const cliName of PNPM_JS_CLI_NAMES) {
+      const candidate = join(pathEntry, "node_modules", "pnpm", "bin", cliName);
+      if (existsSync(candidate)) {
+        return candidate;
+      }
     }
   }
 

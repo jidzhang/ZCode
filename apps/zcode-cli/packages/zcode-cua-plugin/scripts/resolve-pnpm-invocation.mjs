@@ -11,9 +11,10 @@ export function resolvePnpmInvocation(input) {
   const { npmExecpath, platform } = input;
   const args = ["install", "--prefer-offline"];
   // 首选让当前 Node 直接跑 pnpm 的 JS 入口：不经 shell、不碰 `.cmd`，三平台同一条码路。
-  // pnpm 运行 package script 时会注入 npm_execpath。
+  // pnpm 运行 package script 时会注入 npm_execpath；但 @pnpm/exe 独立版注入的是
+  // pnpm.exe，交给 node 会按源码解析 MZ 头直接 SyntaxError，只接受 .js/.cjs/.mjs 入口。
   const entry = typeof npmExecpath === "string" ? npmExecpath.trim() : "";
-  if (entry) {
+  if (entry && /\.(?:cjs|mjs|js)$/iu.test(entry)) {
     return { command: process.execPath, args: [entry, ...args], options: {} };
   }
   // 回落。Windows 上 pnpm 是 `pnpm.cmd`：execFile 不走 shell 时不补 PATHEXT（ENOENT），

@@ -15,6 +15,11 @@ function encodeUtf8Value(value) {
   return Buffer.from(value, "utf8").toString("base64");
 }
 
+// Windows PowerShell 在中文等非 UTF-8 系统代码页下，[Console]::Out 按控制台代码页
+// （如 GBK）编码输出，Node 侧按 utf8 解码会得到乱码（含非 ASCII 的路径必现）。
+// 统一在脚本开头把控制台输出切到 UTF-8；动态值解码仍显式使用 UTF-8。
+const UTF8_OUTPUT_PREFIX = "[Console]::OutputEncoding=[Text.Encoding]::UTF8;";
+
 export function createEncodedPowerShellArgs(script, values = []) {
   // Windows PowerShell 5.1 会把普通 `-Command` 后续 argv 拼回命令文本，
   // 不会把它们注入 `$args`。动态值先单独编码，再放进 `-EncodedCommand`，同时避免
@@ -25,7 +30,10 @@ export function createEncodedPowerShellArgs(script, values = []) {
         `$zcodeArg${index}=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodeUtf8Value(value)}'));`,
     )
     .join("");
-  const encodedCommand = Buffer.from(`${valueBindings}${script}`, "utf16le").toString("base64");
+  const encodedCommand = Buffer.from(
+    `${UTF8_OUTPUT_PREFIX}${valueBindings}${script}`,
+    "utf16le",
+  ).toString("base64");
   return [...POWERSHELL_COMMON_ARGS, "-EncodedCommand", encodedCommand];
 }
 

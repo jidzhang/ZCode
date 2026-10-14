@@ -15,7 +15,7 @@ export function resolveDraftDisplayedConfig(
     model: selection.modelId,
     thought: selection.options?.reasoningLevel ?? "",
     thoughtLevels: [],
-    followupMode: composer.followupMode ?? "queue",
+    followupMode: composer.followupMode ?? "guide",
     mode: composer.mode ?? "build",
   };
 }

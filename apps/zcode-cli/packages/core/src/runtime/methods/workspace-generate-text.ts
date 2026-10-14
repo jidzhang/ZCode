@@ -58,7 +58,7 @@ export async function testModelConnectivity(
   input: ModelConnectivityTestInput,
   options?: { abortSignal?: AbortSignal; traceContext?: TraceContext },
 ): Promise<void> {
-  const baseModel = createRuntimeModel(this, { selection: input.selection });
+  const baseModel = createRuntimeModel(this, { selection: input.selection, scope: "workspace" });
   // 连接探测不需要生成正文，但预算必须沿用目标模型的有效 maxOutputTokens：
   // 用户填写值经 Registry 合并后已在 optionSpecs.maxOutputTokens.max 中，留空时为
   // 内置/继承默认值（如默认档 32000）；硬编码小预算会被上游最小值校验拒绝。
@@ -123,7 +123,6 @@ async function probeConnectivityLevel(
   await runWithModelInvocationContext(
     {
       metadata: traceContextToLogContext(traceContext),
-      modelRequestSessionType: "other",
       modelCall: { operation: "workspace_generate_text" },
       statusSink: this.createModelStatusSink(traceContext, []),
       traceContext,
@@ -186,7 +185,7 @@ async function generateWorkspaceTextImpl(
   assertWorkspaceModelInput(input);
   const requestedSelection = input.selection;
   const querySource = input.querySource.trim() || "workspace_generate_text";
-  const baseModel = createRuntimeModel(this, { selection: requestedSelection });
+  const baseModel = createRuntimeModel(this, { selection: requestedSelection, scope: "workspace" });
   // 辅助请求需要的是最低公开档位，不是扫描 off/nothink 等名称后强制关闭。
   const model =
     querySource === GIT_COMMIT_MESSAGE_QUERY_SOURCE
@@ -240,7 +239,6 @@ async function generateWorkspaceTextImpl(
   const result = await runWithModelInvocationContext(
     {
       metadata: traceContextToLogContext(modelTraceContext),
-      modelRequestSessionType: "other" as const,
       modelCall: {
         operation:
           querySource === GIT_COMMIT_MESSAGE_QUERY_SOURCE

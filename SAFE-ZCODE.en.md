@@ -13,6 +13,9 @@ One goal: quiet by default, online only when it should be.
 - No secret spill: credentials caught in tool summaries, error messages, or permission
   prompts sent to Feishu/WeChat are masked before delivery; paths and links stay readable.
 - Daily builds never self-update; Check for Updates simply reports you are on the latest version.
+- Enter just sends: follow-up defaults to "guide" — Enter sends right away and the agent
+  continues after the tool call, no need to learn what a queue is. Switch back to "queue"
+  if you prefer batching messages.
 - Smaller installer: ~143MB vs ~170MB official for the same version — Alibaba telemetry
   removed entirely, and sourcemaps and other non-runtime files stripped.
 

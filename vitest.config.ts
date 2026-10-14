@@ -41,6 +41,12 @@ const forkIsolatedTests = [
   // 波及面收敛到本文件，其余测试结果可完整收集；崩溃根因见
   // docs/windows-test-compatibility.md。
   "packages/ui/test/pdfJsCMapSupport.test.ts",
+  // Bugfix: 并发读写替换用例在 4 线程全量并发 + 杀软扫描下，rename 的 EPERM 窗口
+  // 会超过重试预算（单独运行稳定通过）；隔离串行消除自身负载。
+  "packages/provider-node/test/bundled-config-replacement.test.ts",
+  // Bugfix: 该用例以 30ms 间隔逐字节喂本地 HTTP 流验证空闲保活，全量并发时定时器
+  // 被调度延迟会超过下载器空闲阈值误判中止；隔离串行保留原时序口径。
+  "packages/zcode-server-cli/test/releaseDownload.test.ts",
 ];
 
 export default defineConfig({

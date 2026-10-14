@@ -14,3 +14,8 @@ third-party/runtime/*.txt -text -whitespace
 docs/knip/docs/LICENSE -text -whitespace
 docs/knip/docs/licenses/** -text -whitespace
 third-party/inventory.json linguist-generated=true
+
+# Gen UI 运行时的 vendored 资源带 manifest sha256 固定快照，构建期逐文件校验；
+# Windows runner 默认 autocrlf=true 会在检出时把 .js/.css 重写成 CRLF，导致
+# 哈希失配（v3.15.1-safe.1 首跑 win 挂、mac 过即此差异）。按字节精确检出。
+apps/zcode-cli/packages/visualize-plugin/skills/visualize/assets/** -text

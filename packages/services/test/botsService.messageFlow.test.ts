@@ -352,7 +352,7 @@ describe("botsService messageFlow", () => {
       text: "/reply streaming_card",
       actor: weixinActor,
     });
-    expect(rejectedStreamingCard[0]?.text).toContain("未找到回复颗粒度");
+    expect(rejectedStreamingCard[0]?.text).toContain("未找到回复方式");
 
     await service.handleInboundMessage({
       botId: "weixin-1",
@@ -409,7 +409,7 @@ describe("botsService messageFlow", () => {
       actor: feishuActor,
     });
 
-    expect(rejectedReplies[0]?.text).toContain("未找到回复颗粒度");
+    expect(rejectedReplies[0]?.text).toContain("未找到回复方式");
     expect((await repo.readConfig()).bots[0]?.replyMode).toBe("assistant_changes");
 
     const acceptedReplies = await service.handleInboundMessage({

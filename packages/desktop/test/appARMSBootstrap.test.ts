@@ -1,8 +1,16 @@
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ZCODE_AGENT_LIFECYCLE_LOG_MARKER } from "@zcode/shared/process-diagnostic";
+
+// fork：@arms/rum-electron 已被 workspace stub（packages/arms-stub）替换，不存在
+// pnpm patch 产物的 dist/index.mjs；依赖读取真实 SDK 源码的用例在 stub 下结构性
+// 无法成立，检测到源码缺失即跳过（换回真实 SDK + patch 后自动恢复执行）。
+const hasPatchedArmsSdk = existsSync(
+  fileURLToPath(new URL("../../../node_modules/@arms/rum-electron/dist/index.mjs", import.meta.url)),
+);
 
 const init = vi.fn((_config: unknown) => Promise.resolve());
 
@@ -430,7 +438,8 @@ describe("appARMSBootstrap beforeReport", () => {
     },
   );
 
-  it.each(["process_type", "ptype"] as const)(
+  it.skipIf(!hasPatchedArmsSdk)
+    .each(["process_type", "ptype"] as const)(
     "reads the structured Crashpad %s annotation",
     async (annotationKey) => {
       const readCrashProcessType = await getPatchedReadCrashProcessType();
@@ -440,7 +449,9 @@ describe("appARMSBootstrap beforeReport", () => {
     },
   );
 
-  it("ignores unreferenced process_type bytes before the structured annotation", async () => {
+  it.skipIf(!hasPatchedArmsSdk)(
+    "ignores unreferenced process_type bytes before the structured annotation",
+    async () => {
     const readCrashProcessType = await getPatchedReadCrashProcessType();
     const dump = buildCrashpadProcessTypeDump({
       annotationKey: "ptype",
@@ -525,7 +536,8 @@ describe("appARMSBootstrap beforeReport", () => {
 });
 
 describe("patched ARMS console error formatter", () => {
-  it.each(["main", "renderer"])(
+  it.skipIf(!hasPatchedArmsSdk)
+    .each(["main", "renderer"])(
     "removes the %s logger prefix and preserves every meaningful argument",
     async (source) => {
       const formatConsoleErrorArgs = await getPatchedFormatConsoleErrorArgs();
@@ -540,7 +552,9 @@ describe("patched ARMS console error formatter", () => {
     },
   );
 
-  it("redacts secrets, tolerates circular values, and caps the reported message", async () => {
+  it.skipIf(!hasPatchedArmsSdk)(
+    "redacts secrets, tolerates circular values, and caps the reported message",
+    async () => {
     const formatConsoleErrorArgs = await getPatchedFormatConsoleErrorArgs();
     const circular: Record<string, unknown> = {
       token: "super-secret",
@@ -562,7 +576,7 @@ describe("patched ARMS console error formatter", () => {
     expect(result.length).toBeLessThanOrEqual(2_000);
   });
 
-  it("drops a public prefix without a business message", async () => {
+  it.skipIf(!hasPatchedArmsSdk)("drops a public prefix without a business message", async () => {
     const formatConsoleErrorArgs = await getPatchedFormatConsoleErrorArgs();
 
     expect(formatConsoleErrorArgs(["[2026-08-20 17:04:22.265] [pid:25144] [main]"])).toBe("");

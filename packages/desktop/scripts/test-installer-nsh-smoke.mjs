@@ -91,6 +91,10 @@ function compileFixture({
 }) {
   const args = [
     "/V2",
+    // fixture 是无 BOM 的 UTF-8（含中文注释）；makensis 在 Windows 上默认按系统
+    // 代码页解码脚本，GBK 下中文注释字节非法会报 "Bad text encoding"，需显式声明。
+    "/INPUTCHARSET",
+    "UTF8",
     ...(buildUninstaller ? ["/WX", "/DBUILD_UNINSTALLER"] : []),
     `/DNSIS_INCLUDE_DIR=${resolve(nsisDir, "Include")}`,
     `/DELECTRON_BUILDER_NSIS_INCLUDE_DIR=${resolve(appBuilderLibDir, "templates/nsis/include")}`,

@@ -14,6 +14,18 @@ import {
 import { createSubagentsService } from "../src/subagents/subagentsService.js";
 
 const tempRoots: string[] = [];
+const activeServices: Array<ReturnType<typeof createSubagentsService>> = [];
+
+// 测试里创建的服务会按需建立 chokidar 文件监听；不先 dispose 就删临时目录，
+// 监听线程会在已删除路径上 realpath 抛 EPERM，vitest 会把它计为 unhandled error
+// 直接判整场失败。统一登记并在 afterEach 先 dispose 再清理目录。
+function createTrackedSubagentsService(
+  ...parameters: Parameters<typeof createSubagentsService>
+): ReturnType<typeof createSubagentsService> {
+  const service = createSubagentsService(...parameters);
+  activeServices.push(service);
+  return service;
+}
 
 async function makeTempHome(prefix = "zcode-subagents-home-"): Promise<string> {
   const home = await mkdtemp(join(tmpdir(), prefix));
@@ -63,6 +75,9 @@ async function writeOfficialPluginFixture(
 }
 
 afterEach(async () => {
+  for (const service of activeServices.splice(0)) service.disposeAll();
+  // dispose 关闭 chokidar watcher 是 fire-and-forget，稍等一拍让关闭落地再删目录。
+  await new Promise((resolve) => setTimeout(resolve, 50));
   while (tempRoots.length > 0) {
     const root = tempRoots.pop();
     if (root) {
@@ -94,7 +109,7 @@ describe("subagent markdown helpers", () => {
       join(pluginRoot, "agents", "nested", "deep.md"),
       serializeSubagentMarkdown({ name: "deep", description: "Deep", systemPrompt: "Deep" }),
     );
-    const service = createSubagentsService({ homeDir: home, isDesktopRuntime: true });
+    const service = createTrackedSubagentsService({ homeDir: home, isDesktopRuntime: true });
     for (const mode of ["settingsUserOnly", "allRuntimeScopes"] as const) {
       const result = await service.list({ workspacePath, mode });
       expect(
@@ -139,7 +154,7 @@ describe("subagent markdown helpers", () => {
       }),
       "utf8",
     );
-    const service = createSubagentsService({ homeDir: home, isDesktopRuntime: true });
+    const service = createTrackedSubagentsService({ homeDir: home, isDesktopRuntime: true });
 
     const result = await service.list({ workspacePath, provider: "glm" });
 
@@ -178,7 +193,7 @@ describe("subagent markdown helpers", () => {
     const projectContent =
       "---\nname: project\nmodel: builtin:zai-coding-plan/GLM-5.3\n---\nProject.";
     await writeFile(projectPath, projectContent);
-    const service = createSubagentsService({ homeDir: home, isDesktopRuntime: true });
+    const service = createTrackedSubagentsService({ homeDir: home, isDesktopRuntime: true });
     const result = await service.list({ workspacePath, mode: "settingsUserOnly" });
     expect(result.pluginAgents.map((agent) => agent.name)).toEqual(["documents:visual-judge"]);
     expect(result.pluginAgents[0]?.readOnly).toBe(true);
@@ -229,7 +244,7 @@ describe("subagent markdown helpers", () => {
       }),
       "utf8",
     );
-    const service = createSubagentsService({ homeDir: home, isDesktopRuntime: true });
+    const service = createTrackedSubagentsService({ homeDir: home, isDesktopRuntime: true });
 
     const result = await service.list({ workspacePath, provider: "glm" });
 
@@ -285,7 +300,7 @@ describe("subagent markdown helpers", () => {
         plugins: { enabledPlugins: { [pluginId]: true } },
       }),
     );
-    const service = createSubagentsService({ homeDir: home, isDesktopRuntime: true });
+    const service = createTrackedSubagentsService({ homeDir: home, isDesktopRuntime: true });
     const selection = { providerId: "p", modelId: "new", options: { reasoningLevel: "high" } };
     await Promise.all([
       service.setPluginAgentModelOverride({ agentId, modelSelection: selection }),
@@ -571,7 +586,7 @@ describe("createSubagentsService", () => {
     const projectFile = join(projectRoot, "project.md");
     await writeFile(userFile, content);
     await writeFile(projectFile, content.replace("name: helper", "name: project-helper"));
-    const service = createSubagentsService({ homeDir: home, isDesktopRuntime: true });
+    const service = createTrackedSubagentsService({ homeDir: home, isDesktopRuntime: true });
     const result = await service.list({ workspacePath });
     expect(result.agents.find((agent) => agent.name === "helper")?.modelSelection?.providerId).toBe(
       "account:zai-individual-coding-plan",
@@ -590,7 +605,7 @@ describe("createSubagentsService", () => {
     );
     expect(
       (
-        await createSubagentsService({ homeDir: home, isDesktopRuntime: true }).list({
+        await createTrackedSubagentsService({ homeDir: home, isDesktopRuntime: true }).list({
           workspacePath,
         })
       ).agents.find((agent) => agent.name === "helper")?.modelSelection,
@@ -603,7 +618,7 @@ describe("createSubagentsService", () => {
     const original = '{"builtInModelOverrides":';
     await writeFile(path, original);
     await expect(
-      createSubagentsService({ homeDir: home }).prepareRuntimeState(),
+      createTrackedSubagentsService({ homeDir: home }).prepareRuntimeState(),
     ).resolves.toBeUndefined();
     expect(await readFile(path, "utf8")).toBe(original);
   });
@@ -618,7 +633,7 @@ describe("createSubagentsService", () => {
       disabledAgentIds: ["disabled-profile"],
     };
     await writeFile(statePath, JSON.stringify(legacy));
-    const service = createSubagentsService({
+    const service = createTrackedSubagentsService({
       homeDir: home,
     });
     await service.prepareRuntimeState();
@@ -644,7 +659,7 @@ describe("createSubagentsService", () => {
       statePath,
       JSON.stringify({ builtInModelOverrides: { Explore: "custom:builtin%3Azai-coding-plan:m" } }),
     );
-    const service = createSubagentsService({ homeDir: home });
+    const service = createTrackedSubagentsService({ homeDir: home });
     await Promise.all([
       service.prepareRuntimeState(),
       service.setBuiltInModelOverride({ agentName: "Explore", modelSelection: undefined }),
@@ -665,7 +680,7 @@ describe("createSubagentsService", () => {
       disabledAgentIds: [],
     };
     await writeFile(statePath, JSON.stringify(legacy));
-    const service = createSubagentsService({
+    const service = createTrackedSubagentsService({
       homeDir: home,
       isDesktopRuntime: true,
     });
@@ -693,7 +708,7 @@ describe("createSubagentsService", () => {
   it("persists model overrides for built-in subagents without making them editable", async () => {
     const home = await makeTempHome();
     const workspacePath = join(home, "workspace");
-    const service = createSubagentsService({
+    const service = createTrackedSubagentsService({
       homeDir: home,
       isDesktopRuntime: true,
     });
@@ -770,7 +785,7 @@ describe("createSubagentsService", () => {
   it("clears a built-in subagent model override and restores inheritance", async () => {
     const home = await makeTempHome();
     const workspacePath = join(home, "workspace");
-    const service = createSubagentsService({
+    const service = createTrackedSubagentsService({
       homeDir: home,
       isDesktopRuntime: true,
     });
@@ -830,7 +845,7 @@ describe("createSubagentsService", () => {
       }),
       "utf8",
     );
-    const service = createSubagentsService({
+    const service = createTrackedSubagentsService({
       homeDir: home,
       isDesktopRuntime: true,
     });
@@ -926,7 +941,7 @@ tools:
 架构 prompt`,
       "utf8",
     );
-    const service = createSubagentsService({
+    const service = createTrackedSubagentsService({
       homeDir: home,
       isDesktopRuntime: true,
     });
@@ -966,7 +981,7 @@ tools:
       }),
       "utf8",
     );
-    const service = createSubagentsService({ homeDir: home, isDesktopRuntime: true });
+    const service = createTrackedSubagentsService({ homeDir: home, isDesktopRuntime: true });
 
     const result = await service.list({ workspacePath, provider: "glm" });
 
@@ -1027,7 +1042,7 @@ tools:
       }),
       "utf8",
     );
-    const service = createSubagentsService({ homeDir: home, isDesktopRuntime: true });
+    const service = createTrackedSubagentsService({ homeDir: home, isDesktopRuntime: true });
 
     const result = await service.list({ workspacePath, provider: "glm" });
 
@@ -1043,7 +1058,7 @@ tools:
       model: "custom:custom-openai:gpt-5.4",
     });
     const agentId = "plugin:documents@zcode-plugins-official:visual-judge";
-    const service = createSubagentsService({ homeDir: home, isDesktopRuntime: true });
+    const service = createTrackedSubagentsService({ homeDir: home, isDesktopRuntime: true });
 
     const before = await service.list({ workspacePath, provider: "glm" });
     expect(before.pluginAgents[0]).toMatchObject({
@@ -1092,7 +1107,7 @@ tools:
 
   it("creates user agents in the runtime-consumed user agents root", async () => {
     const home = await makeTempHome();
-    const service = createSubagentsService({
+    const service = createTrackedSubagentsService({
       homeDir: home,
       isDesktopRuntime: true,
     });
@@ -1114,7 +1129,7 @@ tools:
   it("creates and updates workspace agents in the selected workspace root", async () => {
     const home = await makeTempHome();
     const workspacePath = join(home, "workspace");
-    const service = createSubagentsService({
+    const service = createTrackedSubagentsService({
       homeDir: home,
       isDesktopRuntime: true,
     });
@@ -1160,7 +1175,7 @@ tools:
 
   it("removes a custom thoughtLevel when the updated config omits it", async () => {
     const home = await makeTempHome();
-    const service = createSubagentsService({
+    const service = createTrackedSubagentsService({
       homeDir: home,
       isDesktopRuntime: true,
     });
@@ -1197,7 +1212,7 @@ tools:
 
   it("creates agents with wildcard and colon tool patterns as valid markdown", async () => {
     const home = await makeTempHome();
-    const service = createSubagentsService({
+    const service = createTrackedSubagentsService({
       homeDir: home,
       isDesktopRuntime: true,
     });
@@ -1227,7 +1242,7 @@ tools:
 
   it("preserves disabled state when a user agent is renamed", async () => {
     const home = await makeTempHome();
-    const service = createSubagentsService({
+    const service = createTrackedSubagentsService({
       homeDir: home,
       isDesktopRuntime: true,
     });

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import type { WorkspaceHeaderActionSection as WorkspaceHeaderActionSectionType } from "@/WorkspaceHeaderSections/WorkspaceHeaderActionSection.js";
 import { ServiceProvider } from "@/hooks/useServices.js";
+import { CONVERSATION_SHARE_PUBLISH_ENABLED } from "@/ConversationShareMenu.js";
 import { createSettingsTestServices } from "./lib/settingsTestServices.js";
 
 const capturedHeaderHelp = vi.hoisted(() => {
@@ -149,7 +150,10 @@ describe("WorkspaceHeaderActionSection", () => {
     expect(html).toContain("sidePane.expand");
   });
 
-  it("只在 Desktop local/SSH/WSL/Docker 已有任务显示分享入口", async () => {
+  // fork：分享发布门控关闭时入口不渲染，正向断言随门控恢复自动执行。
+  it.skipIf(!CONVERSATION_SHARE_PUBLISH_ENABLED)(
+    "只在 Desktop local/SSH/WSL/Docker 已有任务显示分享入口",
+    async () => {
     const { WorkspaceHeaderActionSection } =
       await import("@/WorkspaceHeaderSections/WorkspaceHeaderActionSection.js");
     const renderSection = (extra: Record<string, unknown>) =>

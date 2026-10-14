@@ -11,6 +11,12 @@ vi.mock("@/i18n/IntlProvider.js", () => ({
   }),
 }));
 
+// fork：出站加固让组件经 useSettings 读取远端图标开关；上游用例没有 ServiceProvider，
+// mock 掉该 hook 维持原语义（settings=null ⇒ 远端图标一律回退内置 Lucide 图标）。
+vi.mock("@/hooks/useSettingService.js", () => ({
+  useSettings: () => ({ settings: null }),
+}));
+
 import { ConversationDraftSuggestedPrompts } from "@/v4/ConversationDraftSuggestedPrompts.js";
 import type { DraftSuggestedPromptItem } from "@/v4/draftSuggestedPromptItems.js";
 
@@ -177,6 +183,21 @@ describe("ConversationDraftSuggestedPrompts", () => {
     expect(iconSlot?.querySelector("img")).toBeNull();
     expect(iconSlot?.querySelector("svg.lucide-square-code")).not.toBeNull();
     expect(iconSlot?.querySelector("[data-client-scene-lucide-icon]")).toBeNull();
+  });
+
+  it("远端图标 URL 在出站开关关闭时回退内置图标，不加载外部资源", () => {
+    const view = render(
+      createElement(ConversationDraftSuggestedPrompts, {
+        items: [
+          items[0]!,
+          { ...items[1]!, iconUrl: "https://cdn.example.com/icon.svg" },
+        ],
+      }),
+    );
+    const iconSlot = view.container.querySelectorAll("[data-draft-suggested-prompt-icon]")[1];
+
+    expect(iconSlot?.querySelector("img")).toBeNull();
+    expect(iconSlot?.querySelector("svg")).not.toBeNull();
   });
 
   it("forwards the complete clicked recommendation config, and stays inert without a handler", () => {

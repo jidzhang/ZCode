@@ -139,7 +139,13 @@ describe("OpenExternal 对 file URL 的分流", () => {
     const { listener } = await registerOpenExternalListener();
     const sender = { getURL: vi.fn(() => "about:blank") };
 
-    listener({ sender }, "file:///tmp/report.html#section");
+    // 上游用例假设 POSIX 路径；Windows 的 fileURLToPath 要求盘符，file:///tmp/...
+    // 会抛 ERR_INVALID_FILE_URL_PATH，按平台取等价的锚点 URL。
+    const anchoredFileUrl =
+      process.platform === "win32"
+        ? "file:///C:/report.html#section"
+        : "file:///tmp/report.html#section";
+    listener({ sender }, anchoredFileUrl);
 
     await vi.waitFor(() => expect(h.shellOpenPath).toHaveBeenCalledTimes(1));
     expect(h.shellOpenPath).not.toHaveBeenCalledWith(expect.stringContaining("#"));
@@ -157,7 +163,11 @@ describe("OpenExternal 对 file URL 的分流", () => {
     expect(h.shellOpenPath).not.toHaveBeenCalled();
   });
 
-  it("file URL 无法转换为本地路径时记录 warn 且不回退到 shell.openExternal", async () => {
+  // POSIX 语义：带 host 的 file URL 无法转换为本地路径；Windows 上同一 URL 是合法
+  // UNC 路径（\\server\share\page.html），会成功走 openPath，断言只在 POSIX 有效。
+  it.skipIf(process.platform === "win32")(
+    "file URL 无法转换为本地路径时记录 warn 且不回退到 shell.openExternal",
+    async () => {
     const { listener, options } = await registerOpenExternalListener();
     const sender = { getURL: vi.fn(() => "about:blank") };
 

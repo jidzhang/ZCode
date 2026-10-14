@@ -60,8 +60,18 @@ describe("Gen UI executor file reader", () => {
     await expect(readGenUiDocument({ ...target, path: oldPath }, outputRoot)).rejects.toThrow(
       "host output directory",
     );
-    await symlink(oldPath, target.path);
-    await expect(readGenUiDocument(target, outputRoot)).rejects.toThrow("symbolic links");
+    // Windows 未开启开发者模式/管理员时创建符号链接返回 EPERM（权限限制而非实现
+    // 缺陷）；创建成功才继续校验 symlink 拒绝路径，junction 部分不受影响。
+    let symlinkAvailable = true;
+    try {
+      await symlink(oldPath, target.path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EPERM") throw error;
+      symlinkAvailable = false;
+    }
+    if (symlinkAvailable) {
+      await expect(readGenUiDocument(target, outputRoot)).rejects.toThrow("symbolic links");
+    }
     await rm(directory, { recursive: true });
     await symlink(target.workspacePath, directory, "junction");
     await expect(readGenUiDocument(target, outputRoot)).rejects.toThrow("symbolic links");

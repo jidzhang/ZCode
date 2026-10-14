@@ -10,8 +10,8 @@ import { WINDOWS_CAPTION_CONTROL_CLASS } from "@/windowCaptionControls.js";
 // safe-zcode：分享发布默认关闭。分享会把对话内容发布到官方后端（zcode.z.ai，
 // 见 conversationShareService 的 webShareCallbackUrl），在账号登录策略明确前，
 // 不向官方后端发布任何会话内容；他人分享的链接导入（被动拉取）不受此开关影响。
-// 需要恢复时将此常量改为 true，或后续接入设置项。
-const CONVERSATION_SHARE_PUBLISH_ENABLED = false;
+// 需要恢复时将此常量改为 true，或后续接入设置项。导出供测试按门控跳过入口用例。
+export const CONVERSATION_SHARE_PUBLISH_ENABLED = false;
 
 export function ConversationShareMenu({
   taskId,

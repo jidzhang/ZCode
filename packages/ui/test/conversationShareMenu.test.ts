@@ -3,6 +3,8 @@ import { createElement } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
+// fork：分享发布门控关闭时入口组件整体返回 null，渲染类用例随门控恢复自动执行。
+import { CONVERSATION_SHARE_PUBLISH_ENABLED } from "@/ConversationShareMenu.js";
 
 vi.mock("@/i18n/IntlProvider.js", () => ({
   useZCodeIntl: () => ({ intl: { formatMessage: ({ id }: { id: string }) => id } }),
@@ -15,7 +17,7 @@ afterEach(async () => {
   useConversationShareSelectionStore.getState().resetForTests();
 });
 
-describe("ConversationShareMenu", () => {
+describe.skipIf(!CONVERSATION_SHARE_PUBLISH_ENABLED)("ConversationShareMenu", () => {
   it("点击入口创建默认全选的分享草稿并收起选择面板", async () => {
     const { ConversationShareMenu } = await import("@/ConversationShareMenu.js");
     const { getConversationShareDraft, useConversationShareSelectionStore } =

@@ -8,13 +8,28 @@ import { fileURLToPath } from "node:url";
 if (process.argv.includes("app-server") && process.argv.includes("--stdio")) {
   // 仅由本组 WDIO 预加载的透明 stdio 代理。真实 Host/CLI 完成保存、解析和执行；
   // 故障位于传输边界，不修改业务对象，也不记录其他 RPC 的鉴权或模型凭据。
-  const preload = `--import=${JSON.stringify(fileURLToPath(import.meta.url))}`;
   const child = spawn(process.execPath, process.argv.slice(1), {
     stdio: ["pipe", "pipe", "inherit"],
     // 只移除当前代理预加载，保留覆盖采集等其他 Node 参数，防止递归启动代理。
+    // Windows 的 --import 只接受 file:// URL（绝对路径按 URL 解析会直接报
+    // ERR_UNSUPPORTED_ESM_URL_SCHEME），POSIX 则路径与 URL 两种写法都合法；
+    // 四种自引用形式都必须剥净，否则子进程再次预载代理，形成无限递归。
     env: {
       ...process.env,
-      NODE_OPTIONS: (process.env.NODE_OPTIONS ?? "").replace(preload, "").trim(),
+      NODE_OPTIONS: (process.env.NODE_OPTIONS ?? "")
+        .replace(
+          new RegExp(
+            // 注意 import.meta.url 本身已是 URL 形式，不能再喂给 pathToFileURL（会被
+            // 当作路径再包一层 file:/ 前缀，生成的形式永远匹配不上）。
+            [fileURLToPath(import.meta.url), import.meta.url]
+              .flatMap((form) => [`--import=${JSON.stringify(form)}`, `--import=${form}`])
+              .map((literal) => literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+              .join("|"),
+            "g",
+          ),
+          "",
+        )
+        .trim(),
     },
   });
   const root = process.env.ZCODE_E2E_ARTIFACT_DIR;

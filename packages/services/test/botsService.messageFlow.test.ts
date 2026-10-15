@@ -5122,6 +5122,61 @@ describe("botsService messageFlow", () => {
     service.disposeAll();
   });
 
+  it("queues busy-time text for running tasks the bot process did not start", async () => {
+    // Bugfix 回归（2026-10-15 用户实测"忙时补话不排队"）：桌面发起的任务不在机器人
+    // 内存 runningTasks 集合里，原判定直接返回 null，补话被直接投递进行中的会话。
+    // 快照 status==="running" 是运行时真值，必须与内存集合同等触发排队。
+    const repo = f.createMemoryRepo(f.weixinConfig, {
+      version: 3,
+      bots: {
+        "weixin-1": {
+          botId: "weixin-1",
+          workspacePath: "/tmp/workspace",
+          workspaceIdentity: "ssh://host/tmp/workspace",
+          workspaceId: "ssh://host/tmp/workspace",
+          mode: "task",
+          activeTaskId: "task-1",
+          updatedAt: Date.now(),
+        },
+      },
+    });
+    const legacyTaskService = {
+      ...f.createLegacyTaskService(),
+      getTaskSnapshot: vi.fn(async () => ({
+        meta: {
+          taskId: "task-1",
+          title: "Desktop task",
+          workspacePath: "/tmp/workspace",
+          workspaceIdentity: "ssh://host/tmp/workspace",
+          status: "running",
+        },
+        messages: [],
+        fileChanges: [],
+      })),
+    };
+    const service = f.createBotsService({
+      credentialService: f.createCredentialService({ "weixin-token": "token" }),
+      legacyTaskService,
+      repo: repo as never,
+    });
+
+    const replies = await service.handleInboundMessage({
+      botId: "weixin-1",
+      text: "补一条信息",
+      actor: weixinActor,
+    });
+
+    expect(replies[0]?.text).toContain("已加入队列");
+    expect(legacyTaskService.enqueueTaskCommand).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: "task-1", type: "send_prompt" }),
+    );
+    expect((await repo.readState()).bots["weixin-1"]).toMatchObject({
+      activeTaskId: "task-1",
+      mode: "task",
+    });
+    service.disposeAll();
+  });
+
   it("allows task switching for a legacy active task without persisted status when it is not running", async () => {
     const repo = f.createMemoryRepo(f.weixinConfig, {
       version: 3,

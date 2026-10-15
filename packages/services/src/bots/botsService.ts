@@ -8115,14 +8115,17 @@ export function createBotsService(
       }
       return null;
     }
-    if (!runningTasks.has(context.activeTaskId)) {
-      return null;
-    }
     if (context.workspaceIdentity && !(await isRemoteWorkspaceConnected(context))) {
       // Bugfix: /workspace 这类本地命令只是在切换上下文，不能为了确认旧任务状态而创建远端 runtime。
       // 断连时把内存 running 状态视为不可确认，交给显式 /reconnect 后再恢复查询。
       return null;
     }
+    // Bugfix（2026-10-15 用户实测反馈"忙时补话不排队"）：原判定只信本进程内存集合
+    // runningTasks，桌面客户端发起的任务、或机器人服务重启后的任务不在集合里，
+    // 直接返回 null——忙时补话不排队、被直接投递进行中的会话（用户视角"不响应/等一会"）。
+    // 快照 meta.status 是正交三态（"running"|"completed"|"error"，历史数据可能缺省）：
+    // status==="running" 是运行时真值，优先于内存集合；仅缺省时才回退内存集合旧语义，
+    // 避免无状态的历史遗留任务被误判为运行中、阻塞 /task、/new 等上下文切换。
     const zcodeTaskService = await resolveZCodeTaskServiceForContext(context);
     const activeTaskSnapshot = await zcodeTaskService
       .getTaskSnapshot({
@@ -8140,6 +8143,12 @@ export function createBotsService(
       // 且尚未观察到终态的 task 才阻止 /task、/new 等上下文切换。
       runningTasks.delete(context.activeTaskId);
       stopTyping(context.activeTaskId);
+      return null;
+    }
+    if (activeTaskSnapshot?.meta.status === "running") {
+      return "taskRunning";
+    }
+    if (!runningTasks.has(context.activeTaskId)) {
       return null;
     }
     return "taskRunning";

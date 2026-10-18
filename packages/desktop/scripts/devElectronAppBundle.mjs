@@ -1,4 +1,7 @@
-import { access, cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { pipeline } from "node:stream/promises";
 import { dirname, posix } from "node:path";
 
 export const DEV_ELECTRON_PROTOCOL_SCHEME = "zcode";
@@ -52,6 +55,13 @@ export function resolveDevElectronAppBundlePath({ runtimeRoot, electronVersion, 
   return posix.join(runtimeRoot, `${electronVersion}-${arch}`, `${DEV_ELECTRON_APP_NAME}.app`);
 }
 
+/** 流式计算文件内容哈希：源二进制 ~200MB，整份读进内存会白白抬高峰值占用。 */
+async function hashFileContent(filePath) {
+  const hash = createHash("sha256");
+  await pipeline(createReadStream(filePath), hash);
+  return hash.digest("hex");
+}
+
 export async function prepareDevElectronAppBundle({
   electronAppPath,
   runtimeRoot,
@@ -64,28 +74,34 @@ export async function prepareDevElectronAppBundle({
   const existingExecutablePath = posix.join(appPath, "Contents", "MacOS", "Electron");
   // 源二进制的身份指纹，写在 .app 外面：放进 Contents 会污染 bundle 结构。
   const sourceStampPath = posix.join(dirname(appPath), ".zcode-dev-electron-source.json");
-  // 修复原因：这里原本把两个 Electron 可执行文件（各 ~100MB+）整份读进内存做 equals，
-  // 每次 dev 启动都要付一次全量读盘。源二进制由 npm 包解压产出，记录它的 size+mtime
-  // 即可判定是否需要重拷，语义等价而开销是常数级。
+  // 指纹是源二进制的**内容哈希**。
   //
-  // 不直接比较「源与副本」的 mtime：cp 即使开 preserveTimestamps 也会把 mtime
-  // 四舍五入到毫秒，源的亚毫秒精度必然丢失，两边永远不相等 —— 那等于没有缓存。
+  // Bugfix（2026-10-17 实测）：原指纹是 size+mtimeMs。同大小的改动（例如重新解压同一
+  // 版本 Electron）落在同一 mtime 刻度时指纹完全相同，缓存会一直复用旧副本 ——
+  // 本机实测约 10% 的碰撞率，dev 启动会拿到过期的二进制且没有任何提示。mtimeNs 也
+  // 救不了：该文件系统上连续两次写入仍有 84% 落在同一纳秒刻度。内容哈希与时钟无关，
+  // 内容变了必然不等。size 是同一份字节的派生值，跟着哈希走，单独存没有判定意义。
+  //
+  // 这里哈希的是**源**文件，与 stamp 里的值比对；源正在被写时可能读到撕裂内容，
+  // 但那只会让下次判定为"需要重拷"，绝不会把旧副本当成新的。
+  // 代价是每次 dev 启动多约 0.8s 读盘（页缓存热），换来的是正确的缓存判定；哈希不提前
+  // await，重拷路径上与 rm/cp 并行读同一页缓存，串行等待只发生在缓存命中路径。
   //
   // format 字段记录副本的布局版本：布局修复（例如符号链接策略变更）时递增，
   // 让已存在的旧副本在源二进制没变的情况下也能被判定为需要重拷。
-  const sourceStats = await stat(sourceExecutablePath).catch(() => undefined);
-  const sourceStamp = sourceStats
-    ? JSON.stringify({
-        format: DEV_ELECTRON_BUNDLE_FORMAT,
-        size: sourceStats.size,
-        mtimeMs: sourceStats.mtimeMs,
-      })
-    : undefined;
+  // AV/索引器持锁、npm 重解压替换文件都可能让 open/read 瞬时失败。哈希失败按"无指纹"
+  // 处理，落到下方 needsCopy=true 的重拷兜底；不能让一次瞬时读失败打断整个 dev 启动
+  // （旧 size+mtime 指纹只 stat、从不读内容，没有这个失败面）。
+  const sourceHashPromise = hashFileContent(sourceExecutablePath).catch(() => undefined);
   let needsCopy = true;
   try {
     const existingInfoPlist = await readFile(infoPlistPath, "utf8");
     await access(existingExecutablePath);
     const existingStamp = await readFile(sourceStampPath, "utf8");
+    const contentHash = await sourceHashPromise;
+    const sourceStamp = contentHash
+      ? JSON.stringify({ format: DEV_ELECTRON_BUNDLE_FORMAT, contentHash })
+      : undefined;
     needsCopy =
       !existingInfoPlist.includes(`<string>${DEV_ELECTRON_APP_BUNDLE_ID}</string>`) ||
       !existingInfoPlist.includes(`<string>${DEV_ELECTRON_PROTOCOL_SCHEME}</string>`) ||
@@ -109,7 +125,13 @@ export async function prepareDevElectronAppBundle({
     const patchedInfoPlist = patchDevElectronInfoPlist(await readFile(infoPlistPath, "utf8"));
     await writeFile(infoPlistPath, patchedInfoPlist, "utf8");
     // 指纹最后写：中途失败时下次仍会判定为需要重拷，不会留下半成品缓存。
-    if (sourceStamp !== undefined) await writeFile(sourceStampPath, sourceStamp, "utf8");
+    const contentHash = await sourceHashPromise;
+    if (contentHash !== undefined)
+      await writeFile(
+        sourceStampPath,
+        JSON.stringify({ format: DEV_ELECTRON_BUNDLE_FORMAT, contentHash }),
+        "utf8",
+      );
   }
 
   return {

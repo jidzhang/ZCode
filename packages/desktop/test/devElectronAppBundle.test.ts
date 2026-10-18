@@ -1,4 +1,14 @@
-import { mkdtemp, readFile, readlink, rm, mkdir, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  readlink,
+  rm,
+  mkdir,
+  stat,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -167,11 +177,7 @@ describe("dev Electron app bundle", () => {
     const stamp = JSON.parse(await readFile(stampPath, "utf8"));
     expect(stamp.format).toBe(DEV_ELECTRON_BUNDLE_FORMAT);
     // 模拟旧版脚本留下的缓存：没有 format 字段，源二进制指纹却仍然匹配。
-    await writeFile(
-      stampPath,
-      JSON.stringify({ size: stamp.size, mtimeMs: stamp.mtimeMs }),
-      "utf8",
-    );
+    await writeFile(stampPath, JSON.stringify({ contentHash: stamp.contentHash }), "utf8");
     await writeFile(join(first.appPath, "Contents", "MacOS", "Electron"), "stale-copy", "utf8");
 
     await prepareDevElectronAppBundle({
@@ -212,6 +218,57 @@ describe("dev Electron app bundle", () => {
       arch: "arm64",
     });
     await writeFile(join(sourceMacOS, "Electron"), "source-v2", "utf8");
+
+    await prepareDevElectronAppBundle({
+      electronAppPath: sourceApp,
+      runtimeRoot: outputRoot,
+      electronVersion: "41.0.3",
+      arch: "arm64",
+    });
+
+    expect(await readFile(join(first.appPath, "Contents", "MacOS", "Electron"), "utf8")).toBe(
+      "source-v2",
+    );
+  });
+
+  it("rebuilds when a same-size source change lands in the same mtime tick", async () => {
+    // Bugfix 回归（2026-10-17）：原指纹是 size+mtimeMs，"source-v1"→"source-v2" 这类
+    // 同大小改动若两次写入落在同一 mtime 刻度，指纹不变、缓存判定为命中，dev 会一直用
+    // 旧二进制。本机实测该碰撞约 10%。这里把 mtime 显式钉在同一刻度上，让该场景
+    // 从"概率性逃过判定"变成确定性用例。
+    const root = await mkdtemp(join(tmpdir(), "zcode-dev-bundle-same-tick-test-"));
+    tempRoots.push(root);
+    const sourceApp = join(root, "source", "Electron.app");
+    const sourceContents = join(sourceApp, "Contents");
+    const sourceMacOS = join(sourceContents, "MacOS");
+    await mkdir(sourceMacOS, { recursive: true });
+    await writeFile(
+      join(sourceContents, "Info.plist"),
+      `<?xml version="1.0"?><plist version="1.0"><dict>
+<key>CFBundleDisplayName</key><string>Electron</string>
+<key>CFBundleIdentifier</key><string>com.github.Electron</string>
+<key>CFBundleName</key><string>Electron</string>
+</dict></plist>\n`,
+      "utf8",
+    );
+    const sourceExecutable = join(sourceMacOS, "Electron");
+    // 两次写入都钉在同一个 mtime 上：旧指纹（size+mtimeMs）在改动前后完全相同，
+    // 必然误判为"未变化"；内容哈希指纹则必须发现这次改动。
+    const pinned = new Date();
+    await writeFile(sourceExecutable, "source-v1", "utf8");
+    await utimes(sourceExecutable, pinned, pinned);
+    const outputRoot = join(root, "runtime");
+    const beforeSize = (await stat(sourceExecutable)).size;
+
+    const first = await prepareDevElectronAppBundle({
+      electronAppPath: sourceApp,
+      runtimeRoot: outputRoot,
+      electronVersion: "41.0.3",
+      arch: "arm64",
+    });
+    await writeFile(sourceExecutable, "source-v2", "utf8");
+    await utimes(sourceExecutable, pinned, pinned);
+    expect((await stat(sourceExecutable)).size).toBe(beforeSize);
 
     await prepareDevElectronAppBundle({
       electronAppPath: sourceApp,

@@ -1663,6 +1663,15 @@ const zcodeToolCallBasePayloadSchema = z
     childSessionId: nonEmptyString.optional(),
     childToolCallId: nonEmptyString.optional(),
     description: z.string().optional(),
+    // 官方运行时（3.15.x glm 通道）为工具记录新增的元数据字段（zcode.cjs 实测：
+    // readOnly/destructive 布尔，sideEffectScope 如 "network"，approvalStatus 如
+    // "none"/"requested"/"denied"/"allowed"）；strict schema 漏字段会让
+    // session/event 整条被丢弃（2026-10-16 桌面单日丢弃 tool.updated 261 次）。
+    readOnly: z.boolean().optional(),
+    destructive: z.boolean().optional(),
+    sideEffectScope: z.string().optional(),
+    approvalStatus: z.string().optional(),
+    firstOutputAt: protocolInstantSchema.optional(),
   })
   .strict();
 

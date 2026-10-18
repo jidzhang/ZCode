@@ -1119,6 +1119,45 @@ describe("ZCode Protocol", () => {
     ).toThrow();
   });
 
+  it("parses official-runtime tool metadata (readOnly/sideEffectScope) on tool updates", () => {
+    // Bugfix 回归（2026-10-16 实测）：官方 3.15.x glm 通道运行时给工具记录新增
+    // readOnly/destructive/sideEffectScope/approvalStatus/firstOutputAt；strict schema
+    // 漏字段导致桌面把整条 tool.updated 丢弃（单日 261 次），工具进度完全不可见。
+    const event = zcodeSessionEventSchema.parse({
+      eventId: "evt_official_tool_started",
+      seq: 20,
+      sessionId: "sess_main",
+      timestamp: 21,
+      traceId: "trace_main",
+      turnId: "turn_main",
+      type: "tool.updated",
+      payload: {
+        kind: "started",
+        toolCallId: "call_official_1",
+        startedAt: 21,
+        toolName: "Bash",
+        readOnly: false,
+        destructive: false,
+        sideEffectScope: "network",
+        approvalStatus: "none",
+        firstOutputAt: 22,
+      },
+    });
+    expect(event.payload.readOnly).toBe(false);
+    expect(event.payload.sideEffectScope).toBe("network");
+    expect(event.payload.approvalStatus).toBe("none");
+    // 严格校验保留：真正未知的字段依旧整条拒绝。
+    expect(() =>
+      zcodeSessionEventSchema.parse({
+        ...event,
+        payload: {
+          ...event.payload,
+          futureField: { nested: true },
+        },
+      }),
+    ).toThrow();
+  });
+
   it("parses background subagent mirrored tool updates", () => {
     const event = zcodeSessionEventSchema.parse({
       eventId: "evt_background_subagent_tool_started",

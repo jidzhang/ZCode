@@ -86,7 +86,13 @@ describe("release downloader", () => {
   });
 
   it("keeps an active archive stream alive past the idle timeout", async () => {
-    const payload = Buffer.from("abcdefgh");
+    // Bugfix（2026-10-17 实测）：原参数是 8 字节 / 间隔 30ms 对 50ms 空闲预算，余量仅 ~1.05x。
+    // idle 计时器在 fetch 之前就启动，所以「建连 + fetch 解析 + 首字节」整段都算在预算内：
+    // 本机实测首字节耗时 p95=64.8ms、超过 50ms 的比例 23%，全量并发下约 20% 概率被误判为
+    // 空闲超时。参数改为「间隔 30ms × 12 字节（≈360ms 总时长）对 250ms 预算」：单次间隔
+    // （实测 p95 47ms、最坏 65ms）远小于 250ms，负载下不误报；总时长仍明显超过预算，
+    // 空闲计时器若不再随数据到达重置，流会在预算处被中止而失败，判别力未被放宽。
+    const payload = Buffer.from("abcdefghijkl");
     const sha256 = createHash("sha256").update(payload).digest("hex");
     const server = createServer((_request, response) => {
       let index = 0;
@@ -111,8 +117,8 @@ describe("release downloader", () => {
       destination: join(dir, "release.tar.gz"),
       sha256,
       expectedSizeBytes: payload.byteLength,
-      timeoutMs: 50,
-      overallTimeoutMs: 1_000,
+      timeoutMs: 250,
+      overallTimeoutMs: 5_000,
       maxAttempts: 1,
     });
   });

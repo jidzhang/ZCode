@@ -150,7 +150,13 @@ export class ZCodeStdioTransport implements ZCodeProtocolTransport {
       windowsCleanupDeadlineAtMs,
     );
     const processTreeSnapshot = this.cleanupProcessTreeSnapshot;
-    if (!this.hasChildExited()) {
+    // Bugfix（2026-10-18 实测）：EOF 等待只在首轮 cleanup 发生。stdin 关闭是一次性动作，
+    // 首轮已请求过；重试轮再等满窗口只会把仅剩的 1.25s 绝对预算烧光，waiter 启动时
+    // deadline 已到点、且先于 force 定时器入队，settle 会先清掉 force 定时器——
+    // taskkill /F 永远发不出去。控制台进程温和 taskkill 必然被拒（"只能强制终止"），
+    // 于是每个重试轮重复同样的失败直到外部超时（zcodeAgentProcessManager 曾 1/3 概率
+    // 全量翻红）。重试轮跳过 EOF 等待，把预算留给强杀升级。
+    if (!this.hasChildExited() && this.cleanupAttemptCount === 1) {
       // app-server --stdio 的正常退出边界是 stdin EOF。直接 taskkill
       // 进程树，既跳过 agent 自身 shutdown，也会让 host 固定等强杀兜底窗口。
       // 这里先请求协议入口自然收尾；短时间无响应再进入进程树兜底，仍保证不残留子进程。
@@ -161,10 +167,15 @@ export class ZCodeStdioTransport implements ZCodeProtocolTransport {
         process.env.ZCODE_E2E_COVERAGE === "1"
           ? E2E_COVERAGE_STDIO_EOF_EXIT_WAIT_MS
           : STDIO_EOF_EXIT_WAIT_MS;
+      // EOF 等待不得吃光整个绝对预算：慢 CIM 之后 remaining 已被压缩，再等到 deadline
+      // 会让 waiter 以 0 预算启动，deadline(0ms) 先于 force 定时器触发并直接判残留。
+      // 给强杀阶段固定保留 taskkill 超时 + 退出观察宽限，/F 至少有机会发出。
+      const eofTerminationReserveMs =
+        PROCESS_TREE_WINDOWS_TASKKILL_TIMEOUT_MS + PROCESS_TREE_WINDOWS_EXIT_OBSERVATION_GRACE_MS;
       const remainingCleanupMs =
         windowsCleanupDeadlineAtMs === undefined
           ? configuredEofWaitMs
-          : Math.max(windowsCleanupDeadlineAtMs - Date.now(), 0);
+          : Math.max(windowsCleanupDeadlineAtMs - Date.now() - eofTerminationReserveMs, 0);
       await this.waitForChildExit(Math.min(configuredEofWaitMs, remainingCleanupMs));
     }
     // app 关闭时 host 必须等进程树的 SIGTERM/SIGKILL 兜底跑完；

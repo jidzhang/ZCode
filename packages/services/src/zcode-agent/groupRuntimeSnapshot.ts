@@ -8,13 +8,19 @@ import {
 } from "@zcode/shared/zcode-protocol-v4";
 import type { IZCodeAgentService, ZCodeAgentSessionTarget } from "#src/zcode-agent/zcodeAgent.js";
 
-/** Bot 控制操作临时读取 CLI 权威快照，不建立第二份输入队列。 */
+/** Bot 控制操作临时读取 CLI 权威快照，不建立第二份输入队列。
+ * signal 让调用方用自己的短预算中断读取：只靠 Promise.race 提前返回会留下
+ * 仍在运行的订阅和监听器，半死运行时下每条消息都会叠一份。 */
 export function readBotGroupRuntimeSnapshot(
   agent: IZCodeAgentService,
   target: ZCodeAgentSessionTarget,
+  signal?: AbortSignal,
 ): Promise<ConversationSnapshot> {
-  return observeRuntime(agent, target, (frame) =>
-    frame.payload.kind === "snapshot" ? frame.payload.snapshot : undefined,
+  return observeRuntime(
+    agent,
+    target,
+    (frame) => (frame.payload.kind === "snapshot" ? frame.payload.snapshot : undefined),
+    signal,
   );
 }
 

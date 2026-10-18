@@ -748,6 +748,9 @@ const REMOTE_RECONNECT_DEDUPE_TTL_MS = 3_000;
 const REMOTE_RECONNECT_DELIVERY_DEDUPE_TTL_MS = 2 * 60_000;
 const BOT_INBOUND_DELIVERY_DEDUPE_TTL_MS = 2 * 60_000;
 const BOT_AUTOMATION_DELIVERY_WARNING_TTL_MS = 5 * 60_000;
+// 僵尸 running 的活查缓存 TTL：判定结果与失败共用一条记录，避免常驻私聊每条补话都付一次
+// 跨进程探测。5 秒内即便运行时相位刚变化，也只会晚一个 TTL 才重新判定，不会放行真在跑的任务。
+const BOT_RUNTIME_PHASE_PROBE_TTL_MS = 5_000;
 const BOT_ELICITATION_CUSTOM_OPTION_ID = "__custom__";
 const BOT_ELICITATION_SUBMIT_OPTION_ID = "__submit__";
 const BOT_ELICITATION_SKIP_OPTION_ID = "__skip__";
@@ -794,6 +797,10 @@ export function createBotsService(
   const typingIntervals = new Map<string, ReturnType<typeof setInterval>>();
   const typingTargets = new Map<string, { bot: BotConfig; target: BotTypingTarget }>();
   const runningTasks = new Set<string>();
+  const runtimePhaseProbeByTaskKey = new Map<
+    string,
+    { busy: boolean | null; probedAt: number }
+  >();
   // 修复原因（2026-09-25 插话排队）：忙时纯文本改走 host 命令队列后，bot 需要知道
   // 每个 task 还有几条排队输入将由 host drain 执行——终态事件到达时据此重建流订阅，
   // 否则 drain 出的新回合无人观看、回复黑洞。仅记录 bot 自己的入队动作，不镜像 host 队列。
@@ -7196,6 +7203,10 @@ export function createBotsService(
   ): void {
     privateImTraces.add(JSON.stringify([taskStreamKey(context, actor), traceId]));
     streamSubscriptions.get(taskStreamKey(context, actor))?.imInput();
+    // Bugfix（2026-10-18）：僵尸 running 放行投递后任务会真正跑起来，而探针的"已完成"
+    // 判定还按 5s TTL 缓存着；窗口内下一条补话会命中缓存被直接投递进运行中的回合，
+    // 重演 2026-09-25 修掉的"忙时直投"。投递即作废旧判定，强制下一条消息重新活查。
+    runtimePhaseProbeByTaskKey.delete(runtimePhaseProbeKey(context, taskId));
     // 私聊常驻订阅不再随每轮建立；必须在本次输入派发前接管 Typing，
     // 否则回调收尾会将它当作短命令表情立即删除。终态/交互等待沿用原清理路径。
     if (!context.group) startTyping(bot, actor, taskId);
@@ -8072,6 +8083,54 @@ export function createBotsService(
       : null;
   }
 
+  /** 探针缓存 key：workspace 归一化沿用统一的 getWorkspaceKey 规则，不在此重写一份，
+   * 避免与其它按 workspace 聚合的表在转义/trim 语义上分叉。 */
+  function runtimePhaseProbeKey(context: BotContextState, taskId: string): string {
+    return `${getWorkspaceKey(context.workspacePath, context.workspaceIdentity)}\u0000${taskId}`;
+  }
+
+  /** 活查 busy 判定按任务缓存，成功和失败共用一条记录：失败也按 TTL 缓存，运行时离线时
+   * 不能每条消息都付一次预算。查询失败返回 null，由调用侧维持原判定（保守，不误放行真忙
+   * 任务）。判定错误一律 warn：workspace mismatch 这类路由错误与"运行时半死"必须能在
+   * 日志里区分。 */
+  async function readCachedRuntimeBusyState(
+    context: BotContextState,
+    taskId: string,
+  ): Promise<boolean | null> {
+    const key = runtimePhaseProbeKey(context, taskId);
+    const now = Date.now();
+    pruneRuntimePhaseProbe(now);
+    const cached = runtimePhaseProbeByTaskKey.get(key);
+    if (cached) return cached.busy;
+    let busy: boolean | null = null;
+    try {
+      const zcodeTaskService = await resolveZCodeTaskServiceForContext(context);
+      busy =
+        (await zcodeTaskService.getTaskRuntimeBusyState?.({
+          taskId,
+          workspacePath: context.workspacePath,
+          workspaceIdentity: context.workspaceIdentity,
+        })) ?? null;
+    } catch (error) {
+      botsLogger.warn(
+        undefined,
+        `runtime busy state probe failed task=${taskId} error=${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    runtimePhaseProbeByTaskKey.set(key, { busy, probedAt: Date.now() });
+    return busy;
+  }
+
+  /** 探针记录只在 TTL 内有意义，逐条清理避免长驻进程按历史任务无限增长。 */
+  function pruneRuntimePhaseProbe(now: number): void {
+    for (const [key, probe] of runtimePhaseProbeByTaskKey) {
+      if (now - probe.probedAt >= BOT_RUNTIME_PHASE_PROBE_TTL_MS)
+        runtimePhaseProbeByTaskKey.delete(key);
+    }
+  }
+
   async function getContextTaskBlockReason(
     context: BotContextState,
   ): Promise<
@@ -8146,6 +8205,20 @@ export function createBotsService(
       return null;
     }
     if (activeTaskSnapshot?.meta.status === "running") {
+      // Bugfix（2026-10-16 夜间实测）：持久化快照可能残留 running（后台命令终态无人观察，
+      // 任务早已结束、运行时零活动），bot 却回"任务仍在运行"并把新消息全部拦下。改判前向
+      // 运行时要一次活的 control.phase（按任务缓存）：运行时也认为在跑才算忙；查询失败或
+      // 能力缺失时维持原判定（保守，不改变现有行为）。
+      const busy = await readCachedRuntimeBusyState(context, context.activeTaskId);
+      if (busy === false) {
+        runningTasks.delete(context.activeTaskId);
+        stopTyping(context.activeTaskId);
+        botsLogger.info(
+          undefined,
+          `cleared stale running snapshot task=${context.activeTaskId} runtimeBusy=false`,
+        );
+        return null;
+      }
       return "taskRunning";
     }
     if (!runningTasks.has(context.activeTaskId)) {
@@ -9971,6 +10044,7 @@ export function createBotsService(
         stopTyping(taskId);
       }
       runningTasks.clear();
+      runtimePhaseProbeByTaskKey.clear();
       liveStatusProgressByTaskId.clear();
       pendingRemoteReconnectsByKey.clear();
       recentRemoteReconnectAtByKey.clear();

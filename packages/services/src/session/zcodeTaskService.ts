@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- ZCode task wrapper service 接口集中承载 app/runtime API，拆散会让替换阶段更难追踪。 */
 import type { Event } from "@zcode/rpc";
 import { ServiceChannels } from "@zcode/shared";
-import type { CommandPayloadMap } from "@zcode/shared/zcode-protocol-v4";
+import type { CommandPayloadMap, SessionPhase } from "@zcode/shared/zcode-protocol-v4";
 import { createServiceDescriptor } from "#src/descriptors.js";
 import type {
   ZCodeImportSessionsResult,
@@ -280,6 +280,16 @@ export interface IZCodeTaskService {
     workspacePath: string;
     workspaceIdentity?: string;
   }): Promise<"running" | "queued" | "interaction" | null>;
+
+  /** 从 CLI 权威快照判定任务当下是否真的在忙（相位进行中，或仍有排队输入/待交互）；
+   * false 表示运行时确认空闲、可推翻持久化快照残留的僵尸 running；null 表示查询失败
+   * 或能力缺失，调用侧保守按忙处理。 */
+  getTaskRuntimeBusyState?(params: {
+    taskId: string;
+    workspacePath: string;
+    workspaceIdentity?: string;
+    remoteSessionId?: string;
+  }): Promise<boolean | null>;
   cancelBotGroupInput?(params: {
     workspacePath?: string;
     workspaceIdentity?: string;

@@ -176,8 +176,9 @@ interface CreateZCodeTaskIndexSyncerOptions {
   taskIndexRepo: TaskIndexRepo;
 }
 
-/** phase 终态集合（sessions-index 的 conflated 最新态里判定迁移用）。 */
-function isTerminalPhase(phase: SessionPhase): boolean {
+/** phase 终态集合（sessions-index 的 conflated 最新态里判定迁移用）。
+ * 导出供同包消费：adapter 的活查 busy 判定与索引终态迁移必须始终是同一集合。 */
+export function isTerminalPhase(phase: SessionPhase): boolean {
   return phase === "completedSuccess" || phase === "completedInterrupted" || phase === "error";
 }
 

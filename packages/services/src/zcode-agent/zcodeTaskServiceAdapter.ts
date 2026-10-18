@@ -145,10 +145,11 @@ import type {
   ZCodeAgentServiceEvent,
   ZCodeAgentWorkspaceTarget,
 } from "./zcodeAgent.js";
-import type {
-  ZCodeTaskIndexReadyEvent,
-  ZCodeTaskIndexSyncer,
-  ZCodeTaskIndexTerminalEvent,
+import {
+  isTerminalPhase,
+  type ZCodeTaskIndexReadyEvent,
+  type ZCodeTaskIndexSyncer,
+  type ZCodeTaskIndexTerminalEvent,
 } from "./zcodeTaskIndexSyncer.js";
 import { readModelTrajectory } from "./modelTrajectory.js";
 import { errorAttributionSchema, type CommandPayloadMap } from "@zcode/shared/zcode-protocol-v4";
@@ -2160,6 +2161,51 @@ export function createZCodeTaskServiceAdapter(
         return "running";
       if (snapshot.queue.items.length > 0) return "queued";
       return null;
+    },
+    async getTaskRuntimeBusyState(params) {
+      // 用非抛出的 taskTargets.get（与相邻 getBotGroupTaskBlockReason 一致）：僵尸 running
+      // 高发于桌面发起、未经 rememberTaskTarget 注册的任务，getTaskTarget 会直接抛
+      // ZCODE_SESSION_TARGET_NOT_FOUND，反而清不掉僵尸状态。
+      const target = taskTargets.get(params.taskId);
+      // 比对用"生效 workspace"：params 缺身份时采纳注册目标的身份（与下方 workspace
+      // 构造同一规则）。直接拿原始 params 比对会误伤"调用方只报了路径、目标带着
+      // identity 注册"的场景——探针永远 mismatch，僵尸 running 反而清不掉。
+      const effective = {
+        workspacePath: params.workspacePath,
+        workspaceIdentity: params.workspaceIdentity ?? target?.workspaceIdentity,
+        taskId: params.taskId,
+      };
+      if (target && taskKey(target) !== taskKey(effective))
+        throw new Error("Task workspace mismatch");
+      const workspace = {
+        workspacePath: effective.workspacePath,
+        workspaceIdentity: effective.workspaceIdentity,
+        remoteSessionId: params.remoteSessionId ?? target?.remoteSessionId,
+      };
+      // 这条活查在 DM 补话的关键路径上（每条消息一次），必须给短预算：
+      // - 本进程注册过的本机任务正常往返是毫秒级，超时即可按半死判定，不让用户等；
+      // - 注册目标带 remoteSessionId 的远端任务与未注册任务（多为桌面发起、可能落在
+      //   远端 workspace）一样可能走远端链路，给满 4 秒，避免把正常的远端往返误判成
+      //   运行时不可达。
+      // 预算用 AbortSignal 传给读取本身，中断会连带释放订阅与监听器；只 race 不中断的话
+      // 每条消息都会留下一份活到 15 秒兜底的孤儿订阅。
+      const signal = AbortSignal.timeout(target && !target.remoteSessionId ? 1_000 : 4_000);
+      const snapshot = await readBotGroupRuntimeSnapshot(
+        botAgent(workspace),
+        { ...workspace, sessionId: params.taskId },
+        signal,
+      );
+      // 忙的判定取相位、排队输入、待交互三者之并，返回值直接就是调用方要的 busy 语义：
+      // - 非终态相位（draft/prewarming/running 及未来新增相位）一律按忙，宁可多排队
+      //   也不把消息直投进可能在跑的会话；
+      // - 终态相位与 queue.items/pendingInteractions 可能短暂并存（host 命令队列在回合
+      //   结束后才 drain，残留 running 的任务还可能压着从未 drain 的旧排队输入），此时
+      //   按空闲放行会让新消息插到排队输入之前，重演 2026-09-25 修掉的"忙时直投"乱序。
+      return (
+        !isTerminalPhase(snapshot.control.phase) ||
+        snapshot.queue.items.length > 0 ||
+        snapshot.pendingInteractions.length > 0
+      );
     },
     async cancelBotGroupInput(params) {
       const target = getTaskTarget(params.taskId);

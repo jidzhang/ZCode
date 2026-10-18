@@ -80,6 +80,35 @@ describe("group CLI snapshot read", () => {
     );
     expect(dispose).toHaveBeenCalledOnce();
   });
+
+  it("releases the subscription and listener when the caller aborts its budget", async () => {
+    // Bugfix：Bot 补话路径用短预算探测运行时相位。调用方只 race 结果而不中断读取时，
+    // 半死运行时下每条消息都会留下一个活到 15 秒兜底的订阅和监听器。
+    const dispose = vi.fn();
+    let acknowledge!: (result: { ack: { subscriptionId: string } }) => void;
+    const agent = {
+      onDynamicConversationFrame: () => () => ({ dispose }),
+      subscribeConversationV4: () =>
+        new Promise((resolve) => {
+          acknowledge = resolve;
+        }),
+      unsubscribeConversationV4: vi.fn(async () => undefined),
+    };
+    const controller = new AbortController();
+    const result = readBotGroupRuntimeSnapshot(
+      agent as never,
+      { workspacePath: "/work", sessionId: "task" },
+      controller.signal,
+    ).catch((error) => error);
+    controller.abort();
+    expect(await result).toBeInstanceOf(Error);
+    expect(dispose).toHaveBeenCalledOnce();
+    acknowledge({ ack: { subscriptionId: "late" } });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(agent.unsubscribeConversationV4).toHaveBeenCalledWith(
+      expect.objectContaining({ subscriptionId: "late" }),
+    );
+  });
 });
 
 describe("topic authoritative stop barrier", () => {

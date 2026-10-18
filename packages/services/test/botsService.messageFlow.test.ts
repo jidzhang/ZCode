@@ -5177,6 +5177,145 @@ describe("botsService messageFlow", () => {
     service.disposeAll();
   });
 
+  // 快照 status=running 场景的公用 setup：各用例仅 getTaskRuntimeBusyState 的
+  // mock 行为不同（运行时确认空闲 / 硙 / 抛错 / 调用次数），其余 fixture 逐字节相同。
+  function setupRunningSnapshotBot(runtimeBusy: () => Promise<boolean | null>) {
+    const repo = f.createMemoryRepo(f.weixinConfig, {
+      version: 3,
+      bots: {
+        "weixin-1": {
+          botId: "weixin-1",
+          workspacePath: "/tmp/workspace",
+          workspaceIdentity: "ssh://host/tmp/workspace",
+          workspaceId: "ssh://host/tmp/workspace",
+          mode: "task",
+          activeTaskId: "task-1",
+          updatedAt: Date.now(),
+        },
+      },
+    });
+    const legacyTaskService = {
+      ...f.createLegacyTaskService(),
+      getTaskSnapshot: vi.fn(async () => ({
+        meta: {
+          taskId: "task-1",
+          title: "Desktop task",
+          workspacePath: "/tmp/workspace",
+          workspaceIdentity: "ssh://host/tmp/workspace",
+          status: "running",
+        },
+        messages: [],
+        fileChanges: [],
+      })),
+      getTaskRuntimeBusyState: vi.fn(runtimeBusy),
+    };
+    const service = f.createBotsService({
+      credentialService: f.createCredentialService({ "weixin-token": "token" }),
+      legacyTaskService,
+      repo: repo as never,
+    });
+    return { service, legacyTaskService };
+  }
+
+  it("does not queue when the persisted running snapshot is stale and runtime reports completed", async () => {
+    // Bugfix 回归（2026-10-16 夜间实测）：任务早已完成、运行时零活动，持久化快照
+    // status 仍停留 running，bot 回"任务仍在运行"并拦下所有补话。快照 running 必须
+    // 向运行时要一次活的 control.phase 二次确认：运行时已进入完成相位即视为僵尸
+    // 状态，放行投递。
+    const { service, legacyTaskService } = setupRunningSnapshotBot(async () => false);
+
+    const replies = await service.handleInboundMessage({
+      botId: "weixin-1",
+      text: "补一条信息",
+      actor: weixinActor,
+    });
+
+    expect(legacyTaskService.getTaskRuntimeBusyState).toHaveBeenCalledOnce();
+    // 放行路径不在本调用内同步回执（后台投递）；判定依据＝未入队、未拒绝，且
+    // 消息确实经 sendPrompt 投递给了任务（防"放行后静默丢弃"的假通过）。
+    expect(replies.some((reply) => reply.text.includes("已加入队列"))).toBe(false);
+    expect(legacyTaskService.enqueueTaskCommand).not.toHaveBeenCalled();
+    expect(legacyTaskService.sendPrompt).toHaveBeenCalled();
+    service.disposeAll();
+  });
+
+  it("keeps queueing when the runtime confirms the task is still busy", async () => {
+    // 运行时确认仍在跑：维持排队，兜底不得误放行真忙任务。
+    const { service, legacyTaskService } = setupRunningSnapshotBot(async () => true);
+
+    const replies = await service.handleInboundMessage({
+      botId: "weixin-1",
+      text: "补一条信息",
+      actor: weixinActor,
+    });
+
+    expect(replies[0]?.text).toContain("已加入队列");
+    expect(legacyTaskService.enqueueTaskCommand).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: "task-1", type: "send_prompt" }),
+    );
+    service.disposeAll();
+  });
+
+  it("keeps queueing when the runtime busy state query fails", async () => {
+    // 查询失败维持原判定（保守兜底，不改变现有行为）。
+    const { service } = setupRunningSnapshotBot(async () => {
+      throw new Error("runtime offline");
+    });
+
+    const replies = await service.handleInboundMessage({
+      botId: "weixin-1",
+      text: "补一条信息",
+      actor: weixinActor,
+    });
+
+    expect(replies[0]?.text).toContain("已加入队列");
+    service.disposeAll();
+  });
+
+  it("reuses the live busy verdict instead of probing the runtime on every message", async () => {
+    // 常驻私聊里每条补话都活查一次运行时会让判定本身变成消息路径上的开销，
+    // 且运行时离线时每条消息都要等满一次预算。同一任务的判定在 TTL 内必须复用。
+    const { service, legacyTaskService } = setupRunningSnapshotBot(async () => true);
+
+    for (const text of ["补一条信息", "再补一条"]) {
+      const replies = await service.handleInboundMessage({
+        botId: "weixin-1",
+        text,
+        actor: weixinActor,
+      });
+      expect(replies[0]?.text).toContain("已加入队列");
+    }
+
+    expect(legacyTaskService.getTaskRuntimeBusyState).toHaveBeenCalledOnce();
+    service.disposeAll();
+  });
+
+  it("re-probes the runtime after a released message re-activates the task", async () => {
+    // Bugfix 回归（2026-10-18）：僵尸 running 放行投递后任务会真正跑起来，而探针的
+    // "已完成"判定按 5s TTL 缓存着。投递必须作废旧判定：否则窗口内下一条补话命中缓存
+    // 被直接投递进运行中的回合（重演"忙时直投"），而不是按运行时真值排队。
+    let busy = false;
+    const { service, legacyTaskService } = setupRunningSnapshotBot(async () => busy);
+
+    const first = await service.handleInboundMessage({
+      botId: "weixin-1",
+      text: "补一条信息",
+      actor: weixinActor,
+    });
+    expect(first.some((reply) => reply.text.includes("已加入队列"))).toBe(false);
+    expect(legacyTaskService.sendPrompt).toHaveBeenCalled();
+
+    busy = true;
+    const second = await service.handleInboundMessage({
+      botId: "weixin-1",
+      text: "再补一条",
+      actor: weixinActor,
+    });
+    expect(second[0]?.text).toContain("已加入队列");
+    expect(legacyTaskService.getTaskRuntimeBusyState).toHaveBeenCalledTimes(2);
+    service.disposeAll();
+  });
+
   it("allows task switching for a legacy active task without persisted status when it is not running", async () => {
     const repo = f.createMemoryRepo(f.weixinConfig, {
       version: 3,

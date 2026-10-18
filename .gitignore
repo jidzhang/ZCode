@@ -92,3 +92,4 @@ LOCAL-*.md
 
 # wechat-channel 本地凭据（勿提交）
 packages/wechat-channel/.env.local
+.scratch/

@@ -59,7 +59,8 @@ function isRetryableAtomicRenameError(error: unknown): boolean {
   return code === "EPERM" || code === "EBUSY" || code === "EACCES";
 }
 
-async function renameWithRetry(
+/** 导出供测试复用：测试模拟外部原子替换时沿用与产品完全一致的重试语义，不再各写一份。 */
+export async function renameWithRetry(
   tempFile: string,
   filePath: string,
   retryDelaysMs: readonly number[] = DEFAULT_RENAME_RETRY_DELAYS_MS,

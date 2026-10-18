@@ -3,7 +3,6 @@ import {
   rm,
   mkdir,
   writeFile,
-  rename,
   readFile,
   chmod,
   symlink,
@@ -14,6 +13,10 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSubagentsService } from "../src/subagents/subagentsService.js";
+// 测试模拟的原子替换与 watcher 并发时，Windows 会按文件共享模式对 rename 返回
+// EPERM（POSIX 无此语义，全量并发时被真实打出）。这里直接复用产品的 renameWithRetry，
+// 重试语义与写入侧完全一致，不在测试里再养一份克隆。
+import { renameWithRetry } from "../src/fs/atomicFileUtils.js";
 
 // 仅观察真实补扫的 stat 次数，以实际进入稳定等待作为时序证据。
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -230,7 +233,7 @@ describe("native subagent Host watchers", () => {
     });
     await f.both({ profiles: [{ name: "researcher", systemPrompt: "old" }] });
     const root = join(f.homeDir, ".zcode", "agents");
-    await rename(join(root, "Researcher.MD"), join(root, "researcher.md"));
+    await renameWithRetry(join(root, "Researcher.MD"), join(root, "researcher.md"));
     await writeFile(join(root, "researcher.md"), markdown("researcher", "new"));
     await f.both({ profiles: [{ name: "researcher", systemPrompt: "new" }] });
     await rm(join(root, "researcher.md"));
@@ -345,7 +348,7 @@ describe("native subagent Host watchers", () => {
       const path = join(root, "external.markdown");
       await f.both({ profiles: [{ name: "external", systemPrompt: "first" }] });
       await writeFile(join(root, "temp"), md("atomic"));
-      await rename(join(root, "temp"), path);
+      await renameWithRetry(join(root, "temp"), path);
       await f.both({ profiles: [{ systemPrompt: "atomic" }] });
       await rm(root, { recursive: true });
       await f.both({ profiles: [] });
@@ -372,7 +375,7 @@ describe("native subagent Host watchers", () => {
     });
     const root = join(f.workspace.workspacePath, ".zcode", "agents");
     // 目标缺失时，连临时监听的空父目录也可能被整体移走。
-    await rename(
+    await renameWithRetry(
       join(f.workspace.workspacePath, ".zcode"),
       join(f.workspace.workspacePath, "saved"),
     );
@@ -389,7 +392,7 @@ describe("native subagent Host watchers", () => {
     await mkdir(replacement);
     await writeFile(join(replacement, "a.md"), markdown("aaa", "replacement"));
     await rm(root, { recursive: true });
-    await rename(replacement, root);
+    await renameWithRetry(replacement, root);
     await f.both({ profiles: [{ systemPrompt: "replacement" }] });
     await writeFile(path, markdown("aaa", "later"));
     await f.both({ profiles: [{ systemPrompt: "later" }] });
@@ -480,11 +483,11 @@ describe("native subagent Host watchers", () => {
       await mkdir(join(home, "workspace", ".zcode", "agents"), { recursive: true });
     });
     const root = join(f.workspace.workspacePath, ".zcode", "agents");
-    await rename(root, root + "-saved");
+    await renameWithRetry(root, root + "-saved");
     await writeFile(root, "not a directory");
     await f.both({ kind: "built-in-fallback" });
     await rm(root);
-    await rename(root + "-saved", root);
+    await renameWithRetry(root + "-saved", root);
     await writeFile(join(root, "researcher.md"), markdown("researcher", "restored"));
     await f.both({ kind: "ready", profiles: [{ systemPrompt: "restored" }] });
   }, 20000);

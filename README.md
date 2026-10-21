@@ -19,6 +19,8 @@ ZCode 是 AI 编程工作台，提供桌面应用、浏览器界面和终端 Age
 - **零后台联网**：启动 7 类官方请求全停，更新器整个拿掉，日常包永远不自己更新；
 - **不外发**：会话分享已禁用，发往飞书/微信的内容先脱敏再发。
 
+已知缺失：Computer Use 在本仓库的构建中不可用。上游开源树的 `@zcode/zcode-cua` 是 fail-closed 占位包，真实 cua-helper 运行时只随官方闭源安装包分发、源码未公开，因此本仓库构建的安装包不带 `resources/tools/cua-helper`；Browser Use 不受影响。
+
 发版包更新只从本仓库 Releases 来。完整说明见 [SAFE-ZCODE.md](SAFE-ZCODE.md)。
 
 ## 初始化

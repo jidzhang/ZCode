@@ -1,3 +1,4 @@
+import { redactSecretsInDisplayText } from "@zcode/shared";
 import { helpText, modeListText, parseChannelCommand } from "../domain/commandRouter.js";
 import { buildReplyCard } from "../domain/cardBuilder.js";
 import { finalTextOf, renderAssistantReply } from "../domain/replyFormatter.js";
@@ -25,7 +26,8 @@ const DEDUPE_CAPACITY = 2048;
 /** 面向用户的错误摘要：不回显内部堆栈与地址，避免把敏感信息带进飞书会话。 */
 function errorMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error);
-  const singleLine = raw.replace(/\s+/gu, " ").trim();
+  // 错误文本可能携带带凭据的 URL/请求头，与渲染正文同口径脱敏后再进会话。
+  const singleLine = redactSecretsInDisplayText(raw).replace(/\s+/gu, " ").trim();
   return singleLine.length > 160 ? `${singleLine.slice(0, 157)}…` : singleLine;
 }
 

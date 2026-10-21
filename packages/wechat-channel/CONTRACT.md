@@ -25,6 +25,7 @@ iLink 的 fetch、header、游标管理只允许出现在 `adapters/`；
 
 ## 行为要点（详见 SPEC.md）
 
+- 出站文本（正文/工具行/错误摘要）统一凭据脱敏（`redactSecretsInDisplayText`）。
 - 仅私聊；`message_type=2` 的自发回显跳过；回复必须携带最近入站的 `context_token`。
 - 工具调用默认不回显（仅 `verbose` 终态附工具行）；`stream` 在纯文本媒介上
   降级为 typing 指示 + 终态文本，无中间内容更新。

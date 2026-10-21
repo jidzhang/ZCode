@@ -19,6 +19,8 @@ ZCode is an AI coding workspace with desktop, browser, and terminal interfaces. 
 - **Zero background chatter**: 7 categories of startup calls to official servers disabled, updater removed from daily builds;
 - **Nothing leaves silently**: conversation sharing disabled; credentials masked before reaching Feishu/WeChat.
 
+Known gap: Computer Use is unavailable in builds from this repo. In the upstream open-source tree, `@zcode/zcode-cua` is a fail-closed placeholder; the real cua-helper runtime ships only inside the official closed-source installer and its source is not published, so builds here contain no `resources/tools/cua-helper`. Browser Use is unaffected.
+
 Release builds update only from this repo's Releases. Full notes: [SAFE-ZCODE.en.md](SAFE-ZCODE.en.md).
 
 ## Setup

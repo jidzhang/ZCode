@@ -14,8 +14,9 @@
 
 ## 协议事实（逆向自官方闭源 host 包）
 
-来源：`D:\work\github\zcode_debug\host\__out__host__index.js`（`createWeixinBotProvider`、
-`requestWeixinJson`、`getWeixinUpdates`、`beginWeixinRegistration`、`pollWeixinRegistration`）。
+来源：官方闭源 host 包的本地逆向产物（local-only，不随仓库分发；涉及符号：
+`createWeixinBotProvider`、`requestWeixinJson`、`getWeixinUpdates`、
+`beginWeixinRegistration`、`pollWeixinRegistration`）。
 iLink 是微信私有接口，随微信版本可能变化；字段读取按闭源实现的宽容风格
 （多候选字段名依次回退），不可验证处如实标注。
 
@@ -53,6 +54,9 @@ context_token?, item_list: [{type: 1, text_item: {text}}]}`；
 
 ## 行为
 
+- 出站脱敏：终态正文、verbose 工具行与错误摘要在出站前统一过 `@zcode/shared` 的
+  `redactSecretsInDisplayText`（与官方 bot 层同口径），apiKey/token/密钥形态内容以
+  `{redacted}`/`{secret}` 占位，不回显到微信会话。
 - 每个微信用户（私聊）绑定一个引擎 task（懒创建，首条消息时创建）。
   任务协作模式默认 **yolo**（`WEIXIN_TASK_MODE` 可覆盖），与官方 bot 一致。
 - **仅私聊**：带群字段的消息回执一次「仅支持私聊」后忽略（与官方提示语一致）；

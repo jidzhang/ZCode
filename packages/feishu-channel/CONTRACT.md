@@ -20,6 +20,7 @@
 ## 行为要点（详见 SPEC.md）
 
 - 工具调用默认不回显（仅 `verbose` 模式渲染工具行）。
+- 出站文本（正文/工具行/错误摘要）统一凭据脱敏（`redactSecretsInDisplayText`）。
 - 引擎忙时输入入队（`enqueueTaskCommand`），不丢弃。
 - 渲染以 `readSessionMessages` 全量重读为唯一数据源，幂等可重复 PATCH。
 - 引擎断连期间的入站消息明确回执"未接受"，不静默丢弃。

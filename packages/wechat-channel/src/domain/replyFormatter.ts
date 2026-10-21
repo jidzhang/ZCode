@@ -1,3 +1,4 @@
+import { redactSecretsInDisplayText } from "@zcode/shared";
 import type { ReplyMode } from "../contract.js";
 
 /**
@@ -43,16 +44,19 @@ const MAX_TEXT_LENGTH = 20_000;
 export function renderAssistantReply(request: RenderRequest): RenderResult {
   const assistant = lastAssistant(request.messages);
   const parts = assistant?.parts ?? [];
-  const text = parts
-    .filter((part) => part.type === "text" && !part.synthetic && !part.ignored)
-    .map((part) => part.text ?? "")
-    .join("")
-    .trim();
+  // 出站脱敏：助手正文可能回显 apiKey/token 等凭据，与官方 bot 层（packages/services/src/bots/replyFormatter.ts）同口径，先脱敏再截断。
+  const text = redactSecretsInDisplayText(
+    parts
+      .filter((part) => part.type === "text" && !part.synthetic && !part.ignored)
+      .map((part) => part.text ?? "")
+      .join("")
+      .trim(),
+  );
   const toolLines =
     request.mode === "verbose"
       ? parts
           .filter((part) => part.type === "tool")
-          .map((part) => formatToolLine(part))
+          .map((part) => redactSecretsInDisplayText(formatToolLine(part)))
           .filter(Boolean)
       : [];
   const truncated =

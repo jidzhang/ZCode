@@ -85,3 +85,23 @@ test("卡片构建：stream 无工具区块，verbose 有；输入超长被截�
   assert.ok(truncatedCard.length < 40_000);
   assert.ok(truncatedCard.includes("tool_49"));
 });
+
+test("正文与工具行出站前做凭据脱敏", () => {
+  const messages: RenderMessage[] = [
+    {
+      role: "assistant",
+      parts: [
+        {
+          type: "text",
+          text: "配置如下：apiKey: sk-abcdef1234567890abcd；备用 Bearer ghp_abcdefghijklmnopqrstuvwxyz123456；裸 sk-abcdef1234567890",
+        },
+        { type: "tool", tool: "web_search", status: "completed" },
+      ],
+    },
+  ];
+  const result = renderAssistantReply({ messages, mode: "verbose", running: false });
+  assert.match(result.text, /apiKey: \{redacted\}/);
+  assert.match(result.text, /Bearer \{redacted\}/);
+  assert.match(result.text, /\{secret\}/);
+  assert.doesNotMatch(result.text, /sk-abcdef1234567890abcd|ghp_[A-Za-z]/);
+});

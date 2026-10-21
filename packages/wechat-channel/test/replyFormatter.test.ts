@@ -59,3 +59,17 @@ test("超长正文被截断并标注", () => {
   assert.ok(rendered.text.length < 25_000);
   assert.match(rendered.text, /已截断/);
 });
+
+test("正文出站前做凭据脱敏", () => {
+  const messages = messagesWith([
+    {
+      type: "text",
+      text: "配置如下：apiKey: sk-abcdef1234567890abcd；备用 Bearer ghp_abcdefghijklmnopqrstuvwxyz123456；裸 sk-abcdef1234567890",
+    },
+  ]);
+  const rendered = renderAssistantReply({ messages, mode: "final", running: false });
+  assert.match(rendered.text, /apiKey: \{redacted\}/);
+  assert.match(rendered.text, /Bearer \{redacted\}/);
+  assert.match(rendered.text, /\{secret\}/);
+  assert.doesNotMatch(rendered.text, /sk-abcdef1234567890abcd|ghp_[A-Za-z]/);
+});

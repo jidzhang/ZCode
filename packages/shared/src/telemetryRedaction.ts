@@ -57,7 +57,8 @@ export function redactTelemetryText(
       /(["']?(?:api[_-]?key|token|access[_-]?token|password|passwd|secret|client[_-]?secret|cookie|set-cookie|session)["']?\s*[:=]\s*["']?)(?!\{redacted\})[^\s,"'};]+/giu,
       "$1{redacted}",
     )
-    .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/giu, "$1 {redacted}")
+    // 修复原因：值字符类原先不含下划线，`Bearer ghp_xxx`/`Bearer sk_live_xxx` 等带 `_` 的 token 只打码到 `_` 前，尾部明文残留；补齐下划线与 sk/gh 口径对齐。
+    .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=_-]+/giu, "$1 {redacted}")
     .replace(/\b(?:sk|rk|pk)-[A-Za-z0-9_-]{12,}\b/giu, "{secret}")
     .replace(/\bgh[pousr]_[A-Za-z0-9]{20,}\b/gu, "{secret}")
     .replace(/\bAKIA[A-Z0-9]{16}\b/gu, "{secret}")
@@ -95,7 +96,8 @@ const DISPLAY_SECRET_KV_PATTERN = new RegExp(
   `(["']?(?:${DISPLAY_SECRET_KV_KEYS})["']?\\s*[:=]\\s*["']?)(?!\\{redacted\\})[^\\s,"'};]+`,
   "giu",
 );
-const DISPLAY_BEARER_SCHEME_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/giu;
+/** 值字符类含下划线：`Bearer ghp_xxx` 等带 `_` 的 token 必须整体打码，不能停在 `_` 前。 */
+const DISPLAY_BEARER_SCHEME_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=_-]+/giu;
 const DISPLAY_SK_PATTERN = /\b(?:sk|rk|pk)-[A-Za-z0-9_-]{12,}\b/giu;
 const DISPLAY_GH_PATTERN = /\bgh[pousr]_[A-Za-z0-9]{20,}\b/gu;
 const DISPLAY_AKIA_PATTERN = /\bAKIA[A-Z0-9]{16}\b/gu;

@@ -14,6 +14,9 @@
 
 ## 行为
 
+- 出站脱敏：助手正文、verbose 工具行与错误摘要在出站前统一过 `@zcode/shared` 的
+  `redactSecretsInDisplayText`（与官方 bot 层同口径），apiKey/token/密钥形态内容以
+  `{redacted}`/`{secret}` 占位，不回显到飞书会话。
 - 每个飞书 chat 绑定一个引擎 task（懒创建，首条消息时创建）。
   任务协作模式默认 **yolo**（`FEISHU_TASK_MODE` 可覆盖），与官方飞书 bot 行为一致：
   不产生权限询问，也就不需要权限转发链路。

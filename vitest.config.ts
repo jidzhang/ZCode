@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 const processLifecycleTests = [
   "packages/services/test/processTreeTerminator.test.ts",
@@ -10,6 +10,12 @@ const processLifecycleTests = [
 ];
 const forkIsolatedTests = [
   ...processLifecycleTests,
+  // 真实显示进程树和独立配置读者都在 5 秒内等待启动；并发调度延迟曾触发截止。
+  // 放入串行组保留真实进程和原时限，避免把启动排队误判为资源隔离或读锁失败。
+  "packages/desktop/test/r3RemoteProcess.test.ts",
+  "packages/provider-node/test/personal-config-read-lock.test.ts",
+  // 原生 fs.watch 集成在批量并发时曾等不到通知；串行验证真实接线，去重逻辑由受控事件单测覆盖。
+  "packages/services/src/gen-ui/adapters/stateStorage.test.ts",
   // electron-builder 下载 NSIS 时把进程 stdio 传给子进程，不能使用 threads 的虚拟 stdio。
   "packages/desktop/test/windowsInstallerCompile.test.ts",
   "packages/desktop/test/cdnPreloadScript.test.ts",
@@ -19,8 +25,16 @@ const forkIsolatedTests = [
   "packages/desktop/test/migrateStableFeedScript.test.ts",
   "packages/desktop/test/pluginE2EAdmissionScripts.test.ts",
   "packages/desktop/test/uploadOssScript.test.ts",
+  // 发布脚本会启动真实 Node/工具子进程，批量 threads 下曾打穿 30s；沿用发布类串行隔离。
+  "packages/desktop/test/notarizeMacosScript.test.ts",
+  "packages/desktop/test/publishReleaseScript.test.ts",
+  // 选源集成测试连续启动 Git、Bash 和 Node；并发启动排队会打穿 30s，沿用发布类串行隔离。
+  "packages/web/test/remoteFrontendBuildSource.test.ts",
+  // Sharp 闭包装配后要启动真实 Node 加载原生库；并行热启动曾触发其 15s 子进程限时。
+  "packages/desktop/test/dev-cua-plugin-runtime.test.ts",
   // 全量并发时真实心跳与嵌套构建会被调度延迟打穿；单独运行均通过，沿用串行组保留原时限。
   "packages/desktop/test/webRemoteControlTransport.test.ts",
+  "packages/web/test/webRemoteControlTransport.test.ts",
   "packages/provider-node/test/builtin-provider-build.test.ts",
   "packages/provider-node/test/builtin-provider-test-config-sync.test.ts",
   "packages/server/test/remoteDeploy.test.ts",
@@ -44,9 +58,6 @@ const forkIsolatedTests = [
   // Bugfix: 并发读写替换用例在 4 线程全量并发 + 杀软扫描下，rename 的 EPERM 窗口
   // 会超过重试预算（单独运行稳定通过）；隔离串行消除自身负载。
   "packages/provider-node/test/bundled-config-replacement.test.ts",
-  // Bugfix: 该用例以 30ms 间隔逐字节喂本地 HTTP 流验证空闲保活，全量并发时定时器
-  // 被调度延迟会超过下载器空闲阈值误判中止；隔离串行保留原时序口径。
-  "packages/zcode-server-cli/test/releaseDownload.test.ts",
 ];
 
 export default defineConfig({
@@ -73,6 +84,13 @@ export default defineConfig({
   },
   test: {
     setupFiles: ["./vitest.setup.ts"],
+    // 官方 affected 图不额外追踪 setupFiles；公共 setup 必须触发全量选择，再由入口跳过 UT 并成功退出。
+    forceRerunTriggers: [
+      ...configDefaults.forceRerunTriggers,
+      // 默认配置 glob 的尾部 /** 在当前版本不能匹配部分配置文件，补充文件模式。
+      "**/{vitest,vite}.config.*",
+      "**/vitest.setup.ts",
+    ],
     // 修复原因：全量 run 的 stdout 会把**通过**测试里的 console 输出一并转发——services 层
     // 用 createServiceLogger 的用例在绿态下也要刷几千行多行日志，全量输出因此膨胀到
     // ~3.3MB，超过 CI/工作流门禁对单条命令 256KB 的 stdout 上限，导致门禁整条命令被判
@@ -107,6 +125,7 @@ export default defineConfig({
           ],
           exclude: [
             "packages/desktop/test/e2e/**",
+            "packages/zcode-cua/**",
             // feishu/wechat-channel 的测试走各自包脚本的 node --test runner（tsx 直跑），
             // vitest 收集不到 node:test 套件只会整文件报错；排除以消除全量跑的假红。
             "packages/feishu-channel/test/**",
@@ -130,6 +149,7 @@ export default defineConfig({
           sequence: { groupOrder: 1 },
         },
       },
+      "packages/zcode-cua/vitest.config.ts",
     ],
     coverage: {
       provider: "v8",

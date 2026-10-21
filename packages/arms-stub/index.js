@@ -13,9 +13,12 @@ const armsRum = {
   sendEvent() {
     /* 上报丢弃：safe-zcode 零遥测语义 */
   },
-  setConfig(config) {
-    if (config && typeof config === "object") {
-      Object.assign(state, config, { env: "local" });
+  setConfig(configOrKey, value) {
+    // 上游两种形态：整包 setConfig(config) 与部分更新 setConfig("properties", {...})。
+    if (typeof configOrKey === "string") {
+      state[configOrKey] = value;
+    } else if (configOrKey && typeof configOrKey === "object") {
+      Object.assign(state, configOrKey, { env: "local" });
     }
   },
   getConfig() {

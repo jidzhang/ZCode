@@ -108,6 +108,8 @@ See Packaging below for build instructions. `pnpm build:zcode` only creates the 
 
 ### CLI Source Development
 
+See the [CLI usage guide (Chinese)](apps/zcode-cli/docs/usage/README.md) for model configuration, non-interactive runs, tools and extensions, batch evaluation, and trajectory capture.
+
 Use the source entry when developing the TUI or Agent:
 
 ```bash

@@ -112,6 +112,8 @@ Web 模式默认工作目录为当前目录，监听 `127.0.0.1`，默认不启�
 
 ### CLI 源码开发
 
+CLI 的模型配置、非交互调用、工具与扩展、批量评测和轨迹记录见 [CLI 使用指南](apps/zcode-cli/docs/usage/README.md)。
+
 直接开发 TUI 或 Agent 时，运行源码入口：
 
 ```bash

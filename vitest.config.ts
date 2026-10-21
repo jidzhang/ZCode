@@ -7,6 +7,10 @@ const processLifecycleTests = [
   "packages/services/test/zcodeAgentService.v4.test.ts",
   "packages/services/test/zcodeAgentProcessManager.test.ts",
   "packages/services/test/zcodeStdioTransport.test.ts",
+  // Bugfix（2026-10-22，上游 3.16.2 合并后）：bots 目录重构使该文件的模块导入图变重，
+  // 与其它大图测试同 worker 并发时间歇打穿 threads 隔离默认堆（ERR_WORKER_OUT_OF_MEMORY，
+  // 单跑 90/90 稳定通过）；挪入串行 fork 池，沿用重图测试的隔离惯例。
+  "packages/services/test/botsService.messageFlow.test.ts",
 ];
 const forkIsolatedTests = [
   ...processLifecycleTests,

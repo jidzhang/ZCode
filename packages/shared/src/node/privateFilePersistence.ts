@@ -9,7 +9,12 @@ const DEFAULT_LOCK_OWNERLESS_GRACE_MS = 100;
 const DEFAULT_LOCK_MAX_WAIT_MS = 8_000;
 // Bugfix: 高并发/杀软扫描下 Windows 原子替换的 EPERM 可持续超过 1.5s（全量单测
 // 4 线程并发时两次复现），原 5 档重试预算不够；补两档长退避把窗口拉到约 6 秒。
-const DEFAULT_RENAME_RETRY_DELAYS_MS = [50, 100, 200, 400, 800, 1600, 3200] as const;
+// 2026-10-22 二次加档：上游 3.16.2 合并后全量单测下 bundled-config-replacement
+// 连续两轮复现 EPERM 超过 6s 预算（单跑稳定通过），杀软对 %TEMP% 新文件的扫描
+// 排队随全量负载变长；再补两档到约 25 秒，仍低于该链路 30s 测试超时。
+const DEFAULT_RENAME_RETRY_DELAYS_MS = [
+  50, 100, 200, 400, 800, 1600, 3200, 6400, 12_800,
+] as const;
 const processFileLockTails = new Map<string, Promise<void>>();
 
 export interface SharedFileLockOptions {

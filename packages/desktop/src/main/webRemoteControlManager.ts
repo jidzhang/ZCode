@@ -10,6 +10,7 @@ import {
 } from "@zcode/client";
 import {
   buildWebRemoteControlExternalQrUrl,
+  normalizeWebRemoteControlRouteAppVersion,
   buildWebRemoteControlBridgeResultTelemetry,
   buildWebRemoteControlPairResultTelemetry,
   classifyRemoteUsageError,
@@ -770,7 +771,8 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
   ): WebRemoteControlWindowBootstrapResult {
     return {
       windowControlSessionId: runtime.deviceSid,
-      desktopAppVersion: dependencies.appVersion,
+      // Bugfix：手机页版本守卫按此字段重写 URL，带 -safe.N 后缀会被服务端 404。
+      desktopAppVersion: normalizeWebRemoteControlRouteAppVersion(dependencies.appVersion),
       workspaces: getAvailableWorkspaces(runtime),
       tasks: getAvailableTasks(runtime),
       initialViewState: getRuntimeInitialViewState(runtime),
@@ -1304,7 +1306,8 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
       timestamp: Date.now(),
       deviceMid: dependencies.deviceMid,
       deviceName: dependencies.deviceName,
-      appVersion: dependencies.appVersion,
+      // Bugfix：/remote/v4 服务端按 app_version 参数路由资源，带 -safe.N 后缀的二维码直接 404。
+      appVersion: normalizeWebRemoteControlRouteAppVersion(dependencies.appVersion),
       theme,
     });
   }

@@ -5,6 +5,7 @@ import {
   WebRemoteControlCloseCodes,
   buildWebRemoteControlExternalQrUrl,
   matchesWebRemoteControlRoutePath,
+  normalizeWebRemoteControlRouteAppVersion,
   parseWebRemoteControlExternalQrParams,
   resolveWebRemoteControlFailureReasonFromCloseCode,
   resolveWebRemoteControlInitialWorkspaceSelection,
@@ -124,6 +125,25 @@ describe("external relay QR helpers", () => {
     expect(
       parseWebRemoteControlExternalQrParams(new URLSearchParams("sid=sid-1&t=1710000000000")),
     ).toBeNull();
+  });
+});
+
+describe("normalizeWebRemoteControlRouteAppVersion", () => {
+  it("strips local channel suffixes from numeric semver cores", () => {
+    expect(normalizeWebRemoteControlRouteAppVersion("3.15.1-safe.3")).toBe("3.15.1");
+    expect(normalizeWebRemoteControlRouteAppVersion("3.16.2-beta.1")).toBe("3.16.2");
+    expect(normalizeWebRemoteControlRouteAppVersion("1.5.0-rc-1")).toBe("1.5.0");
+  });
+
+  it("keeps clean semver and multi-segment numeric versions untouched", () => {
+    expect(normalizeWebRemoteControlRouteAppVersion("3.16.2")).toBe("3.16.2");
+    expect(normalizeWebRemoteControlRouteAppVersion("3.15.3.8237")).toBe("3.15.3.8237");
+    expect(normalizeWebRemoteControlRouteAppVersion("")).toBe("");
+  });
+
+  it("keeps versions whose dash base is not a numeric core", () => {
+    expect(normalizeWebRemoteControlRouteAppVersion("dev-build-1")).toBe("dev-build-1");
+    expect(normalizeWebRemoteControlRouteAppVersion("-safe.3")).toBe("-safe.3");
   });
 });
 

@@ -301,6 +301,19 @@ export function buildWebRemoteControlExternalQrUrl({
   return url.toString();
 }
 
+/**
+ * 归一化用于手机页路由的桌面版本号：剥离 `-safe.N` 等本地渠道后缀，仅保留数字版本核。
+ * Bugfix：/remote/v4 服务端按 app_version 路由版本化资源，带 prerelease 后缀直接 404；
+ * 手机页版本守卫还会用 desktopAppVersion 重写 URL，不清后缀会在配对后被重定向回 404。
+ * 仅当 "-" 前是纯数字段时剥离；官方四段式版本与干净 semver 原样保留。
+ */
+export function normalizeWebRemoteControlRouteAppVersion(version: string): string {
+  const dashIndex = version.indexOf("-");
+  if (dashIndex <= 0) return version;
+  const base = version.slice(0, dashIndex);
+  return /^\d+(\.\d+)*$/.test(base) ? base : version;
+}
+
 export function parseWebRemoteControlExternalQrParams(
   params: URLSearchParams,
 ): WebRemoteControlExternalQrParams | null {

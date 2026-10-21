@@ -34,6 +34,7 @@ function createManagerHarness(options?: {
   startupRestoreContext?: NonNullable<AppSettings["webRemoteControlLastEnabledContext"]>;
   startupRestoreClearError?: Error;
   registeredAuths?: Array<{ deviceSid: string; passHash: string }>;
+  appVersion?: string;
   attachWorkspaceHost?: AttachWorkspaceHost;
   releaseWorkspaceHostAttachment?: (attachmentId: string) => void;
   disposeWorkspaceHostAttachmentsForWindow?: (windowId: number, reason: string) => void;
@@ -89,7 +90,7 @@ function createManagerHarness(options?: {
     getEndpointUrls: options?.getEndpointUrls,
     deviceMid: "mid-1",
     deviceName: "MacBook",
-    appVersion: "1.5.0",
+    appVersion: options?.appVersion ?? "1.5.0",
     authProvider: {
       createPassword: () => "password",
       createPassHash: () => "hash-1",
@@ -303,6 +304,25 @@ describe("createWebRemoteControlManager external relay", () => {
       }),
     );
     expect(h.defaultAttachWorkspaceHost).not.toHaveBeenCalled();
+    await h.manager.stop(1);
+  });
+
+  it("上报二维码与 bootstrap 的版本号剥离本地渠道后缀", async () => {
+    const h = createManagerHarness({ appVersion: "3.15.1-safe.3" });
+    await h.manager.start(1, { workspacePath: localWorkspace.workspacePath });
+
+    const status = h.manager.getStatus(1);
+    expect(status.qrUrl).toContain("app_version=3.15.1");
+    expect(status.qrUrl).not.toContain("safe.3");
+
+    h.deliverPayload({ zcode_type: "bootstrap-request", requestId: "version-check" });
+    expect(h.sentPayloads).toContainEqual(
+      expect.objectContaining({
+        zcode_type: "bootstrap-response",
+        requestId: "version-check",
+        result: expect.objectContaining({ desktopAppVersion: "3.15.1" }),
+      }),
+    );
     await h.manager.stop(1);
   });
   afterEach(() => {

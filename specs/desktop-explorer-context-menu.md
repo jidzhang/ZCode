@@ -35,3 +35,9 @@ Windows 主进程在启动时与界面语言切换时，通过 `reg.exe add /f` 
 1. 安装并启动应用一次后：资源管理器中右键点选文件夹、右键点选驱动器、在文件夹/桌面/驱动器根目录空白处右键，均出现"在ZCode中打开"。
 2. 空白处右键触发时，ZCode 打开的是当前浏览的目录（`%V`），与点选该文件夹图标右键（`%1`）行为等价。
 3. 界面语言切换后，三个位置的菜单文案同步切换。
+4. 打开目录后，该目录必须成为一个项目：左侧「项目」列表出现它（已有同 root 的项目则复用），输入框项目位显示项目名而不是「选择项目」；tab 的 `workspacePurpose` 为 `project`，草稿 `projectId` 指向该项目。
+5. 目录为网络路径（UNC）时仍走 WSL/远端流程，不创建本地虚拟项目。
+
+## 项目归属（2026-10-22 修订）
+
+上游 v3.16.x 引入虚拟项目侧栏后，仅 `addTab` 的目录是没有 `projectId` 的 conversation workspace，项目列表与输入框项目位都看不到它。系统右键与「打开文件夹」共用 `handleSelectProject`，因此在导航前先按 root 复用或创建虚拟项目（`projectService.readProjects` → `saveProject({ roots: [path] })`），再以 `workspacePurpose: "project"` 建 tab 并把草稿绑定到该 `projectId`。创建失败只记 warn 并退回 workspace-only，不阻断打开目录。

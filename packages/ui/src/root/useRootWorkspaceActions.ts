@@ -20,6 +20,7 @@ import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { reportAppTelemetryEvent } from "@/lib/appTelemetry.js";
 import { resolveLogoutProviderFamilyDomain } from "@/lib/providerFamilyDomainSettings.js";
 import { isRendererReloadNavigation } from "@/lib/rendererNavigation.js";
+import { getPathLeaf } from "@/lib/path.js";
 import { parseWslUncWorkspacePath } from "@/lib/wslUncWorkspace.js";
 import { logger } from "@/logger.js";
 import { useComposerClientNamespace } from "@/hooks/useServices.js";
@@ -506,6 +507,40 @@ export function useRootWorkspaceActions({
     userId,
   ]);
 
+  // 打开文件夹（系统右键「在 ZCode 中打开」/ Ctrl+O）要落到一个真实项目上：
+  // 已有同 root 的项目就复用，没有就创建，保证项目侧栏与输入框项目位都能看到它。
+  // 网络路径（UNC）已在调用方转去 WSL/远端流程，不在这里创建本地项目。
+  const ensureProjectForOpenedFolder = useCallback(
+    async (path: string): Promise<string | undefined> => {
+      const projectService = services.projectService;
+      if (!projectService) return undefined;
+      if (path.replace(/\\/g, "/").startsWith("//")) return undefined;
+      const normalizeForCompare = (value: string) =>
+        value.replace(/\\/g, "/").replace(/\/+$/u, "").toLowerCase();
+      const target = normalizeForCompare(path);
+      try {
+        const projects = await projectService.readProjects();
+        const existing = projects.find(
+          (project) =>
+            !project.deleted &&
+            project.roots.some((root) => normalizeForCompare(root.rootPath) === target),
+        );
+        if (existing) return existing.id;
+        const created = await projectService.saveProject({
+          roots: [path],
+          defaultName: getPathLeaf(path),
+        });
+        logger.info("[Root] 已为打开的文件夹创建项目", { path, projectId: created.id });
+        return created.id;
+      } catch (error) {
+        // 创建项目失败不能阻断打开目录，退回旧的 workspace-only 行为。
+        logger.warn("[Root] 为打开的文件夹创建项目失败，退回普通工作区", error);
+        return undefined;
+      }
+    },
+    [services.projectService],
+  );
+
   const handleSelectProject = useCallback(
     async (path: string) => {
       logger.info("[Root] handleSelectProject called with path:", path);
@@ -543,11 +578,18 @@ export function useRootWorkspaceActions({
           return;
         }
 
+        // 修复原因（2026-10-22）：上游 v3.16.x 引入虚拟项目侧栏后，只 addTab 的目录
+        // 会成为一个没有 projectId 的 conversation workspace —— 左侧「项目」列表不出现
+        // 该目录，输入框项目位仍显示「选择项目」，用户看到的就是"右键打开后既没进入
+        // 也没创建这个项目"。系统右键「在 ZCode 中打开」与手动打开文件夹同走本函数，
+        // 这里先按目录复用或创建项目，再把 tab 与草稿挂到该项目上。
+        const projectId = await ensureProjectForOpenedFolder(path);
+
         // 新增 tab（如果已在本窗口打开则激活它）
-        addTab(path);
+        addTab(path, { workspacePurpose: projectId ? "project" : "conversation" });
         // 打开 workspace 是 workspace-only 意图，不是“继续上次会话”。
         // 即使命中已存在 tab，也必须清掉该 workspace 的 activeTaskId 并回到单 pane 草稿。
-        startDraftInWorkspace(path);
+        startDraftInWorkspace(path, undefined, projectId ? { projectId } : undefined);
         setWorkspaceActionError(null);
       } catch (err) {
         logger.error("[Root] handleSelectProject error:", err);
@@ -555,6 +597,7 @@ export function useRootWorkspaceActions({
     },
     [
       addTab,
+      ensureProjectForOpenedFolder,
       intl,
       onOpenRemoteConnection,
       platform,

@@ -11,6 +11,9 @@ mock-cdn/
 packages/desktop/bundled-resources/
 packages/desktop/bundled-agents/
 packages/desktop/bundled-tools/
+# safe-zcode fork：本地注入的官方闭源 cua-helper 产物副本，绝不入库（来源与用法见
+# packages/desktop/scripts/local-cua-helper-runtime.mjs 头注释）。
+packages/desktop/local-cua-helper/
 packages/desktop/mock-cdn/
 packages/desktop/.e2e-home/
 # 修复原因：Windows shard runner 会生成带 run id 的 HOME；中断后不应把测试产物误判为源码改动。

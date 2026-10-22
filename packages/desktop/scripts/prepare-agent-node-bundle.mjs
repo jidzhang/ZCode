@@ -23,6 +23,7 @@ import {
   stageSharpIntoBundledAgents,
 } from "./sharp-package-assets.mjs";
 import { stageKoffiIntoBundledAgents } from "./koffi-package-assets.mjs";
+import { isLocalCuaHelperRuntimeAvailable } from "./local-cua-helper-runtime.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(scriptDir, "..");
@@ -437,7 +438,12 @@ function stageBundledSkillPack() {
 }
 
 function stageSharpForNodeReplPlugin() {
-  if (!isSharpRequiredByComputerUse({ desktopPackageRoot: desktopRoot })) {
+  // safe-zcode fork：本地注入（local-cua-helper，见 local-cua-helper-runtime.mjs）启用 CUA 时，
+  // 官方客户端同样需要 sharp，与真实 producer 安装态同口径。
+  const sharpRequired =
+    isSharpRequiredByComputerUse({ desktopPackageRoot: desktopRoot }) ||
+    isLocalCuaHelperRuntimeAvailable({ desktopPackageRoot: desktopRoot });
+  if (!sharpRequired) {
     console.log(
       "[prepare:agent-bundle] Computer Use package does not declare sharp, skip sharp staging",
     );

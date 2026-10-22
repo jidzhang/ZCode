@@ -7,6 +7,7 @@ import { resolveNativeSearchReleasePlan } from "../../../scripts/native-search-t
 import { runCommand } from "../../../scripts/spawn-command.mjs";
 import { getTargetPlatform } from "./target-platform.mjs";
 import { isRealComputerUseProducerInstalled } from "./computer-use-producer.mjs";
+import { isLocalCuaHelperRuntimeAvailable } from "./local-cua-helper-runtime.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(scriptDir, "..");
@@ -21,8 +22,14 @@ const nativeSearchReleasePlan = resolveNativeSearchReleasePlan({
 const shouldPrepareWindowsBrowserImportHelper =
   target.os === "win32" && process.env.ZCODE_ENABLE_WINDOWS_BROWSER_IMPORT === "1";
 // Windows Computer Use Helper 由真实 producer 提供；开源占位包没有 Helper runtime，跳过准备。
+// safe-zcode fork：本地注入路径——local-cua-helper（官方安装包产物副本，gitignore）存在时
+// 走 prepare:local-cua-helper 原样暂存；两者都无则维持上游跳过行为（CI 零影响）。
 const shouldPrepareWindowsCuaHelper =
   target.os === "win32" && isRealComputerUseProducerInstalled({ desktopPackageRoot: desktopRoot });
+const shouldPrepareLocalWindowsCuaHelper =
+  target.os === "win32" &&
+  !shouldPrepareWindowsCuaHelper &&
+  isLocalCuaHelperRuntimeAvailable({ desktopPackageRoot: desktopRoot });
 // CUA 权限浮窗的吸附数据源。仅 macOS；缺 swiftc 时脚本内部自行降级为跳过（浮窗 fail-open
 // 到屏幕底部，仍可用），所以无条件挂在 darwin 上不会让构建变脆。
 const shouldPrepareMacosWindowBounds = target.os === "darwin";
@@ -32,6 +39,7 @@ const shouldPrepareMacosWindowBounds = target.os === "darwin";
 const localRuntimeScripts = [
   "prepare:agent-bundle",
   ...(shouldPrepareWindowsCuaHelper ? ["prepare:windows-cua-helper"] : []),
+  ...(shouldPrepareLocalWindowsCuaHelper ? ["prepare:local-cua-helper"] : []),
   ...(nativeSearchReleasePlan.enabled ? ["prepare:native-search"] : []),
   ...(shouldPrepareWindowsBrowserImportHelper ? ["prepare:browser-import-helper"] : []),
   ...(shouldPrepareMacosWindowBounds ? ["prepare:macos-window-bounds"] : []),

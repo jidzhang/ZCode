@@ -20,6 +20,7 @@
     "prepare:glm": "node ../../scripts/download-glm.mjs",
     "prepare:agent-bundle": "node scripts/prepare-agent-node-bundle.mjs",
     "prepare:windows-cua-helper": "node scripts/prepare-windows-cua-helper.mjs",
+    "prepare:local-cua-helper": "node scripts/prepare-local-cua-helper.mjs",
     "prepare:native-search": "node ../../scripts/prepare-native-search-tools.mjs",
     "prepare:browser-import-helper": "node scripts/build-windows-browser-import-helper.mjs",
     "prepare:macos-window-bounds": "node scripts/build-macos-window-bounds.mjs",

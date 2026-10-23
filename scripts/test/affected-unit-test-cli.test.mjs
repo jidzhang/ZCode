@@ -193,10 +193,9 @@ test("Push 使用 remote SHA；新分支使用 staging 共同祖先；手动模�
   }
 });
 
-test("无基线、无效基线、非 HEAD 推送均报错；删除 ref 不测试", async (t) => {
+test("无效基线、非 HEAD 推送均报错；无基线退回 HEAD 空选；删除 ref 不测试", async (t) => {
   const { invoke, hook, base } = await fixture(t);
   for (const [args, env] of [
-    [["--scope", "push"], {}],
     [["--base", "missing"], {}],
     [["--scope", "push"], await hook("1".repeat(40))],
     [
@@ -206,6 +205,11 @@ test("无基线、无效基线、非 HEAD 推送均报错；删除 ref 不测试
     [["--scope", "invalid"], {}],
   ])
     assert.equal((await invoke(args, env)).code, 2);
+  // fork 没有 origin/staging：首次推送（含 tag）退回 origin/main，再退 HEAD。
+  // 夹具只有本地 main，因此这里走到 HEAD 兜底：changed=HEAD 无增量，空选成功退出。
+  const noBaseline = await invoke(["--scope", "push"], {});
+  assert.equal(noBaseline.code, 0, noBaseline.stderr);
+  assert.match(noBaseline.stdout, /无选中测试/u);
   const deleted = await invoke(["--scope", "push"], {
     ZCODE_PRE_PUSH_STDIN: `(delete) ${zero} refs/heads/x ${base}`,
   });

@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import {
-  buildWebRemoteControlExternalQrUrl,
-  parseWebRemoteControlExternalQrParams,
+  buildWebRemoteControlV2QrUrl,
+  parseWebRemoteControlV2QrParams,
 } from "@zcode/shared";
 import {
   getWebRemoteControlHeartbeatDelayMs,
@@ -10,7 +10,7 @@ import {
 } from "@zcode/shared/web-remote-relay";
 
 it("builds V2 links without secrets, including removal of stale base URL credentials", () => {
-  const url = buildWebRemoteControlExternalQrUrl({
+  const url = buildWebRemoteControlV2QrUrl({
     baseUrl: "https://zcode.z.ai/remote/v4?hash=old&t=123",
     deviceSid: "d_1",
     deviceMid: "mid-1",
@@ -19,7 +19,7 @@ it("builds V2 links without secrets, including removal of stale base URL credent
   });
   const params = new URL(url).searchParams;
   expect([...params.keys()]).toEqual(["sid", "mid", "name", "app_version"]);
-  expect(parseWebRemoteControlExternalQrParams(params)).toEqual({
+  expect(parseWebRemoteControlV2QrParams(params)).toEqual({
     deviceSid: "d_1",
     deviceMid: "mid-1",
     deviceName: "我的桌面",
@@ -36,9 +36,9 @@ it("accepts every V2 routing hint independently or none and rejects legacy crede
     ["app_version=3.13.0", { appVersion: "3.13.0" }],
     ["sid=%20&name=%20", {}],
   ] as const)
-    expect(parseWebRemoteControlExternalQrParams(new URLSearchParams(query))).toEqual(result);
+    expect(parseWebRemoteControlV2QrParams(new URLSearchParams(query))).toEqual(result);
   for (const query of ["sid=d_1&hash=secret&t=123", "hash=", "t=123"]) {
-    expect(parseWebRemoteControlExternalQrParams(new URLSearchParams(query))).toBeNull();
+    expect(parseWebRemoteControlV2QrParams(new URLSearchParams(query))).toBeNull();
   }
 });
 

@@ -152,7 +152,6 @@ modules:
       - shared
       - ui
       - conversation-workspace-target
-      - web-remote-control-ui
       - remote-connection-flow
     publicEntrypoints:
       - packages/ui/src/project-sidebar/index.tsx
@@ -450,29 +449,6 @@ modules:
       - app
       - adapters
       - ui
-  # desktop-web-remote-relay：由 architecture:adopt 登记
-  - id: desktop-web-remote-relay
-    roots:
-      - packages/desktop/src/main/web-remote-relay
-    managed: true
-    requires:
-      - client
-      - desktop
-      - shared
-      - web-remote-relay
-    publicEntrypoints:
-      - packages/desktop/src/main/web-remote-relay/index.ts
-      - packages/desktop/src/main/web-remote-relay/contract.ts
-    layers:
-      contract: contract.ts
-      adapters: .
-    owner: remote
-    layerOrder:
-      - contract
-      - domain
-      - app
-      - adapters
-      - ui
   # mobile-ui：由 architecture:adopt 登记
   - id: mobile-ui
     roots:
@@ -488,33 +464,6 @@ modules:
       - packages/ui/src/components/mobile-ui/bottom-sheet.tsx
     layers:
       contract: contract.ts
-      ui: .
-    owner: remote
-    layerOrder:
-      - contract
-      - domain
-      - app
-      - adapters
-      - ui
-  # web-remote-control-ui：由 architecture:adopt 登记
-  - id: web-remote-control-ui
-    roots:
-      - packages/ui/src/web-remote-control
-    managed: true
-    requires:
-      - mobile-ui
-      - services
-      - shared
-      - ui
-    publicEntrypoints:
-      - packages/ui/src/web-remote-control/index.ts
-      - packages/ui/src/web-remote-control/contract.ts
-      - packages/ui/src/web-remote-control/WebRemoteControlDeviceHeader.tsx
-      - packages/ui/src/web-remote-control/app/useWebRemoteControlAuthSync.ts
-    layers:
-      contract: contract.ts
-      domain: domain
-      app: app
       ui: .
     owner: remote
     layerOrder:
@@ -779,6 +728,26 @@ exceptions:
     rule: unmanaged-new-file
     paths: [packages/zcode-cua/vitest.config.ts]
     reason: 该文件只装配测试项目，开源占位版本用于保持根单测入口可运行；不包含 producer 运行逻辑，不为同目录实现文件开放例外。
+  - id: web-remote-control-v1-restore
+    rule: unmanaged-new-file
+    paths:
+      - packages/desktop/src/main/webRemoteControlRelayAuthProvider.ts
+      - packages/desktop/src/main/webRemoteControlRelayAuthStorageProvider.ts
+      - packages/desktop/src/main/webRemoteControlTransport.ts
+      - packages/ui/src/WebRemoteControlDialog.tsx
+      - packages/ui/src/WebRemoteControlMobileTaskHome.tsx
+      - packages/ui/src/WebRemoteControlTaskIndex.tsx
+      - packages/ui/src/WebRemoteControlTaskIndexRow.tsx
+      - packages/ui/src/hooks/chatActionHelpers.ts
+      - packages/ui/src/lib/taskRuntimeDisplayStatus.ts
+      - packages/ui/src/lib/taskTimelineGroups.ts
+      - packages/ui/src/lib/webRemoteControlMobileTaskHome.ts
+      - packages/ui/src/lib/webRemoteControlTaskIndex.ts
+      - packages/ui/src/lib/webRemoteControlTaskSync.ts
+      - packages/ui/src/store/remotePinnedTaskStore.ts
+      - packages/ui/src/store/remoteTimelineTaskStore.ts
+      - packages/shared/src/web-remote-control-heartbeat.ts
+    reason: 逐文件恢复 3.15.1（54483d06）的 V1 免登录配对存量实现以撤销上游 3.16.2 的账号登录门禁；文件内容与当时一致（仅测试/类型随当前主干适配），沿用原有未受管目录布局，不做模块接管改造。
   - id: opensource-tool-search-comment-cleanup
     rule: unmanaged-new-file
     paths:

@@ -11,6 +11,7 @@ import {
   PlatformChannels,
   rendererLogPayloadSchema,
   stringArraySchema,
+  webRemoteControlTaskTargetsSchema,
   webRemoteControlWorkspaceTargetsSchema,
   type DesktopCommandId,
   type ApplicationIconRequest,
@@ -22,6 +23,7 @@ import {
   type CreateTempTextAttachmentRequest,
   type MaterializeWorkflowArtifactFileRequest,
   type UpdateStatePayload,
+  type WebRemoteControlTaskTarget,
   type WebRemoteControlWorkspaceTarget,
   type WindowControlsOverlayReadyPayload,
 } from "@zcode/shared";
@@ -91,6 +93,7 @@ export function registerPlatformIpcHandlers(options: {
     windowId: number,
     workspaces: WebRemoteControlWorkspaceTarget[],
   ) => void;
+  syncWebRemoteControlTasks: (windowId: number, tasks: WebRemoteControlTaskTarget[]) => void;
   getDesktopSessionActivity: () => {
     runningAgentSessionCount: number;
   };
@@ -301,6 +304,24 @@ export function registerPlatformIpcHandlers(options: {
     }
 
     options.syncWebRemoteControlWorkspaces(win.id, result.data);
+  });
+
+  ipcMain.on(PlatformChannels.SyncWebRemoteControlTasks, (event, payload: unknown) => {
+    const result = webRemoteControlTaskTargetsSchema.safeParse(payload);
+    if (!result.success) {
+      options.logger.warn(
+        "[sync-web-remote-control-tasks] invalid payload:",
+        formatZodError(result.error),
+      );
+      return;
+    }
+
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) {
+      return;
+    }
+
+    options.syncWebRemoteControlTasks(win.id, result.data);
   });
 
   ipcMain.on(PlatformChannels.SyncWindowUnreadCount, (event, payload: unknown) => {

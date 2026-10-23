@@ -114,6 +114,27 @@ export const webRemoteControlReconnectWorkspaceResultSchema = z.union([
   }),
 ]);
 
+export const webRemoteControlTaskTargetSchema = z.object({
+  taskId: nonEmptyStringSchema,
+  title: z.string(),
+  workspacePath: nonEmptyStringSchema,
+  workspaceIdentity: nonEmptyStringSchema.optional(),
+  remoteSessionId: nonEmptyStringSchema.optional(),
+  workspaceLabel: nonEmptyStringSchema,
+  workspaceKind: z.enum(["local", "remote"]),
+  createdAt: z.number().finite(),
+  updatedAt: z.number().finite(),
+  provider: zcodeProviderSchema.optional(),
+  unreadAt: z.number().finite().optional(),
+  displayStatus: z.enum(["idle", "running", "completed", "error"]).optional(),
+  hasBackgroundWork: z.boolean().optional(),
+  workflowActivity: sessionWorkflowActivitySchema.optional(),
+  pinned: z.boolean().optional(),
+  archived: z.boolean().optional(),
+});
+
+export const webRemoteControlTaskTargetsSchema = z.array(webRemoteControlTaskTargetSchema);
+
 export const webRemoteControlFailureReasonSchema = z.enum([
   "session-not-found",
   "session-expired",
@@ -197,6 +218,8 @@ export const webRemoteControlWindowBootstrapResultSchema = z.object({
   windowControlSessionId: nonEmptyStringSchema,
   desktopAppVersion: nonEmptyStringSchema.optional(),
   workspaces: webRemoteControlWorkspaceTargetsSchema,
+  // V1 手机页任务索引；V1 桌面端总会携带，V2 手机页（未部署）不读取，解析按可选接受。
+  tasks: webRemoteControlTaskTargetsSchema.optional(),
   initialViewState: webRemoteControlMobileViewStateSchema.optional(),
   mobileViewState: webRemoteControlMobileViewStateSchema.optional(),
   mobileTaskViewEpoch: webRemoteControlTransportIdSchema.optional(),
@@ -204,6 +227,7 @@ export const webRemoteControlWindowBootstrapResultSchema = z.object({
 
 export const webRemoteControlWorkspaceListResultSchema = z.object({
   workspaces: webRemoteControlWorkspaceTargetsSchema,
+  tasks: webRemoteControlTaskTargetsSchema.optional(),
   activeWorkspaceKey: nonEmptyStringSchema.optional(),
   activeTaskId: nonEmptyStringSchema.optional(),
 });

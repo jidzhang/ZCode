@@ -1,4 +1,3 @@
-import type { WebRemoteControlAuthStateChange } from "./web-remote-control.js";
 /* eslint-disable max-lines -- 通信频道和请求响应映射必须集中定义，避免跨进程 channel 字符串散落。 */
 import type {
   ResourceUsageSnapshot,
@@ -15,6 +14,7 @@ import type {
   WebRemoteControlReconnectWorkspaceResult,
   WebRemoteControlStartOperationResult,
   WebRemoteControlStatus,
+  WebRemoteControlTaskTarget,
   WebRemoteControlWorkspaceTarget,
 } from "./web-remote-control.js";
 import type { AppSettings, Locale } from "./protocol.js";
@@ -242,8 +242,8 @@ export const PlatformChannels = {
   StopWebRemoteControl: "zcode:stop-web-remote-control",
   /** 查询当前窗口的 Web 远程控制状态 */
   GetWebRemoteControlStatus: "zcode:get-web-remote-control-status",
-  /** Renderer → Main：OAuth 会话变化通知，不携带凭据 */
-  WebRemoteControlAuthStateChanged: "zcode:web-remote-control-auth-state-changed",
+  /** 清除旧配对材料并重新生成 Web 远程控制二维码（V1 免登录配对保留） */
+  ResetWebRemoteControlPairing: "zcode:reset-web-remote-control-pairing",
   /** Main → Renderer：当前窗口 Web 远程控制状态变化 */
   WebRemoteControlStatusChanged: "zcode:web-remote-control-status-changed",
   /** 释放当前窗口里的远程 session */
@@ -268,6 +268,8 @@ export const PlatformChannels = {
   SyncWindowTabs: "zcode:sync-window-tabs",
   /** Renderer → Main：同步当前窗口可供 Web 远程控制切换的 workspace */
   SyncWebRemoteControlWorkspaces: "zcode:sync-web-remote-control-workspaces",
+  /** Renderer → Main：同步当前窗口可供手机端展示的 task 索引（V1 免登录配对保留） */
+  SyncWebRemoteControlTasks: "zcode:sync-web-remote-control-tasks",
   /** Main → Renderer：手机端请求重连当前窗口里的远程 workspace */
   WebRemoteControlReconnectWorkspace: "zcode:web-remote-control-reconnect-workspace",
   /** Renderer → Main：同步当前窗口的未读 task 数 */
@@ -861,9 +863,9 @@ export interface PlatformChannelMap {
     request: void;
     response: void;
   };
-  [PlatformChannels.WebRemoteControlAuthStateChanged]: {
-    request: WebRemoteControlAuthStateChange;
-    response: void;
+  [PlatformChannels.ResetWebRemoteControlPairing]: {
+    request: WebRemoteControlContext;
+    response: WebRemoteControlStartOperationResult;
   };
   [PlatformChannels.GetWebRemoteControlStatus]: {
     request: void;
@@ -911,6 +913,10 @@ export interface PlatformChannelMap {
   };
   [PlatformChannels.SyncWebRemoteControlWorkspaces]: {
     request: WebRemoteControlWorkspaceTarget[];
+    response: void;
+  };
+  [PlatformChannels.SyncWebRemoteControlTasks]: {
+    request: WebRemoteControlTaskTarget[];
     response: void;
   };
   [PlatformChannels.WebRemoteControlReconnectWorkspace]: {

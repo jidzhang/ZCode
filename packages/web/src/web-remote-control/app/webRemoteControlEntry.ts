@@ -5,7 +5,7 @@ import type {
   WebRemoteControlDeviceGroup,
 } from "#src/web-remote-control/contract.js";
 import type { WebRemoteControlRelayV2Device } from "@zcode/shared/web-remote-relay";
-import { parseWebRemoteControlExternalQrParams } from "@zcode/shared";
+import { parseWebRemoteControlV2QrParams } from "@zcode/shared";
 import { WebRemoteControlV2ConnectionError } from "@zcode/shared/web-remote-relay";
 import type { WebOAuthProviderId } from "#src/auth/browserOAuthCredentialRepo.js";
 import { groupWebRemoteControlDevices } from "#src/web-remote-control/domain/webRemoteControlDeviceGroups.js";
@@ -85,7 +85,7 @@ export class WebRemoteControlEntry {
       this.options.onView({ kind: "login" });
       return;
     }
-    const params = parseWebRemoteControlExternalQrParams(url.searchParams);
+    const params = parseWebRemoteControlV2QrParams(url.searchParams);
     if (!params) {
       this.options.onView({ kind: "failure", failure: { reason: "invalid-mobile-connection" } });
       return;

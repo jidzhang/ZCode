@@ -113,6 +113,144 @@ export interface WebRemoteControlMobileDeviceInfo extends WebRemoteControlRelayD
   updatedAt: number;
 }
 
+export type WebRemoteControlRelayRole = "device" | "terminal";
+// Bugfix: zcode-remote-hub 当前只会把配对状态表示为 waiting/matched；
+// KICKED、WRONG_PARAM 等是 error code，不是 pair_status。这里收窄共享类型，
+// 避免客户端把不存在的 rejected/kicked 配对状态误判成桌面端 WS 需要关闭。
+export type WebRemoteControlRelayPairStatus = "waiting" | "matched";
+export type WebRemoteControlRelayErrorCode =
+  | "AUTH_FAILED"
+  | "DEVICE_OFFLINE"
+  | "KICKED"
+  | "WRONG_PARAM"
+  | "INTERNAL";
+
+export interface WebRemoteControlRelayOutgoingBase {
+  client_ts?: number;
+}
+
+export interface WebRemoteControlRelayIncomingBase {
+  server_ts?: number;
+}
+
+export interface WebRemoteControlRelayDeviceRegisterInit extends WebRemoteControlRelayOutgoingBase {
+  type: "device_register_init";
+  device_mid: string;
+  pass_hash: string;
+  meta: WebRemoteControlRelayDeviceMeta;
+}
+
+export interface WebRemoteControlRelayDeviceRegisterAck extends WebRemoteControlRelayIncomingBase {
+  type: "device_register_ack";
+  device_sid: string;
+}
+
+export interface WebRemoteControlRelayAuthInit extends WebRemoteControlRelayOutgoingBase {
+  type: "auth_init";
+  role: WebRemoteControlRelayRole;
+  device_sid: string;
+  meta: WebRemoteControlRelayDeviceMeta;
+}
+
+export interface WebRemoteControlRelayAuthChallenge extends WebRemoteControlRelayIncomingBase {
+  type: "auth_challenge";
+  nonce: string;
+}
+
+export interface WebRemoteControlRelayAuthResponse extends WebRemoteControlRelayOutgoingBase {
+  type: "auth_response";
+  device_sid: string;
+  proof: string;
+}
+
+export interface WebRemoteControlRelayAuthAck extends WebRemoteControlRelayIncomingBase {
+  type: "auth_ack";
+  device_sid: string;
+  terminal_sid?: string;
+  pair_status: WebRemoteControlRelayPairStatus;
+}
+
+export interface WebRemoteControlRelayPairStatusQuery extends WebRemoteControlRelayOutgoingBase {
+  type: "pair_status_query";
+  device_sid: string;
+}
+
+export interface WebRemoteControlRelayPairStatusAck extends WebRemoteControlRelayIncomingBase {
+  type: "pair_status_ack";
+  terminal_sid?: string;
+  pair_status: WebRemoteControlRelayPairStatus;
+}
+
+export interface WebRemoteControlRelayDataMessage<TPayload = unknown>
+  extends WebRemoteControlRelayOutgoingBase, WebRemoteControlRelayIncomingBase {
+  type: "data";
+  payload: TPayload;
+}
+
+export interface WebRemoteControlRelayError extends WebRemoteControlRelayIncomingBase {
+  type: "error";
+  code: WebRemoteControlRelayErrorCode;
+  message: string;
+}
+
+export type WebRemoteControlRelayOutgoingMessage =
+  | WebRemoteControlRelayDeviceRegisterInit
+  | WebRemoteControlRelayAuthInit
+  | WebRemoteControlRelayAuthResponse
+  | WebRemoteControlRelayPairStatusQuery
+  | WebRemoteControlRelayDataMessage<WebRemoteControlAppPayload>;
+
+export type WebRemoteControlRelayIncomingMessage =
+  | WebRemoteControlRelayDeviceRegisterAck
+  | WebRemoteControlRelayAuthChallenge
+  | WebRemoteControlRelayAuthAck
+  | WebRemoteControlRelayPairStatusAck
+  | WebRemoteControlRelayDataMessage<WebRemoteControlAppPayload>
+  | WebRemoteControlRelayError;
+
+export interface WebRemoteControlRelayAuthProofVector {
+  passHash: string;
+  nonce: string;
+  role: WebRemoteControlRelayRole;
+  deviceSid: string;
+  proof: string;
+}
+
+export const WEB_REMOTE_CONTROL_RELAY_AUTH_PROOF_VECTORS: WebRemoteControlRelayAuthProofVector[] = [
+  {
+    passHash: "dGVzdF9oYXNo",
+    nonce: "nonce-1",
+    role: "device",
+    deviceSid: "device-1",
+    proof: "XK0m7u-26VS88uk7ISAX5Z_9pjzq8jqyP77N-HkCsPE",
+  },
+  {
+    passHash: "dGVzdF9oYXNo",
+    nonce: "nonce-1",
+    role: "terminal",
+    deviceSid: "device-1",
+    proof: "YkqkJy-p-iZK1g1AcoGd0Q83REOggX1EygWkcxW4oLU",
+  },
+];
+
+export interface WebRemoteControlExternalQrParams {
+  deviceSid: string;
+  passHash: string;
+  timestamp: number;
+  deviceMid?: string;
+  deviceName?: string;
+  appVersion?: string;
+  theme?: WebRemoteControlThemeSeed;
+}
+
+export interface BuildWebRemoteControlExternalQrUrlOptions extends WebRemoteControlExternalQrParams {
+  baseUrl: string;
+}
+
+/**
+ * V2（账号 JWT 配对）二维码参数与构造/解析。fork 桌面端恢复 V1 免登录配对后，
+ * 这组仅服务于 packages/web 内随上游 3.16.2 合入的手机端 V2 代码（fork 不部署该页面）。
+ */
 export interface WebRemoteControlV2QrParams {
   deviceSid?: string;
   deviceMid?: string;
@@ -120,7 +258,7 @@ export interface WebRemoteControlV2QrParams {
   appVersion?: string;
 }
 
-export type BuildWebRemoteControlExternalQrUrlOptions = WebRemoteControlV2QrParams & {
+export type BuildWebRemoteControlV2QrUrlOptions = WebRemoteControlV2QrParams & {
   baseUrl: string;
 };
 
@@ -146,7 +284,7 @@ export function resolveWebRemoteControlRoutePathFromBaseUrl(baseUrl: string): st
   try {
     pathname = new URL(rawBaseUrl, "https://zcode.invalid").pathname;
   } catch {
-    pathname = rawBaseUrl.startsWith("/") ? rawBaseUrl : `/${rawBaseUrl}`;
+    pathname = rawBaseUrl.startsWith("/") ? `/${rawBaseUrl}` : rawBaseUrl;
   }
 
   const normalizedPathname = pathname.replace(/\/+$/, "") || "/";
@@ -166,10 +304,42 @@ export function matchesWebRemoteControlRoutePath(pathname: string, routePath: st
 export function buildWebRemoteControlExternalQrUrl({
   baseUrl,
   deviceSid,
+  passHash,
+  timestamp,
   deviceMid,
   deviceName,
   appVersion,
+  theme,
 }: BuildWebRemoteControlExternalQrUrlOptions): string {
+  const url = new URL(baseUrl);
+  url.searchParams.set("sid", deviceSid);
+  url.searchParams.set("hash", passHash);
+  url.searchParams.set("t", String(timestamp));
+
+  if (deviceMid?.trim()) {
+    url.searchParams.set("mid", deviceMid);
+  }
+  if (deviceName?.trim()) {
+    url.searchParams.set("name", deviceName);
+  }
+  if (appVersion?.trim()) {
+    url.searchParams.set("app_version", appVersion);
+  }
+  void theme;
+  // Bugfix: 手机端主题现在固定走本地默认 dark，不再通过二维码 URL 透传 theme。
+  // 之前 theme 参数会把桌面端主题耦合到手机首次进入行为，后续维护和排障都更复杂。
+  // 这里保留入参仅做向后兼容，避免旧调用点一次性改动过大。
+
+  return url.toString();
+}
+
+export function buildWebRemoteControlV2QrUrl({
+  baseUrl,
+  deviceSid,
+  deviceMid,
+  deviceName,
+  appVersion,
+}: BuildWebRemoteControlV2QrUrlOptions): string {
   const url = new URL(baseUrl);
   if (deviceSid !== undefined) url.searchParams.set("sid", deviceSid);
   // 旧凭据只允许清除，不能从 base URL 重新带入新二维码。
@@ -201,7 +371,46 @@ export function normalizeWebRemoteControlRouteAppVersion(version: string): strin
   return /^\d+(\.\d+)*$/.test(base) ? base : version;
 }
 
+/**
+ * fork 恢复 V1 免登录配对后，二维码与配对载荷统一使用的手机页路由版本。
+ * 服务端按 app_version 路由 /remote/v4 页面资源：3.16.2 起的页面只保留账号 JWT
+ * 配对（不再处理 hash/t 参数），fork 的 V1 hash 配对必须把手机固定引导到仍含
+ * pass_hash 配对逻辑的历史页面。3.15.1 页面已于 2026-10-23 实测可用。
+ * 升级该常量前必须重新验证目标版本页面资源仍包含 V1 hash 配对。
+ */
+export const WEB_REMOTE_CONTROL_V1_MOBILE_PAGE_APP_VERSION = "3.15.1";
+
 export function parseWebRemoteControlExternalQrParams(
+  params: URLSearchParams,
+): WebRemoteControlExternalQrParams | null {
+  const deviceSid = readNonEmptySearchParam(params, "sid");
+  const passHash = readNonEmptySearchParam(params, "hash");
+  const rawTimestamp = readNonEmptySearchParam(params, "t");
+  const timestamp = rawTimestamp ? Number(rawTimestamp) : Number.NaN;
+  const theme = readNonEmptySearchParam(params, "theme");
+
+  if (!deviceSid || !passHash || !Number.isFinite(timestamp)) {
+    return null;
+  }
+
+  return {
+    deviceSid,
+    passHash,
+    timestamp,
+    ...(readNonEmptySearchParam(params, "mid")
+      ? { deviceMid: readNonEmptySearchParam(params, "mid") }
+      : {}),
+    ...(readNonEmptySearchParam(params, "name")
+      ? { deviceName: readNonEmptySearchParam(params, "name") }
+      : {}),
+    ...(readNonEmptySearchParam(params, "app_version")
+      ? { appVersion: readNonEmptySearchParam(params, "app_version") }
+      : {}),
+    ...(theme ? { theme: theme as WebRemoteControlThemeSeed } : {}),
+  };
+}
+
+export function parseWebRemoteControlV2QrParams(
   params: URLSearchParams,
 ): WebRemoteControlV2QrParams | null {
   if (params.has("hash") || params.has("t")) return null;
@@ -667,6 +876,8 @@ export type WebRemoteControlReconnectWorkspaceResult =
       error: string;
     };
 
+export type WebRemoteControlTaskDisplayStatus = "idle" | "running" | "completed" | "error";
+
 export interface WebRemoteControlTaskTarget {
   taskId: string;
   hostId?: string;
@@ -680,10 +891,18 @@ export interface WebRemoteControlTaskTarget {
   updatedAt: number;
   provider?: ZCodeProvider;
   unreadAt?: number;
+  /** V1 手机页任务索引展示字段；V2 手机页（packages/web，未部署）不读取。 */
+  displayStatus?: WebRemoteControlTaskDisplayStatus;
+  hasBackgroundWork?: boolean;
+  workflowActivity?: SessionWorkflowActivity;
+  pinned?: boolean;
+  archived?: boolean;
 }
 
 export interface WebRemoteControlWorkspaceListResult {
   workspaces: WebRemoteControlWorkspaceTarget[];
+  /** V1 手机页任务索引；V1 桌面端填充，V2 手机页不读取。 */
+  tasks?: WebRemoteControlTaskTarget[];
   activeWorkspaceKey?: string;
   activeTaskId?: string;
 }
@@ -741,6 +960,8 @@ export interface WebRemoteControlWindowBootstrapResult {
   /** 当前连接的桌面实际版本；旧桌面缺失时手机保留原 URL。 */
   desktopAppVersion?: string;
   workspaces: WebRemoteControlWorkspaceTarget[];
+  /** V1 手机页任务索引；V1 桌面端填充，V2 手机页（packages/web，未部署）不读取。 */
+  tasks?: WebRemoteControlTaskTarget[];
   initialViewState?: WebRemoteControlMobileViewState;
   mobileViewState?: WebRemoteControlMobileViewState;
   /** 仅新端提供；用 bootstrap 补足配对瞬间的重申请求，不能用来恢复可见任务。 */

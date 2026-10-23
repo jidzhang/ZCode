@@ -2006,12 +2006,8 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
   // 断点切换曾卸载查看 Reporter，伪造离开后返回并清掉手动未读。
   // 同一 Shell 持有查看与手机导航，只替换布局内容；真实 Home/后台仍立即撤销查看。
   const renderRemoteShell = (wideContent: ReactNode) =>
-    webRemoteControlWorkspaceSwitcher ? (
+    webRemoteControlWorkspaceSwitcher && isWebRemoteControlMobileViewport ? (
       <WebRemoteControlMobileShell
-        isMobileViewport={isWebRemoteControlMobileViewport}
-        taskViewEnabled={
-          isWorkspaceVisible && workspaceMainView === "chat" && !isWebRemoteControlTaskSwitching
-        }
         activeTaskId={activeTaskId}
         activeWorkspaceIdentity={workspaceIdentity}
         activeWorkspacePath={workspaceAbsPath}
@@ -2019,7 +2015,8 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
         webRemoteControlTerminalTransportState={webRemoteControlTerminalTransportState}
         isSidePaneOpen={isSidePaneOpen}
         onCloseSidePane={isSidePaneOpen ? handleToggleSidePane : undefined}
-        renderTaskHome={renderWorkspaceSidebar}
+        onSelectTask={handleSelectTaskInChat}
+        onStartDraftInWorkspace={handleCreateProjectDraft}
         switcher={webRemoteControlWorkspaceSwitcher}
         renderChatHeader={() =>
           shouldRenderWorkspaceHeader ? (
@@ -2232,9 +2229,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
           )
         }
         sidePaneContent={renderSidePanePanel({ mobileOverlay: true })}
-      >
-        {wideContent}
-      </WebRemoteControlMobileShell>
+      />
     ) : (
       wideContent
     );

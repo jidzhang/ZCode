@@ -81,17 +81,32 @@ describe("external relay QR helpers", () => {
       buildWebRemoteControlExternalQrUrl({
         baseUrl: "https://zcode.z.ai/remote",
         deviceSid: "sid-1",
+        passHash: "hash-1",
+        timestamp: 1_700_000_000_000,
         deviceMid: "mid-1",
         deviceName: "MacBook",
         appVersion: "1.5.0",
       }),
-    ).toBe("https://zcode.z.ai/remote?sid=sid-1&mid=mid-1&name=MacBook&app_version=1.5.0");
+    ).toBe(
+      "https://zcode.z.ai/remote?sid=sid-1&hash=hash-1&t=1700000000000&mid=mid-1&name=MacBook&app_version=1.5.0",
+    );
   });
 
-  it("parses V2 routing hints without carrying theme state", () => {
+  it("parses V1 hash pairing params and rejects URLs without hash credentials", () => {
     expect(
-      parseWebRemoteControlExternalQrParams(new URLSearchParams("sid=sid-1&mid=mid-1&theme=light")),
-    ).toEqual({ deviceSid: "sid-1", deviceMid: "mid-1" });
+      parseWebRemoteControlExternalQrParams(
+        new URLSearchParams("sid=sid-1&hash=hash-1&t=1700000000000&mid=mid-1"),
+      ),
+    ).toEqual({
+      deviceSid: "sid-1",
+      passHash: "hash-1",
+      timestamp: 1_700_000_000_000,
+      deviceMid: "mid-1",
+    });
+    // 缺 hash/t 的 URL 不是 V1 配对二维码（V2 路由提示由 parseWebRemoteControlV2QrParams 处理）。
+    expect(
+      parseWebRemoteControlExternalQrParams(new URLSearchParams("sid=sid-1&mid=mid-1")),
+    ).toBeNull();
   });
 });
 

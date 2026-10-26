@@ -14,10 +14,17 @@ import { readProjectSidebarView } from "@/project-sidebar/view-preference.js";
 
 const KEY = "zcode-project-sidebar-preferences";
 const EMPTY_AVAILABILITY: ReadonlyMap<string, ProjectAvailability> = new Map();
+const EMPTY_ACTIVITY: ReadonlyMap<string, number> = new Map();
 interface Preferences {
   order: string[];
   view: ProjectSidebarView;
   expanded: Record<string, boolean>;
+  /**
+   * 用户是否手动拖拽过项目顺序。false（默认）时项目按最近任务活动排序——
+   * 用户反馈创建顺序被持久化后"几乎不参与的项目还在第一项"；一旦拖拽，
+   * 手动顺序接管（以拖拽那一刻的显示顺序为起点写入 order）。
+   */
+  manualOrder: boolean;
 }
 function read(key: string): Record<string, unknown> {
   try {
@@ -37,6 +44,7 @@ export function useProjectSidebarPreferences(
   projects: VirtualProject[],
   loading: boolean,
   availability: ReadonlyMap<string, ProjectAvailability> = EMPTY_AVAILABILITY,
+  activityRank: ReadonlyMap<string, number> = EMPTY_ACTIVITY,
 ) {
   const upgradeKeys = useMemo(
     () =>
@@ -66,6 +74,9 @@ export function useProjectSidebarPreferences(
               Object.entries(saved.expanded).filter(([, v]) => typeof v === "boolean"),
             )
           : {},
+      // 存量偏好没有该字段：旧的持久化顺序多半是创建顺序（用户反馈"乱套"），
+      // 只有真正拖拽过才认手动序，其余一律回到活动排序。
+      manualOrder: saved.manualOrder === true,
     };
   });
   useEffect(() => {
@@ -80,6 +91,7 @@ export function useProjectSidebarPreferences(
           ...previous,
           order: [...new Set(value.order)],
           view: value.view === "timeline" || value.view === "grouped" ? value.view : "projects",
+          manualOrder: value.manualOrder === true,
           expanded:
             value.expanded && typeof value.expanded === "object"
               ? Object.fromEntries(
@@ -147,6 +159,13 @@ export function useProjectSidebarPreferences(
           ...order.filter((key) => key !== projectKey(project)),
         ]),
       sort: (items: VirtualProject[]) => {
+        // 手动序未建立前按项目内最近任务活动时间排序：活跃项目在前，没任务的项目
+        // 以项目自身 updatedAt 兜底、再按 Host position 稳定排序，几乎不参与的沉底。
+        if (!preferences.manualOrder) {
+          const activity = (project: VirtualProject) =>
+            activityRank.get(projectKey(project)) ?? project.updatedAt;
+          return [...items].sort((a, b) => activity(b) - activity(a) || a.position - b.position);
+        }
         // 删除只由权威目录移除行；提前清理排序键会把刷新前的旧行追加到末尾，造成跳动。
         const order = reconcileProjectOrder(preferences.order, items.map(projectKey), upgradeKeys);
         const positions = new Map(order.map((key, index) => [key, index]));
@@ -154,9 +173,21 @@ export function useProjectSidebarPreferences(
           (a, b) => positions.get(projectKey(a))! - positions.get(projectKey(b))!,
         );
       },
-      reorder: (section: VirtualProject[], active: string, over: string) =>
-        changeOrder((order) => moveProjectOrder(order, section.map(projectKey), active, over)),
+      reorder: (section: VirtualProject[], active: string, over: string) => {
+        // 首次拖拽即视为建立手动序：以拖拽那一刻的显示顺序为起点（moveProjectOrder
+        // 内部自带 reconcile），之后活动排序不再自动重排，尊重用户的显式排列意图。
+        setPreferences((previous) => {
+          const next = {
+            ...previous,
+            order: moveProjectOrder(previous.order, section.map(projectKey), active, over),
+            manualOrder: true,
+          };
+          write(KEY, next);
+          return next;
+        });
+      },
       view: preferences.view,
+      manualOrder: preferences.manualOrder,
       setView,
       isExpanded: (project: VirtualProject) =>
         preferences.expanded[projectKey(project)] ??
@@ -187,6 +218,6 @@ export function useProjectSidebarPreferences(
           return next;
         }),
     }),
-    [preferences, changeOrder, setView, legacyExpansion, upgradeKeys],
+    [preferences, changeOrder, setView, legacyExpansion, upgradeKeys, activityRank],
   );
 }

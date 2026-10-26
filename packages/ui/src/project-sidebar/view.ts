@@ -252,6 +252,22 @@ export function selectSortedProjects(tree: ProjectTree): VirtualProject[] {
     .sort((a, b) => a.position - b.position);
 }
 
+/**
+ * 项目 → 最近一次任务活动时间（毫秒）。侧栏"按最近活动时间排序"的默认依据：
+ * 用户反馈创建顺序被持久化后"几乎不参与的项目还在第一项"，项目应按最近任务活跃度排。
+ * 没有任何任务的项目没有活动时间，由调用方决定沉底策略（返回表内缺席）。
+ */
+export function computeProjectActivityRank(tree: ProjectTree): Map<string, number> {
+  const rank = new Map<string, number>();
+  for (const task of tree.tasks) {
+    if (task.projectId == null) continue;
+    const key = projectKey({ hostId: task.hostId, id: task.projectId });
+    const previous = rank.get(key) ?? 0;
+    if (task.updatedAt > previous) rank.set(key, task.updatedAt);
+  }
+  return rank;
+}
+
 export function projectSourceServerId(project: VirtualProject): string | undefined {
   return project.hostId === "local"
     ? undefined

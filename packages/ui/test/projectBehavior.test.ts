@@ -372,9 +372,54 @@ it("同步同一控制端的跨窗口排序，同时保留当前窗口未加载�
     window.dispatchEvent(
       new StorageEvent("storage", {
         key: "zcode-project-sidebar-preferences",
-        newValue: JSON.stringify({ order, view: "projects", expanded: {} }),
+        // 跨窗口同步的是拖拽建立的手动序；manualOrder 标志与 order 同源写入。
+        newValue: JSON.stringify({ order, view: "projects", expanded: {}, manualOrder: true }),
       }),
     ),
   );
   expect(result.current.sort([project, remote]).map((p) => p.id)).toEqual(["remote", "p"]);
+});
+
+it("手动序建立前按最近任务活动排序，无任务项目按自身 updatedAt 兜底", () => {
+  const stale = { ...project, id: "stale", position: 1, updatedAt: 100 };
+  const active = { ...project, id: "active", position: 2, updatedAt: 100 };
+  const untouched = { ...project, id: "untouched", position: 3, updatedAt: 500 };
+  const { result } = renderHook(() =>
+    useProjectSidebarPreferences(
+      [stale, active, untouched],
+      false,
+      undefined,
+      new Map([
+        [JSON.stringify([active.hostId, active.id]), 9_999],
+        [JSON.stringify([stale.hostId, stale.id]), 1],
+      ]),
+    ),
+  );
+  expect(result.current.sort([stale, active, untouched]).map((p) => p.id)).toEqual([
+    "active",
+    "untouched",
+    "stale",
+  ]);
+});
+
+it("拖拽一次即建立手动序，此后活动排序不再自动重排", () => {
+  const first = { ...project, id: "first", position: 0 };
+  const second = { ...project, id: "second", position: 1 };
+  const { result } = renderHook(() =>
+    useProjectSidebarPreferences(
+      [first, second],
+      false,
+      undefined,
+      new Map([
+        [JSON.stringify([first.hostId, first.id]), 1],
+        [JSON.stringify([second.hostId, second.id]), 2],
+      ]),
+    ),
+  );
+  // 活动排序默认把 second（更活跃）排前。
+  expect(result.current.sort([first, second]).map((p) => p.id)).toEqual(["second", "first"]);
+  act(() => {
+    result.current.reorder([first, second], "first", "second");
+  });
+  expect(result.current.sort([first, second]).map((p) => p.id)).toEqual(["first", "second"]);
 });

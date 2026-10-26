@@ -1,7 +1,7 @@
 import { useSourceServerDisplayNames } from "@/hooks/useSourceServerDisplayNames.js";
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { useOptionalPlatform } from "@/hooks/usePlatform.js";
-import { countProjectTreeUnreadTasks } from "@/project-sidebar/view.js";
+import { countProjectTreeUnreadTasks, computeProjectActivityRank } from "@/project-sidebar/view.js";
 import { useProjectTree } from "@/project-sidebar/useProjectTree.js";
 import { useProjectSidebarPreferences } from "@/project-sidebar/useProjectSidebarPreferences.js";
 import { useZCodeStoreWithDefault } from "@/store/StoreProvider.js";
@@ -17,15 +17,23 @@ function useDirectoryState(isDesktop: boolean) {
     () => selectSortedProjects(result.factTree),
     [result.factTree.projects],
   );
+  // 项目内最近任务活动时间：手动序建立前侧栏默认按它排序（活跃在前、不活跃沉底）。
+  const activityRank = useMemo(
+    () => computeProjectActivityRank(result.factTree),
+    [result.factTree.tasks],
+  );
   const preferences = useProjectSidebarPreferences(
     sortedProjects,
     result.loading,
     result.availability,
+    activityRank,
   );
   const projects = useMemo(() => {
     const sorted = preferences.sort(sortedProjects);
     return [...sorted.filter((p) => p.pinned), ...sorted.filter((p) => !p.pinned)];
-  }, [sortedProjects, preferences.order]);
+    // activityRank 变化（任务活动更新）在自动排序模式下需要触发重排；
+    // 仅展开/收起等偏好变化不重算，维持原有的最小广播面。
+  }, [sortedProjects, preferences.order, preferences.manualOrder, activityRank]);
   // Context 不受消费方 memo 保护；父级更新 children 时，等价目录不能再次广播。
   return useMemo(
     () => ({ ...result, preferences, projects, groups, deviceNames }),
@@ -52,10 +60,7 @@ function DirectoryOwner({ children, isDesktop }: { children: ReactNode; isDeskto
   const platform = useOptionalPlatform();
   // 任务通知开关同时门控任务栏/托盘角标：关掉通知 = 连常驻提醒一起关闭
   // （同步 0 清空角标），侧栏蓝点作为应用内状态不受影响。
-  const notificationEnabled = useZCodeStoreWithDefault(
-    (state) => state.notificationEnabled,
-    true,
-  );
+  const notificationEnabled = useZCodeStoreWithDefault((state) => state.notificationEnabled, true);
   const unreadTaskCount = useMemo(
     () => countProjectTreeUnreadTasks(directory.tree),
     [directory.tree],

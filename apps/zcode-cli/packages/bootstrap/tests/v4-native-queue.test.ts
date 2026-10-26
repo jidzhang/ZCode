@@ -664,6 +664,45 @@ describe("v4 原生 sendQueuedNow", () => {
     );
   });
 
+  it("guide 待插话项：sendQueuedNow 中断当前 turn 并以 user_steer 立即重发，不走 steer 车道", async () => {
+    // specs/pending-guide-immediate-steer.md：guide 项只等 tool batch 边界注入，单工具
+    // 长跑期间没有任何注入点；「立即处理」按钮必须能把它按 queue 项同一路径提升。
+    const stopActiveForegroundExecution = vi.fn().mockReturnValue({
+      kind: "stopped",
+      foregroundExecutionId: "foreground-guide-1",
+    });
+    const app = makeApp({ runtime: { stopActiveForegroundExecution } });
+    const record = makeRecord({ app });
+    const host = makeHost(record, {
+      getQueueItem: vi.fn().mockReturnValue(
+        // canSteer 要求无附件，guide 项永远无附件；delivery.admitted=guide 是唯一差异。
+        queueItem({ attachments: [], delivery: { requested: "guide", admitted: "guide" } }),
+      ),
+    });
+
+    await new V4CommandExecutor(host).execute(envelope("sendQueuedNow", { queueItemId: "q-1" }));
+
+    expect(app.reserveQueueItem).toHaveBeenCalledWith("q-1", "cmd-q1", expect.any(Object));
+    expect(stopActiveForegroundExecution).toHaveBeenCalledWith({
+      preserveQueueAutoDrainOnCancel: true,
+      reason: "v4 sendQueuedNow preempts active turn",
+    });
+    // 抢占后作为新输入立即生效，不是 steer 进已中断的旧 turn；guide 项的权威
+    // admittedDelivery 原样带入新 turn，不伪造成普通 queue 提交。
+    expect(app.steerTurn).not.toHaveBeenCalled();
+    expect(app.sendInput).toHaveBeenCalledWith(
+      { text: "排队原文" },
+      expect.objectContaining({
+        inputPresentation: "user_steer",
+        intent: expect.objectContaining({ admittedDelivery: "guide" }),
+      }),
+    );
+    expect(app.removeQueueItem).toHaveBeenCalledWith(
+      "q-1",
+      expect.objectContaining({ reason: "promoted", reservationId: "cmd-q1" }),
+    );
+  });
+
   it("goal queue item：sendQueuedNow 走 goal command path，不作为普通 prompt 重发", async () => {
     const app = makeApp();
     const record = makeRecord({ app });

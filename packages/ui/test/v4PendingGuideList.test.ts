@@ -11,15 +11,26 @@ vi.mock("@/v4/ConversationTurnRow.js", async () => {
     ConversationTurnRow: ({
       row,
       userInputStatus,
+      onSteerNow,
+      onRecallEditQueued,
+      onRevokeQueued,
     }: {
-      row: { text: string };
+      row: { text: string; entityId?: string };
       userInputStatus?: string;
+      onSteerNow?: (queueItemId: string) => void;
+      onRecallEditQueued?: (queueItemId: string) => void | Promise<void>;
+      onRevokeQueued?: (queueItemId: string) => void;
     }) =>
       React.createElement(
         "article",
         null,
         row.text,
         React.createElement("small", null, userInputStatus),
+        React.createElement(
+          "div",
+          { "data-passed-callbacks": [onSteerNow, onRecallEditQueued, onRevokeQueued].map((cb) => (cb ? "1" : "0")).join(",") },
+          row.entityId ?? "",
+        ),
       ),
   };
 });
@@ -54,5 +65,28 @@ describe("ConversationPendingGuideList", () => {
 
     expect(markup).toContain("请先检查这里");
     expect(markup).toContain("等待引导当前任务…");
+  });
+
+  it("立即处理/修改/撤销三个回调都透传到行（缺省不传即不渲染按钮）", () => {
+    const steerNow = vi.fn();
+    const recallEdit = vi.fn();
+    const revoke = vi.fn();
+    const markup = renderToStaticMarkup(
+      createElement(
+        ZCodeIntlProvider,
+        { initialLocale: "zh-CN" },
+        createElement(ConversationPendingGuideList, {
+          context: {} as never,
+          items: [guide],
+          turnId: "turn-1",
+          onSteerNow: steerNow,
+          onRecallEditQueued: recallEdit,
+          onRevokeQueued: revoke,
+        }),
+      ),
+    );
+
+    expect(markup).toContain('data-passed-callbacks="1,1,1"');
+    expect(markup).toContain("guide-1");
   });
 });

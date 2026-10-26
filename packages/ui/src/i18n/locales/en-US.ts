@@ -5741,6 +5741,12 @@ const enUS: Record<string, string> = {
   "chat.queue.sendConfirm.keep": "Send message",
   "chat.message.turnSteer.guided": "Conversation steered",
   "chat.message.turnSteer.pending": "Waiting to steer the current run…",
+  "chat.message.turnSteer.sendNow": "Steer now",
+  "chat.message.turnSteer.recallEdit": "Edit (recall to composer)",
+  "chat.message.turnSteer.revoke": "Remove",
+  "chat.message.turnSteer.revokeConfirmTitle": "Remove this pending message?",
+  "chat.message.turnSteer.revokeConfirmDescription":
+    "The message will be removed from the queue and will not be delivered. This cannot be undone. To edit it instead, choose Cancel and use Edit.",
   "chat.followup.guideCurrent": "Steer current run",
   "chat.followup.sendNow": "Send now",
   "chat.followup.addToQueue": "Add to queue",

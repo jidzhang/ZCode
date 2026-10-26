@@ -4,6 +4,7 @@ import { expandTopicInputMessages } from "@/v4/topicInputMessages.js";
 import { ConnectedBotGroupDeliveryAction } from "@/v4/BotGroupDeliveryAction.js";
 /* oxlint-disable eslint(max-lines) -- v4 逐行 row 渲染分发集中收口（每种 row 一个 memo 叶子 + timelineMarker 分隔线），拆分会打散行类型对照。 */
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
+import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import {
   type ComponentProps,
   memo,
@@ -16,6 +17,7 @@ import {
 import {
   ArchiveIcon,
   ArrowRightLeftIcon,
+  ArrowUpFromLine,
   CheckIcon,
   Clock,
   CopyIcon,
@@ -26,6 +28,7 @@ import {
   PencilIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
+  Trash2Icon,
   TrendingUpDownIcon,
   XIcon,
 } from "lucide-react";
@@ -40,6 +43,9 @@ import {
   TID_V4_FEEDBACK_DISLIKE,
   TID_V4_FEEDBACK_LIKE,
   TID_V4_FORK,
+  TID_V4_PENDING_GUIDE_STEER_NOW,
+  TID_V4_PENDING_GUIDE_RECALL_EDIT,
+  TID_V4_PENDING_GUIDE_REVOKE,
   TID_V4_ROW,
   TID_V4_ROW_ATTACHMENTS,
   testId,
@@ -265,6 +271,15 @@ export interface ConversationRowViewProps {
   /** user 行的 edit 入口（editUserQuery command，用行内编辑文本替换该轮）。 */
   onEdit?: UserInputEditHandler;
   editWorkspaceRewindAvailability?: EditWorkspaceRewindAvailability;
+  /**
+   * 待插话行的「立即处理」入口（sendQueuedNow command：中断当前运行 + 该消息立即生效）。
+   * 仅 ConversationPendingGuideList 注入；普通 user 行不传即不渲染，防止已处理消息出现入口。
+   */
+  onSteerNow?: (queueItemId: string) => void;
+  /** 待插话行「修改」入口（撤回编辑：deleteQueueItem + 文本回填 composer）。仅 pending guide 行注入。 */
+  onRecallEditQueued?: (queueItemId: string) => void | Promise<void>;
+  /** 待插话行「撤销」入口（deleteQueueItem：从队列移除该待插话，不影响当前运行）。仅 pending guide 行注入。 */
+  onRevokeQueued?: (queueItemId: string) => void;
   /** 嵌套在工具 Group 内时去掉 Reasoning 内容的重复左导线与缩进。 */
   reasoningContentVariant?: "default" | "nested";
   /** renderer-only 提交状态；不写入协议 row，也不冒充已 drain 的历史事实。 */
@@ -931,14 +946,21 @@ const SingleUserInputRowView = memo(function SingleUserInputRowView({
   onEdit,
   editWorkspaceRewindAvailability,
   status,
+  onSteerNow,
+  onRecallEditQueued,
+  onRevokeQueued,
 }: {
   row: UserInputRow;
   context: ConversationRowRenderContext;
   onEdit?: UserInputEditHandler;
   editWorkspaceRewindAvailability?: EditWorkspaceRewindAvailability;
   status?: string;
+  onSteerNow?: (queueItemId: string) => void;
+  onRecallEditQueued?: (queueItemId: string) => void | Promise<void>;
+  onRevokeQueued?: (queueItemId: string) => void;
 }) {
   const { intl } = useZCodeIntl();
+  const confirmDialog = useConfirmDialog();
   // 引擎尾注折叠：正文只到 epilogueStart，
   // 之后的引擎文本折进气泡底部的披露。提示词上下文解析也只看正文——尾注里没有用户引用。
   const { body: bodyText, epilogue } = splitUserInputEpilogue(row.text, row.epilogueStart);
@@ -1432,11 +1454,96 @@ const SingleUserInputRowView = memo(function SingleUserInputRowView({
             : "opacity-0 transition-opacity group-hover/user-row:opacity-100 focus-within:opacity-100",
         )}
       >
+        {/* pendingGuideRow 把 queueItemId 放进 entityId；sendQueuedNow 按该 id 提升并
+            中断当前运行——guide 边界等待在单工具长跑期间没有注入点，这是唯一即时出口。 */}
+        {onSteerNow && row.entityId ? (
+          <MessageAction
+            label={intl.formatMessage({ id: "chat.message.turnSteer.sendNow" })}
+            tooltip={intl.formatMessage({ id: "chat.message.turnSteer.sendNow" })}
+            data-testid={testId(TID_V4_PENDING_GUIDE_STEER_NOW, String(row.rowId))}
+            onClick={() =>
+              runUserAction({
+                input: {
+                  featureId: "conversation.pending_guide",
+                  action: "send_now",
+                  trigger: "button",
+                },
+                operation: () => onSteerNow(row.entityId!),
+                completed: { resultSource: "optimistic_projection" },
+                failureStage: "pending_guide_send_now",
+              })
+            }
+          >
+            <ArrowUpFromLine className="size-3.5" />
+          </MessageAction>
+        ) : null}
+        {/* 待插话尚未生效，应允许改口。顺序（用户定稿 2026-10-26）：立即处理、撤销、复制、编辑。
+            撤销=直接从队列移除，需二次确认（文本可能较长，误删不可恢复）；编辑=撤回到输入框
+            重新编辑（队列面板同款撤回编辑，deleteQueueItem + 回填 composer，无确认——内容
+            回到输入框不算丢失）。均复用 SessionPane 既有 handler，CLI 侧与队列面板完全同路径。
+            待插话行不注入 onEdit，编辑位由 onRecallEditQueued 占据；普通消息行相反，
+            两族按钮按注入回调天然互斥。 */}
+        {onRevokeQueued && row.entityId ? (
+          <MessageAction
+            label={intl.formatMessage({ id: "chat.message.turnSteer.revoke" })}
+            tooltip={intl.formatMessage({ id: "chat.message.turnSteer.revoke" })}
+            data-testid={testId(TID_V4_PENDING_GUIDE_REVOKE, String(row.rowId))}
+            onClick={async () => {
+              // 撤销不可恢复且无草稿兜底：先过全局确认弹层（RootShell 挂载，
+              // 桌面与手机远控同源）。确认弹层放在 trace 之外——用户取消不算一次撤销动作。
+              const confirmed = await confirmDialog({
+                title: intl.formatMessage(
+                  { id: "chat.message.turnSteer.revokeConfirmTitle" },
+                  { text: truncateRevokeConfirmText(row.text) },
+                ),
+                description: intl.formatMessage({
+                  id: "chat.message.turnSteer.revokeConfirmDescription",
+                }),
+                confirmLabel: intl.formatMessage({ id: "chat.message.turnSteer.revoke" }),
+                confirmVariant: "destructive",
+              });
+              if (!confirmed) return;
+              runUserAction({
+                input: {
+                  featureId: "conversation.pending_guide",
+                  action: "revoke",
+                  trigger: "button",
+                },
+                operation: () => onRevokeQueued(row.entityId!),
+                completed: { resultSource: "optimistic_projection" },
+                failureStage: "pending_guide_revoke",
+              });
+            }}
+          >
+            <Trash2Icon className="size-3.5" />
+          </MessageAction>
+        ) : null}
         <CopyRowAction
           text={row.text}
           rowId={row.rowId}
           label={intl.formatMessage({ id: "chat.message.copy" })}
         />
+        {onRecallEditQueued && row.entityId ? (
+          <MessageAction
+            label={intl.formatMessage({ id: "chat.message.turnSteer.recallEdit" })}
+            tooltip={intl.formatMessage({ id: "chat.message.turnSteer.recallEdit" })}
+            data-testid={testId(TID_V4_PENDING_GUIDE_RECALL_EDIT, String(row.rowId))}
+            onClick={() =>
+              runUserAction({
+                input: {
+                  featureId: "conversation.pending_guide",
+                  action: "recall_edit",
+                  trigger: "button",
+                },
+                operation: () => onRecallEditQueued(row.entityId!),
+                completed: { resultSource: "optimistic_projection" },
+                failureStage: "pending_guide_recall_edit",
+              })
+            }
+          >
+            <PencilIcon className="size-3.5" />
+          </MessageAction>
+        ) : null}
         {onEdit && row.entityId ? (
           <MessageAction
             label={intl.formatMessage({ id: "chat.message.edit" })}
@@ -1474,6 +1581,12 @@ const UserInputRowView = memo(function UserInputRowView(
 
 // memo 组件的数组默认值必须是模块级常量：内联 [] 每次渲染都是新引用，会让 memo 比较失效。
 const EMPTY_SOURCE_COMMAND_IDS: readonly string[] = [];
+
+/** 撤销确认标题里的消息摘要：单行、超长截断加省略号。 */
+function truncateRevokeConfirmText(text: string, maxLength = 60): string {
+  const singleLine = text.replace(/\s+/g, " ").trim();
+  return singleLine.length > maxLength ? `${singleLine.slice(0, maxLength)}…` : singleLine;
+}
 
 export const ConversationAssistantTextActions = memo(function ConversationAssistantTextActions({
   rowId,
@@ -2337,6 +2450,9 @@ function ConversationRowViewImpl({
   assistantCodeCommentProjectionEnabled,
   reasoningContentVariant,
   userInputStatus,
+  onSteerNow,
+  onRecallEditQueued,
+  onRevokeQueued,
 }: ConversationRowViewProps) {
   switch (row.kind) {
     case "userInput":
@@ -2347,6 +2463,9 @@ function ConversationRowViewImpl({
           onEdit={onEdit}
           editWorkspaceRewindAvailability={editWorkspaceRewindAvailability}
           status={userInputStatus}
+          onSteerNow={onSteerNow}
+          onRecallEditQueued={onRecallEditQueued}
+          onRevokeQueued={onRevokeQueued}
         />
       );
     case "assistantText":

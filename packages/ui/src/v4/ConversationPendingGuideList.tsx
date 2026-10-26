@@ -8,6 +8,12 @@ interface ConversationPendingGuideListProps {
   context: ConversationRowRenderContext;
   items: readonly QueueItem[];
   turnId: string;
+  /** 「立即处理」入口：sendQueuedNow 中断当前运行 + 该待插话立即生效。 */
+  onSteerNow?: (queueItemId: string) => void;
+  /** 「修改」入口：撤回编辑（deleteQueueItem + 文本回填 composer）。 */
+  onRecallEditQueued?: (queueItemId: string) => void | Promise<void>;
+  /** 「撤销」入口：deleteQueueItem 从队列移除该待插话。 */
+  onRevokeQueued?: (queueItemId: string) => void;
 }
 
 function pendingGuideRow(item: QueueItem, turnId: string): UserInputRow {
@@ -31,6 +37,9 @@ function ConversationPendingGuideListImpl({
   context,
   items,
   turnId,
+  onSteerNow,
+  onRecallEditQueued,
+  onRevokeQueued,
 }: ConversationPendingGuideListProps) {
   const { intl } = useZCodeIntl();
   const rows = useMemo(() => items.map((item) => pendingGuideRow(item, turnId)), [items, turnId]);
@@ -46,6 +55,9 @@ function ConversationPendingGuideListImpl({
           row={row}
           context={context}
           userInputStatus={status}
+          onSteerNow={onSteerNow}
+          onRecallEditQueued={onRecallEditQueued}
+          onRevokeQueued={onRevokeQueued}
         />
       ))}
     </div>

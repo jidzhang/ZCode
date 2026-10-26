@@ -5869,6 +5869,9 @@ export function SessionPane({
                   selectionPanelLayoutContainerRef={conversationLayoutContainerRef}
                   rows={timelineSnapshot?.rows.window ?? []}
                   pendingGuides={timelineSnapshot ? pendingGuideProjection?.pendingGuides : []}
+                  onSteerNow={handleSendQueuedNow}
+                  onRecallEditQueued={handleEditQueueItem}
+                  onRevokeQueued={handleDeleteQueueItem}
                   apiRetry={timelineSnapshot?.control.apiRetry ?? null}
                   totalCount={timelineSnapshot?.rows.totalCount ?? 0}
                   sessionKey={sessionId ?? "draft"}

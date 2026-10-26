@@ -646,6 +646,12 @@ export const TID_V4_QUEUE_ITEM_DELETE = "v4-queue-item-delete";
 export const TID_V4_QUEUE_ITEM_EDIT = "v4-queue-item-edit";
 /** v4 queue 项立即发送按钮（动态后缀为 queueItemId） */
 export const TID_V4_QUEUE_ITEM_SEND_NOW = "v4-queue-item-send-now";
+/** v4 待插话行「立即处理」按钮（动态后缀为 rowId） */
+export const TID_V4_PENDING_GUIDE_STEER_NOW = "v4-pending-guide-steer-now";
+/** v4 待插话行「修改（撤回编辑）」按钮（动态后缀为 rowId） */
+export const TID_V4_PENDING_GUIDE_RECALL_EDIT = "v4-pending-guide-recall-edit";
+/** v4 待插话行「撤销」按钮（动态后缀为 rowId） */
+export const TID_V4_PENDING_GUIDE_REVOKE = "v4-pending-guide-revoke";
 /** v4 queue 项上移按钮（动态后缀为 queueItemId） */
 export const TID_V4_QUEUE_ITEM_UP = "v4-queue-item-up";
 /** v4 输入控制：queue autoDrain 开关按钮（setAutoDrain 命令） */

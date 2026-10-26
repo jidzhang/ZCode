@@ -5365,6 +5365,12 @@ const zhCN: Record<string, string> = {
   "chat.queue.sendConfirm.keep": "发送消息",
   "chat.message.turnSteer.guided": "已引导对话",
   "chat.message.turnSteer.pending": "等待引导当前任务…",
+  "chat.message.turnSteer.sendNow": "立即处理",
+  "chat.message.turnSteer.recallEdit": "修改",
+  "chat.message.turnSteer.revoke": "撤销",
+  "chat.message.turnSteer.revokeConfirmTitle": "撤销这条待插话消息？",
+  "chat.message.turnSteer.revokeConfirmDescription":
+    "消息将从队列移除、不会再发送，且无法恢复。想改内容请点取消后用“修改”。",
   "chat.followup.guideCurrent": "引导当前任务",
   "chat.followup.sendNow": "立即发送",
   "chat.followup.addToQueue": "加入队列",

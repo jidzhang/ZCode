@@ -1,29 +1,34 @@
 @echo off
 rem Restricted-network wrapper for one-click-build-github.bat.
-rem Sets binary download mirrors/proxy env so electron and electron-builder can
-rem fetch their binaries on networks where github is not reachable; then calls
-rem the regular github-channel build. pnpm must be installed manually beforehand
-rem (repo pins pnpm@10.33.2, see package.json "packageManager").
+rem Binary downloads (electron, NSIS, winCodeSign) need a proxy plus npmmirror
+rem mirrors on networks where github is not reachable; with direct internet
+rem access the default sources work as-is.
 rem
-rem The proxy address is NOT stored in this repo. It is loaded once per machine
-rem from one-click-build-local.env.bat (gitignored). Create it with:
-rem   echo set BUILD_PROXY=http://your-proxy:8080> one-click-build-local.env.bat
+rem Proxy is NOT stored in this repo. Per machine, copy
+rem one-click-build-local.env.example.bat to one-click-build-local.env.bat
+rem (gitignored) and fill in BUILD_PROXY. If the file is missing or BUILD_PROXY
+rem is empty, this wrapper runs in direct-connection mode (no proxy, default
+rem download sources).
+rem
+rem pnpm must be installed manually beforehand (repo pins pnpm@10.33.2, see
+rem package.json "packageManager").
 rem
 rem NOTE: keep this file ASCII-only; cmd parses .bat in the ANSI codepage (GBK)
 rem and UTF-8 Chinese comments corrupt line parsing.
 setlocal
 cd /d %~dp0
 
+set "BUILD_PROXY="
 if exist "%~dp0one-click-build-local.env.bat" (
   call "%~dp0one-click-build-local.env.bat"
 ) else (
-  echo Missing one-click-build-local.env.bat ^(gitignored, not committed^) that
-  echo defines BUILD_PROXY. Create it once with:
-  echo   echo set BUILD_PROXY=http://your-proxy:8080^> one-click-build-local.env.bat
-  goto :fail
+  echo one-click-build-local.env.bat not found - direct-connection mode
+  echo ^(no proxy, default download sources^). Need a proxy? Copy
+  echo one-click-build-local.env.example.bat and fill in BUILD_PROXY.
+  echo.
 )
 
-if "%BUILD_PROXY%"=="" goto :no_proxy
+if "%BUILD_PROXY%"=="" goto :direct
 
 set HTTPS_PROXY=%BUILD_PROXY%
 set HTTP_PROXY=%BUILD_PROXY%
@@ -50,9 +55,22 @@ echo.
 call one-click-build-github.bat
 goto :end
 
-:no_proxy
-echo one-click-build-local.env.bat exists but does not define BUILD_PROXY.
-goto :fail
+:direct
+call pnpm --version >nul 2>&1
+if errorlevel 1 goto :no_pnpm
+
+if not exist "packages\shared\dist" (
+  echo Fresh clone detected: building workspace packages via pnpm run typecheck ...
+  call pnpm run typecheck
+  if errorlevel 1 goto :fail_typecheck
+)
+
+echo Direct-connection mode: default download sources ^(github^) will be used.
+echo Starting one-click-build-github.bat ...
+echo.
+call one-click-build-github.bat
+goto :end
+
 :no_pnpm
 echo pnpm not found in PATH. Install it manually first:
 echo   npm i -g pnpm@10.33.2 --force

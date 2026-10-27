@@ -3077,6 +3077,14 @@ export function createZCodeTaskServiceAdapter(
       return meta;
     },
 
+    async regenerateTaskTitle(params): Promise<ZCodeTaskMeta | null> {
+      // 命令 ACK 即生成完成；mutate 的 refresh 从 CLI 事实端口拿新标题写 index 并广播。
+      return taskIndexSyncer.mutateSessionFacts(
+        { ...params, sessionId: params.taskId },
+        { type: "regenerate-title" },
+      );
+    },
+
     async setTaskPinned(params): Promise<ZCodeTaskMeta> {
       const meta = await updateIndexedTaskState(params, {
         pinned: params.pinned,

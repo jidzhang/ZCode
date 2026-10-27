@@ -833,6 +833,7 @@ export function TaskListItemContextMenuContent({
   intl,
   onTogglePinTask,
   onStartRenameTask,
+  onRegenerateTitle,
   onArchiveTask,
   onMarkTaskAsUnread,
   disableTaskActions = false,
@@ -847,6 +848,8 @@ export function TaskListItemContextMenuContent({
   intl: TaskListItemIntl;
   onTogglePinTask: (taskId: string, pinned: boolean) => void;
   onStartRenameTask: (taskId: string, currentTitle: string) => void;
+  /** 手动「自动命名」；缺省时菜单不显示该项。 */
+  onRegenerateTitle?: (taskId: string) => void;
   onArchiveTask: (taskId: string) => void;
   onMarkTaskAsUnread: (taskId: string) => void;
   disableTaskActions?: boolean;
@@ -941,6 +944,13 @@ export function TaskListItemContextMenuContent({
       onStartRenameTask={() => {
         onStartRenameTask(task.taskId, task.title);
       }}
+      onRegenerateTitle={
+        onRegenerateTitle
+          ? () => {
+              onRegenerateTitle(task.taskId);
+            }
+          : undefined
+      }
       onArchiveTask={() => {
         onArchiveTask(task.taskId);
       }}

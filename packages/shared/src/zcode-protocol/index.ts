@@ -1520,6 +1520,9 @@ export const zcodeSessionTitleUpdatedEventPayloadSchema = z
   .object({
     messageID: nonEmptyString.optional(),
     previousTitle: z.string(),
+    // manual_regenerate 仅由用户显式「自动命名」触发：下游投影据此放行对 custom 标题的覆盖；
+    // 自动路径不带该字段，custom 粘性行为不变。
+    reason: z.enum(["manual_regenerate"]).optional(),
     source: z.enum(["default", "first_input", "generated", "custom"]),
     title: z.string(),
   })

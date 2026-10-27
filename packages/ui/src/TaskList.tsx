@@ -45,6 +45,7 @@ export const TaskList = memo(function TaskList({
   hasMore = false,
   onShowMore,
   onRenameTask,
+  onRegenerateTaskTitle,
   onSetTaskPinned,
   onArchiveTask,
   isArchived = false,
@@ -73,6 +74,8 @@ export const TaskList = memo(function TaskList({
   hasMore?: boolean;
   onShowMore?: () => void;
   onRenameTask: (taskId: string, title: string) => Promise<ZCodeTaskMeta | null>;
+  /** 手动「自动命名」；缺省时右键菜单不显示该项。 */
+  onRegenerateTaskTitle?: (taskId: string) => Promise<ZCodeTaskMeta | null>;
   onSetTaskPinned: (taskId: string, pinned: boolean) => Promise<ZCodeTaskMeta | null>;
   onArchiveTask: (taskId: string) => Promise<ZCodeTaskMeta | null>;
   isArchived?: boolean;
@@ -100,12 +103,14 @@ export const TaskList = memo(function TaskList({
   const onSetTaskPinnedRef = useRef(onSetTaskPinned);
   const onArchiveTaskRef = useRef(onArchiveTask);
   const onSetTaskUnreadRef = useRef(onSetTaskUnread);
+  const onRegenerateTaskTitleRef = useRef(onRegenerateTaskTitle);
   pendingArchiveTaskIdRef.current = pendingArchiveTaskId;
   renamingTaskIdRef.current = renamingTaskId;
   onSelectTaskRef.current = onSelectTask;
   onSetTaskPinnedRef.current = onSetTaskPinned;
   onArchiveTaskRef.current = onArchiveTask;
   onSetTaskUnreadRef.current = onSetTaskUnread;
+  onRegenerateTaskTitleRef.current = onRegenerateTaskTitle;
   const handleCancelArchiveConfirm = useCallback(() => {
     setPendingArchiveTaskId(null);
   }, []);
@@ -188,6 +193,17 @@ export const TaskList = memo(function TaskList({
       if (!updatedTask) {
         return;
       }
+    },
+    [readOnlyReason],
+  );
+
+  // 手动「自动命名」：命令 ACK 同步等 CLI 生成（秒级），失败由上层 hook toast。
+  const handleRegenerateTitle = useCallback(
+    (taskId: string) => {
+      if (readOnlyReason) {
+        return;
+      }
+      void onRegenerateTaskTitleRef.current?.(taskId);
     },
     [readOnlyReason],
   );
@@ -479,6 +495,7 @@ export const TaskList = memo(function TaskList({
                   intl={intl}
                   onTogglePinTask={handleTogglePinTask}
                   onStartRenameTask={handleStartRenameTask}
+                  onRegenerateTitle={onRegenerateTaskTitle ? handleRegenerateTitle : undefined}
                   onArchiveTask={handleArchiveTask}
                   onMarkTaskAsUnread={handleMarkTaskAsUnread}
                   disableTaskActions={Boolean(readOnlyReason)}

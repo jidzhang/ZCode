@@ -652,6 +652,32 @@ export function WorkspaceHeaderTitleSection({
                     });
                 }}
                 onStartRenameTask={handleStartRenameTask}
+                onRegenerateTitle={() => {
+                  if (!resolvedTaskActionTaskId) {
+                    return;
+                  }
+                  // ACK 即生成完成：成功经返回 meta 更新本地缓存，失败 toast；无乐观更新可回滚。
+                  void services.zcodeTaskService
+                    .regenerateTaskTitle({
+                      taskId: resolvedTaskActionTaskId,
+                      workspacePath: workspaceAbsPath,
+                      ...(workspaceIdentity ? { workspaceIdentity } : {}),
+                    })
+                    .then((meta) => {
+                      if (meta) {
+                        upsertOptimisticTaskListItem(workspaceAbsPath, meta, workspaceIdentity);
+                        applyTaskQueryCacheMutation({
+                          previousTask: buildHeaderTaskSnapshot(meta),
+                          nextTask: meta,
+                          previousState: { pinned: isPinned, archived: false },
+                          nextState: { pinned: isPinned, archived: false },
+                        });
+                      }
+                    })
+                    .catch(() => {
+                      toast(intl.formatMessage({ id: "taskList.regenerateTitleFailed" }));
+                    });
+                }}
                 onArchiveTask={() => {
                   void handleArchiveTask();
                 }}

@@ -24,6 +24,7 @@ export function GroupedTaskContextMenuContent({
   onMoveTaskToGroup,
   onMoveTaskToTop,
   onStartRenameTask,
+  onRegenerateTitle,
   onArchiveTask,
   onMarkTaskAsUnread,
   onOpenTaskPathInFileManager,
@@ -45,6 +46,8 @@ export function GroupedTaskContextMenuContent({
   onMoveTaskToGroup: (task: ZCodeTaskMeta, groupId: string | null) => void;
   onMoveTaskToTop: (task: ZCodeTaskMeta) => void;
   onStartRenameTask: (task: ZCodeTaskMeta) => void;
+  /** 手动「自动命名」；缺省时菜单不显示该项。 */
+  onRegenerateTitle?: (task: ZCodeTaskMeta) => void;
   onArchiveTask: (task: ZCodeTaskMeta) => void;
   onMarkTaskAsUnread: (task: ZCodeTaskMeta) => void;
   onOpenTaskPathInFileManager: () => void;
@@ -127,6 +130,21 @@ export function GroupedTaskContextMenuContent({
           {intl.formatMessage({ id: "taskList.rename" })}
         </ContextMenuItem>
       </SidebarNativeTooltip>
+      {onRegenerateTitle ? (
+        <SidebarNativeTooltip>
+          <ContextMenuItem
+            disabled={Boolean(disabledReason)}
+            title={disabledReason}
+            onSelect={() => {
+              if (!disabledReason) {
+                onRegenerateTitle(task);
+              }
+            }}
+          >
+            {intl.formatMessage({ id: "taskList.regenerateTitle" })}
+          </ContextMenuItem>
+        </SidebarNativeTooltip>
+      ) : null}
       <SidebarNativeTooltip>
         <ContextMenuItem
           disabled={Boolean(disabledReason)}

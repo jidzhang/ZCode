@@ -28,6 +28,7 @@ export function TaskActionMenuContent({
   Separator,
   onTogglePinTask,
   onStartRenameTask,
+  onRegenerateTitle,
   onArchiveTask,
   onMarkTaskAsUnread,
   onOpenTaskFeedback,
@@ -62,6 +63,8 @@ export function TaskActionMenuContent({
   Separator: React.ComponentType<TaskActionMenuSeparatorProps>;
   onTogglePinTask: () => void;
   onStartRenameTask: () => void;
+  /** 手动「自动命名」：缺省（能力不可用）时隐藏菜单项。 */
+  onRegenerateTitle?: () => void;
   onArchiveTask: () => void;
   onMarkTaskAsUnread: () => void;
   onOpenTaskFeedback?: () => void;
@@ -99,6 +102,19 @@ export function TaskActionMenuContent({
       >
         {intl.formatMessage({ id: "taskList.rename" })}
       </Item>
+      {onRegenerateTitle ? (
+        <Item
+          disabled={taskTargetActionsDisabled}
+          title={taskTargetActionsDisabled ? disabledReason : undefined}
+          onSelect={() => {
+            if (!taskTargetActionsDisabled) {
+              onRegenerateTitle();
+            }
+          }}
+        >
+          {intl.formatMessage({ id: "taskList.regenerateTitle" })}
+        </Item>
+      ) : null}
       <Item
         disabled={taskTargetActionsDisabled}
         title={disabledReason}

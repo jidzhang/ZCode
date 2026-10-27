@@ -22,6 +22,7 @@ import type {
 
 export type WindowHostControllerMutation =
   | { kind: "rename"; title: string }
+  | { kind: "regenerate-title" }
   | { kind: "pin"; pinned: boolean }
   | { kind: "archive"; archived: boolean }
   | { kind: "delete" }

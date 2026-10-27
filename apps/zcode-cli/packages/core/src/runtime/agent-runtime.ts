@@ -427,6 +427,8 @@ export interface AgentRuntime {
   ): void;
   /** renameSession：用户显式重命名（titleSource=custom，发 SessionTitleUpdated）。 */
   setCustomSessionTitle(input: { title: string; traceContext: TraceContext }): Promise<void>;
+  /** regenerateSessionTitle：用户显式「自动命名」，多轮素材重生成并覆盖 custom。 */
+  regenerateSessionTitle(input: { traceContext: TraceContext }): Promise<void>;
   maybeStartGoalSummaryTitleGeneration(
     input: string,
     targetID: string,

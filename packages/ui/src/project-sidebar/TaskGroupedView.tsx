@@ -273,6 +273,8 @@ export function TaskGroupedView({
       setRenamingTask(task);
       setRenameDraft(task.title ?? "");
     },
+    onRegenerateTitle: (task: ProjectTask) =>
+      action(() => mutate(task, { kind: "regenerate-title" }), "taskList.regenerateTitleFailed"),
     onMarkTaskAsUnread: (task: ProjectTask) =>
       action(() => mutate(task, { kind: "mark-unread" }), "taskList.markAsUnreadFailed"),
     tooltipsDisabled: drag.dragging,

@@ -56,6 +56,7 @@ export function VirtualizedGroupedTaskList({
   onMoveTaskToGroup,
   onMoveTaskToTop,
   onStartRenameTask,
+  onRegenerateTitle,
   onArchiveTask,
   onMarkTaskAsUnread,
   activeDragTaskKey,
@@ -76,6 +77,7 @@ export function VirtualizedGroupedTaskList({
   onMoveTaskToGroup: (task: ZCodeTaskMeta, groupId: string | null) => void;
   onMoveTaskToTop: (task: ZCodeTaskMeta) => void;
   onStartRenameTask: (task: ZCodeTaskMeta) => void;
+  onRegenerateTitle?: (task: ZCodeTaskMeta) => void;
   onArchiveTask: (task: ZCodeTaskMeta) => void;
   onMarkTaskAsUnread: (task: ZCodeTaskMeta) => void;
   activeDragTaskKey?: string | null;
@@ -170,6 +172,7 @@ export function VirtualizedGroupedTaskList({
         onMoveTaskToGroup={onMoveTaskToGroup}
         onMoveTaskToTop={onMoveTaskToTop}
         onStartRenameTask={onStartRenameTask}
+        onRegenerateTitle={onRegenerateTitle}
         onArchiveTask={onArchiveTask}
         onMarkTaskAsUnread={onMarkTaskAsUnread}
         dragId={taskKey(task)}
@@ -194,6 +197,7 @@ export function VirtualizedGroupedTaskList({
       onOpenFileTree,
       onSelectTask,
       onStartRenameTask,
+      onRegenerateTitle,
       activeDragTaskKey,
       tooltipsDisabled,
     ],

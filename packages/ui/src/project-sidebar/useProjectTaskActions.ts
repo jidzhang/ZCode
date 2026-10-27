@@ -49,6 +49,17 @@ export function useProjectTaskActions(task: ProjectTask, refresh: () => Promise<
     },
     [mutate, refresh],
   );
+  // 手动「自动命名」：命令 ACK 同步等 CLI 生成（秒级），失败 toast，成功后 refresh 拿新标题。
+  const regenerateTitle = useCallback(async () => {
+    try {
+      const result = await mutate({ kind: "regenerate-title" });
+      await refresh();
+      return result ?? null;
+    } catch (error) {
+      report("regenerateTitle", error);
+      return null;
+    }
+  }, [mutate, refresh, report]);
   const pin = useCallback(
     async (_id: string, pinned: boolean) => {
       try {
@@ -96,5 +107,5 @@ export function useProjectTaskActions(task: ProjectTask, refresh: () => Promise<
     },
     [mutate, refresh, task.unreadAt, report],
   );
-  return { remoteSessionId, rename, pin, archive, unread };
+  return { remoteSessionId, rename, regenerateTitle, pin, archive, unread };
 }

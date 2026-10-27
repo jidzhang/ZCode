@@ -25,7 +25,10 @@ export const ProjectTaskRow = memo(function Row({
   showFiles: boolean;
 }) {
   const presentation = useContext(ProjectTaskListContext);
-  const { remoteSessionId, rename, pin, archive, unread } = useProjectTaskActions(task, refresh);
+  const { remoteSessionId, rename, regenerateTitle, pin, archive, unread } = useProjectTaskActions(
+    task,
+    refresh,
+  );
   const workspaceKey = task.workspaceIdentity?.trim() || task.workspacePath;
   const activeId = useZCodeSessionStore(
     (state) => state.workspaces[workspaceKey]?.activeTaskId ?? null,
@@ -72,6 +75,7 @@ export const ProjectTaskRow = memo(function Row({
         sortBy="updated"
         onSelectTask={select}
         onRenameTask={rename}
+        onRegenerateTaskTitle={regenerateTitle}
         onSetTaskPinned={pin}
         onArchiveTask={archive}
         isArchived={task.archived}

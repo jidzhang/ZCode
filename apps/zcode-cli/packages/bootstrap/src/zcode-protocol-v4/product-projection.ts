@@ -1997,10 +1997,12 @@ export class ProductProjection {
 
   // renameSession / 自动标题：SessionTitleUpdated(title, source) → 更新 meta。
   // custom（用户重命名）优先级最高，已 custom 后不再被 generated 覆盖（与 core titleSource 一致）。
+  // 唯一例外 reason=manual_regenerate：用户显式「自动命名」授权覆盖 custom。
   private onSessionTitleUpdated(event: SessionEvent): ConversationDelta[] {
     const payload = event.payload as {
       title?: string;
       source?: string;
+      reason?: string;
     };
     const title = payload.title ?? "";
     // core 的 titleSource 有 4 值（default/first_input/generated/custom）；投影 meta 归一为
@@ -2012,7 +2014,7 @@ export class ProductProjection {
           ? "default"
           : "generated";
     const prev = this.snapshot.meta;
-    if (prev.titleSource === "custom" && source === "generated") return [];
+    if (prev.titleSource === "custom" && source === "generated" && !payload.reason) return [];
     if (prev.title === title && prev.titleSource === source) return [];
     return [
       {

@@ -548,11 +548,18 @@ export function createZCodeTaskIndexSyncer(
                 sessionId: target.taskId,
                 payload: {},
               })
-            : createHostCommandEnvelope({
-                type: "renameSession",
-                sessionId: target.taskId,
-                payload: { title: intent.title },
-              });
+            : intent.type === "regenerate-title"
+              ? // 手动「自动命名」：ACK 同步等 CLI 生成完成，新标题经 mutate 的 refresh 写回 index。
+                createHostCommandEnvelope({
+                  type: "regenerateSessionTitle",
+                  sessionId: target.taskId,
+                  payload: {},
+                })
+              : createHostCommandEnvelope({
+                  type: "renameSession",
+                  sessionId: target.taskId,
+                  payload: { title: intent.title },
+                });
         const ack = await agentService.sendConversationCommandV4({
           workspacePath: target.workspacePath,
           workspaceIdentity: target.workspaceIdentity,

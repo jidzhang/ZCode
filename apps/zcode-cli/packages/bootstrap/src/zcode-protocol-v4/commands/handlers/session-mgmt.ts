@@ -165,6 +165,25 @@ async function renameSession(
   return undefined;
 }
 
+/**
+ * regenerateSessionTitle：用户显式「自动命名」→ core runtime.regenerateSessionTitle。
+ * - ACK 同步等待单次标题生成完成（默认 60s 上限由 titleGeneration.timeoutMs 决定）；
+ *   core 抛错（无素材 / 生成失败 / 乐观锁拒绝）→ failed ACK → UI toast。
+ * - 成功后标题经 SessionTitleUpdated(reason=manual_regenerate) 事件流更新列表，
+ *   ACK 不携带标题（不新增 command result variant）。
+ */
+async function regenerateSessionTitle(
+  host: V4CommandCoreHost,
+  envelope: CommandEnvelope,
+): Promise<CommandResult | undefined> {
+  const record = requireRecord(host, envelope.sessionId);
+  // 与 renameSession 同款：方法经 runtime 调用，this 绑定在 core 实现侧。
+  await record.app.runtime.regenerateSessionTitle({
+    traceContext: record.traceContext,
+  });
+  return undefined;
+}
+
 /** CLI 先持久化软删除，再关闭运行实例；正文保留，后续冷种子不会复活该会话。 */
 async function deleteSession(
   host: V4CommandCoreHost,
@@ -200,6 +219,7 @@ async function discardSharedContext(
 export const sessionMgmtHandlers = {
   createSession,
   renameSession,
+  regenerateSessionTitle,
   deleteSession,
   discardSharedContext,
 };

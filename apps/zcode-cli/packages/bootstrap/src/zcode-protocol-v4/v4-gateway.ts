@@ -700,10 +700,14 @@ export class ConversationV4Gateway {
       prepareDecision: async (envelope) => {
         if (
           envelope.sessionId &&
-          (envelope.type === "renameSession" || envelope.type === "deleteSession") &&
+          (envelope.type === "renameSession" ||
+            envelope.type === "regenerateSessionTitle" ||
+            envelope.type === "deleteSession") &&
           !this.host.sessionExists(envelope.sessionId)
         ) {
           // 历史行的重命名 / 删除仍由 CLI 原命令写持久事实；只在真实命令 admission 后冷恢复。
+          // regenerateSessionTitle（手动「自动命名」）最常作用于已结束的历史会话（Stop 后补救），
+          // 与 renameSession 同走冷恢复名单。
           await this.ensureColdReadyPublisher(envelope.sessionId);
         }
       },

@@ -710,6 +710,16 @@ export interface IZCodeTaskService {
     title: string;
   }): Promise<ZCodeTaskMeta>;
 
+  /**
+   * 手动「自动命名」：请 CLI 用会话已有对话重新生成标题并覆盖 custom。
+   * ACK 同步等待生成完成；失败抛错（UI toast），成功后标题经事件流更新列表。
+   */
+  regenerateTaskTitle(params: {
+    taskId: string;
+    workspacePath: string;
+    workspaceIdentity?: string;
+  }): Promise<ZCodeTaskMeta | null>;
+
   /** 更新 task 置顶状态 */
   setTaskPinned(params: {
     taskId: string;

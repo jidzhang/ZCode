@@ -17,6 +17,7 @@ export function TaskListItemContextMenu({
   providerConfigFile,
   onTogglePinTask,
   onStartRenameTask,
+  onRegenerateTitle,
   onArchiveTask,
   onMarkTaskAsUnread,
   onOpenTaskFeedback,
@@ -47,6 +48,7 @@ export function TaskListItemContextMenu({
   providerConfigFile: { loading: boolean; path: string | null; exists: boolean };
   onTogglePinTask: () => void;
   onStartRenameTask: () => void;
+  onRegenerateTitle?: () => void;
   onArchiveTask: () => void;
   onMarkTaskAsUnread: () => void;
   onOpenTaskFeedback: () => void;
@@ -76,6 +78,7 @@ export function TaskListItemContextMenu({
         Separator={ContextMenuSeparator}
         onTogglePinTask={onTogglePinTask}
         onStartRenameTask={onStartRenameTask}
+        onRegenerateTitle={onRegenerateTitle}
         onArchiveTask={onArchiveTask}
         onMarkTaskAsUnread={onMarkTaskAsUnread}
         onOpenTaskFeedback={onOpenTaskFeedback}

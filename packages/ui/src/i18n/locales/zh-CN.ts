@@ -2704,6 +2704,8 @@ const zhCN: Record<string, string> = {
   "taskList.unarchive": "取消归档任务",
   "taskList.renamePlaceholder": "任务名称",
   "taskList.renameFailed": "重命名任务失败",
+  "taskList.regenerateTitle": "自动命名",
+  "taskList.regenerateTitleFailed": "自动命名失败",
   "taskList.pinFailed": "更新置顶状态失败",
   "taskList.markAsUnread": "标记为未读",
   "chat.toolCall.agent.openInSidePane": "在右侧打开",

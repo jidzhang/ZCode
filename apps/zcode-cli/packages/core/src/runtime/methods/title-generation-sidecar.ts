@@ -87,6 +87,7 @@ export async function generateTitleCandidate(
     querySource: string;
     traceContext: TraceContext;
     modelContext?: TitleModelContext;
+    maxInputChars?: number;
   },
 ): Promise<{ modelSelection: ModelSelection; title: string; traceContext: TraceContext } | null> {
   const titleTelemetry = this.agentTelemetry.detached({
@@ -122,6 +123,7 @@ async function generateTitleCandidateImpl(
     querySource: string;
     traceContext: TraceContext;
     modelContext?: TitleModelContext;
+    maxInputChars?: number;
   },
 ): Promise<{ modelSelection: ModelSelection; title: string; traceContext: TraceContext } | null> {
   const context = options.modelContext ?? retainTitleModelContext(this);
@@ -141,7 +143,7 @@ async function generateTitleCandidateImpl(
     },
   });
   const events: SessionEvent[] = [];
-  const messages = buildTitleMessages(input);
+  const messages = buildTitleMessages(input, options.maxInputChars);
   const modelRequestEvent = this.createEvent(
     SessionEventType.ModelRequest,
     {
@@ -245,17 +247,15 @@ async function generateTitleCandidateImpl(
   return { modelSelection, title, traceContext: modelTraceContext };
 }
 
-export function normalizeTitleInput(input: string): string {
+export function normalizeTitleInput(input: string, maxChars = MAX_TITLE_INPUT_CHARS): string {
   const normalized = input.trim().replace(/\s+/g, " ");
-  return normalized.length > MAX_TITLE_INPUT_CHARS
-    ? normalized.slice(0, MAX_TITLE_INPUT_CHARS)
-    : normalized;
+  return normalized.length > maxChars ? normalized.slice(0, maxChars) : normalized;
 }
 
-function buildTitleMessages(input: string): ModelInputMessage[] {
+function buildTitleMessages(input: string, maxInputChars?: number): ModelInputMessage[] {
   return [
     { role: "system", content: SESSION_TITLE_SYSTEM_PROMPT },
-    { role: "user", content: normalizeTitleInput(input) },
+    { role: "user", content: normalizeTitleInput(input, maxInputChars) },
   ];
 }
 

@@ -8,7 +8,10 @@ export interface TaskWorkspace {
 export interface TaskFactTarget extends TaskWorkspace {
   taskId: string;
 }
-export type TaskFactMutation = { type: "rename"; title: string } | { type: "delete" };
+export type TaskFactMutation =
+  | { type: "rename"; title: string }
+  | { type: "regenerate-title" }
+  | { type: "delete" };
 export interface CliTaskFacts {
   meta: ZCodeTaskMeta;
   titleSource?: string;

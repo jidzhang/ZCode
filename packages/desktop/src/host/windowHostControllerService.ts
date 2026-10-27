@@ -249,6 +249,9 @@ export function createWindowHostControllerRuntime(options: {
       case "rename":
         await service.renameTask({ ...base, title: mutation.title });
         break;
+      case "regenerate-title":
+        await service.regenerateTaskTitle(base);
+        break;
       case "pin":
         await service.setTaskPinned({ ...base, pinned: mutation.pinned });
         break;

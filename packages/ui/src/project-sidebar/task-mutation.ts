@@ -61,6 +61,8 @@ export async function mutateProjectTask(
       return null;
     case "rename":
       return ports.service.renameTask({ ...target, title: mutation.title });
+    case "regenerate-title":
+      return ports.service.regenerateTaskTitle(target);
     case "pin":
       return ports.service.setTaskPinned({ ...target, pinned: mutation.pinned });
     case "mark-read":

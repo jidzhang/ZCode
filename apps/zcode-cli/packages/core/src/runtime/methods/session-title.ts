@@ -27,6 +27,17 @@ const GENERATED_TITLE_EXPECTED_SOURCES: readonly SessionTitleSource[] = [
   "generated",
 ];
 const MIN_GENERATED_TITLE_INPUT_CHARS = 10;
+// 手动「自动命名」允许覆盖 custom（用户点按钮即明确意图），存储层乐观锁名单随之放宽。
+const REGENERATE_TITLE_EXPECTED_SOURCES: readonly SessionTitleSource[] = [
+  ...GENERATED_TITLE_EXPECTED_SOURCES,
+  "custom",
+];
+// 手动重生成的素材是「首条 + 最近对话」多轮拼装（specs/session-title-manual-regenerate.md），
+// 预算独立于自动路径的 1200 字符首条截断。
+const REGENERATE_TITLE_INPUT_CHARS = 8_000;
+const REGENERATE_ORIGINAL_CHARS = 2_000;
+const REGENERATE_RECENT_CHARS = 6_000;
+const REGENERATE_RECENT_ITEM_CHARS = 600;
 
 export function maybeStartSessionTitleGeneration(
   this: AgentRuntimeInternal,
@@ -296,6 +307,130 @@ export async function setCustomSessionTitle(
     ),
     input.traceContext,
   );
+}
+
+/**
+ * regenerateSessionTitle：用户显式「自动命名」（右键菜单）。与 turn 0 一次性自动生成
+ * 完全独立：不检查 turnNumber / attempted / custom（specs/session-title-manual-regenerate.md），
+ * 素材取「首条可见用户消息 + 最近对话」，生成结果以 titleSource=generated 覆盖现有标题。
+ * 失败直接抛错——调用方（v4 命令 handler）把异常转成 failed ACK，UI toast。
+ */
+export async function regenerateSessionTitle(
+  this: AgentRuntimeInternal,
+  input: { traceContext: TraceContext },
+): Promise<void> {
+  const session = await this.sessionStore?.getSession(this.sessionId);
+  if (!session || session.parentID || session.taskType !== "interactive") {
+    throw new Error("session_title_regenerate_unavailable");
+  }
+  const material = await buildRegenerateTitleMaterial.call(this);
+  if (!material) throw new Error("session_title_no_input");
+
+  this.logger?.info("Session title regeneration started", {
+    ...traceContextToLogContext(input.traceContext),
+    event: "session_title_regeneration.started",
+    module: "core.runtime",
+    status: "started",
+  });
+  // 与自动路径一致：入队时冻结 causation 与模型上下文，独立于当前 Turn 生命周期。
+  const causation = this.agentTelemetry.captureCausation();
+  const modelContext = retainTitleModelContext(this);
+  try {
+    const generated = await generateTitleCandidate.call(this, material, {
+      causation,
+      maxInputChars: REGENERATE_TITLE_INPUT_CHARS,
+      querySource: SESSION_TITLE_QUERY_SOURCE,
+      traceContext: input.traceContext,
+    });
+    if (!generated) throw new Error("session_title_generation_failed");
+
+    // 写回前重读：并发下的用户改名（custom）由乐观锁名单内竞争裁决，last-write-wins。
+    const previousTitle = (await this.sessionStore?.getSession(this.sessionId))?.title ?? "";
+    const updated = await this.sessionStore?.updateSession({
+      expectedTitleSources: REGENERATE_TITLE_EXPECTED_SOURCES,
+      id: this.sessionId,
+      title: generated.title,
+      titleSource: "generated",
+    });
+    if (!updated || updated.title !== generated.title || updated.titleSource !== "generated") {
+      throw new Error("session_title_source_changed");
+    }
+    await this.appendEvent(
+      this.createEvent(
+        SessionEventType.SessionTitleUpdated,
+        {
+          // reason 标记手动重生成：product-projection 的 custom 粘性据此放行覆盖。
+          previousTitle,
+          reason: "manual_regenerate",
+          source: "generated",
+          title: generated.title,
+        },
+        input.traceContext,
+      ),
+      input.traceContext,
+    );
+  } finally {
+    modelContext.release();
+  }
+}
+
+/** 手动重生成的素材：首条可见用户消息 + 最近 user/assistant 文本，保尾截断（最新的优先）。 */
+async function buildRegenerateTitleMaterial(
+  this: AgentRuntimeInternal,
+): Promise<string | null> {
+  const messages = await this.sessionStore?.messages({ sessionID: this.sessionId });
+  if (!messages) return null;
+
+  const firstUserIndex = messages.findIndex(isVisibleRealUserMessage);
+  if (firstUserIndex < 0) return null;
+  const original = clipSingleLine(
+    messagePartsText(messages[firstUserIndex]!),
+    REGENERATE_ORIGINAL_CHARS,
+  );
+
+  const recentLines: string[] = [];
+  for (let index = 0; index < messages.length; index += 1) {
+    if (index === firstUserIndex) continue;
+    const message = messages[index]!;
+    const label = isVisibleRealUserMessage(message)
+      ? "User"
+      : isSubstantiveAssistantMessage(message)
+        ? "Assistant"
+        : null;
+    if (!label) continue;
+    const text = clipSingleLine(messagePartsText(message), REGENERATE_RECENT_ITEM_CHARS);
+    if (text) recentLines.push(`${label}: ${text}`);
+  }
+
+  if (recentLines.length === 0) return original;
+  // 保尾：从最新往回累计，超预算即停（轮次完整性优先于凑满预算）。
+  const kept: string[] = [];
+  let budget = REGENERATE_RECENT_CHARS;
+  for (const line of [...recentLines].reverse()) {
+    if (line.length > budget) break;
+    kept.unshift(line);
+    budget -= line.length;
+  }
+  if (kept.length === 0) return original;
+  return `Original request: ${original}\n\nRecent conversation:\n${kept.join("\n")}`;
+}
+
+/** compaction 摘要等合成 assistant 消息不是实质回复，不进素材。 */
+function isSubstantiveAssistantMessage(message: MessageWithParts): boolean {
+  return message.info.role === "assistant" && message.info.summary !== true;
+}
+
+function messagePartsText(message: MessageWithParts): string {
+  return message.parts
+    .filter((part) => part.type === "text" && part.synthetic !== true && part.ignored !== true)
+    .map((part) => (part as { text: string }).text)
+    .join(" ")
+    .trim();
+}
+
+function clipSingleLine(text: string, maxChars: number): string {
+  const singleLine = text.replace(/\s+/g, " ").trim();
+  return singleLine.length <= maxChars ? singleLine : `${singleLine.slice(0, maxChars - 1)}…`;
 }
 
 async function persistGeneratedSessionTitle(

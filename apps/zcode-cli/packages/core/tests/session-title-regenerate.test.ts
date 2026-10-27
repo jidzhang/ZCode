@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SessionEventType, createMessageId, createPartId, createSessionId } from "@zcode/contracts";
-import type { MessageInfo, MessagePart, SessionStorePort } from "@zcode/contracts";
+import type { MessageInfo, MessagePart, ModelSelection, SessionStorePort } from "@zcode/contracts";
+import type { AgentRuntimeConfig, RuntimeModelFactoryInput } from "../src/runtime/types.js";
 import { createTestAgentRuntime } from "./test-agent-runtime.js";
 import { createTestSessionEventStore } from "./test-event-store.js";
 import { createTestModelFactory } from "./test-runtime-model.js";
@@ -62,12 +63,18 @@ function buildRuntime(
   store: SessionStorePort,
   generateText: (messages: { role: string; content: string }[]) => { finishReason: string; text: string },
   updateSessionCalls: Array<Parameters<SessionStorePort["updateSession"]>[0]> = [],
+  options?: {
+    modelSelection?: ModelSelection;
+    titleGeneration?: AgentRuntimeConfig["titleGeneration"];
+    onCreate?: (input: RuntimeModelFactoryInput) => void;
+  },
 ) {
   const eventStore = createTestSessionEventStore();
   const runtime = createTestAgentRuntime(createSessionId(sessionId), {
     mode: "build",
     workingDirectory: "/workspace",
-    titleGeneration: {
+    ...(options?.modelSelection ? { modelSelection: options.modelSelection } : {}),
+    titleGeneration: options?.titleGeneration ?? {
       modelSelection: createTestModelSelection("test/title-model"),
       timeoutMs: 1_000,
     },
@@ -86,6 +93,7 @@ function buildRuntime(
       },
     }) as SessionStorePort,
     modelFactory: createTestModelFactory({
+      ...(options?.onCreate ? { onCreate: options.onCreate } : {}),
       async generateText(request: { messages: { role: string; content: string }[] }) {
         const result = generateText(request.messages);
         return {
@@ -258,5 +266,42 @@ describe("手动「自动命名」regenerateSessionTitle", () => {
     ).rejects.toThrow("session_title_generation_failed");
     const session = await store.getSession(createSessionId(sessionId));
     expect(session?.title).toBe("旧标题");
+  });
+
+  it("无显式标题模型时使用切换后的 Session Selection", async () => {
+    const sessionId = "regen-switched-model";
+    const store = createRecordingSubagentSessionStore();
+    await store.createSession({
+      id: createSessionId(sessionId),
+      title: "旧标题",
+      titleSource: "generated",
+    } as never);
+    await seedConversation(store, sessionId, [
+      {
+        info: userMessage(sessionId, "u1", "切换模型后重新命名"),
+        parts: [textPart(sessionId, "u1", "p1", "切换模型后重新命名")],
+      },
+    ]);
+
+    const requestedSelections: string[] = [];
+    const { runtime } = buildRuntime(
+      sessionId,
+      store,
+      () => ({ finishReason: "stop", text: '{"title":"切换后的标题"}' }),
+      [],
+      {
+        modelSelection: createTestModelSelection("test/original-model"),
+        titleGeneration: { timeoutMs: 1_000 },
+        onCreate: (input) => {
+          requestedSelections.push(`${input.selection.providerId}/${input.selection.modelId}`);
+        },
+      },
+    );
+    runtime.setSessionModelSelection(createTestModelSelection("test/switched-model"));
+
+    await runtime.regenerateSessionTitle({ traceContext: runtime.rootTraceContext });
+
+    expect(requestedSelections).toContain("test/switched-model");
+    expect(requestedSelections).not.toContain("test/original-model");
   });
 });

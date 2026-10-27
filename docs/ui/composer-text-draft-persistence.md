@@ -10,6 +10,30 @@
 有文字时保存正文、编辑器状态、权限、Plan、完整 ModelSelection；删空时删除记录。发送沿用既有乐观清空：先冻结 Submission，再清空正文和记录；失败且未被后续编辑取代时恢复，接纳后更新 Recent。读取旧版本空草稿时只过滤，显式写入时清理，不让旧配置继续阻挡默认值。
 当前输入框的配置仍由 `useDraftConfigControl` 的内存态唯一持有；不因不写盘而在普通 render、目录刷新或 Snapshot 到达时回退。重新进入空白新建页使用当前 workspace Recent，已有 Session 始终从当前 Snapshot 恢复权限与 Plan，有文字草稿时只恢复其中的正文与模型。显式 New Task 即使复用当前 pane，也开启新的空白编辑生命周期；有文字的草稿继续恢复。
 
+## 已绑定会话的显式模型选择（2026-10-27）
+
+已绑定 Session 中，用户从 Composer 显式选择模型或思考深度时，Renderer 同时完成两件事：
+
+1. 写入当前 Composer 的 draft intent，toolbar 立即显示目标选型；
+2. 通过既有 `configCommandBarrier` 提交一次 `switchModelConfig` CAS，把该 Session 的后续选型写入 CLI。
+
+这条命令只更新「未来工作」的 Session Selection；已经开始的 Turn 继续使用启动时冻结的 Active Model，后续 Turn 以及之后发起的 Subagent、独立 Compact 等辅助工作读取新选型，当前 Turn 内的模型请求和 session-start hook 仍使用冻结模型。模型/思考快速连点时使用 latest-wins scheduler，只保留最后一个未开始的意图；发送前 `seal()`，保证已入队配置一定排在 `sendText` 之前，发送之后再发生的点击进入新槽。
+
+```text
+用户点击 B（已绑定 Session）
+  -> Composer draft intent = B，界面立即显示 B
+  -> configCommandBarrier: switchModelConfig(B) [latest-wins + revision CAS]
+       |-- accepted/noop: Session Selection = B，ModelSelected 投影 config B
+       `-- failed/notInRegistry: 保留 draft intent B；下一次 Submission 仍携带 B
+  -> 用户发送: seal scheduler -> sendText(Submission=B) 排在已入队配置之后
+  -> 运行中的 Turn 继续使用 A；下一 Turn / 新辅助工作使用 B
+```
+
+- 失败不写 workspace 默认值，也不回滚 Composer；真正的执行错误仍由发送链路按现有错误横幅呈现。
+- 投影 `config` 可以更新为同一显式选型，但不得覆盖更新的 draft intent；Composer 仍是「下一次提交」的显示权威。
+- 「自动命名」等读取 `runtime.getSessionModelSelection()` 的独立命令在 CAS accepted 后使用新模型；从任务列表发起的命令不在本 pane 的 barrier 内，与点击发生在同一 event-loop 窗口时仍可能观察到切换前的值，这是已知时序边界。
+- 未绑定 Session 的 New Task / prewarm 草稿保持原规则：只更新 intent，随首条 Submission 原子提交，不在点击时写 Session。
+
 ```mermaid
 flowchart LR
     A[空白输入框：内存配置] -->|输入文字| B[持久文字草稿]

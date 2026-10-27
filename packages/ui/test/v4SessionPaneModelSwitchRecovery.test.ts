@@ -1745,6 +1745,9 @@ describe("SessionPane model switch recovery", () => {
       optimisticCommands: [],
       loadingOlder: false,
     };
+    mocks.sendCommand.mockImplementation(async (envelope: CommandEnvelope) =>
+      ackFor(envelope, { status: "accepted" }),
+    );
     mocks.highspeedCardService.getSnapshot.mockResolvedValueOnce({
       card: {
         cardId: "hsc-request-unavailable",
@@ -2430,7 +2433,7 @@ describe("SessionPane model switch recovery", () => {
     });
   });
 
-  it("keeps an existing-session model choice in the Composer until submit", async () => {
+  it("applies an existing-session model choice immediately and still submits it", async () => {
     prewarmHookMock.binding = {
       workspaceKey: "/workspace",
       sessionId: "session-1",
@@ -2458,7 +2461,14 @@ describe("SessionPane model switch recovery", () => {
       await flushMicrotasks();
     });
 
-    expect(mocks.sendCommand).not.toHaveBeenCalled();
+    expect(mocks.sendCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.sendCommand.mock.calls[0]?.[0]).toMatchObject({
+      type: "switchModelConfig",
+      payload: {
+        provider: "alternate-provider",
+        model: "deepseek-v4-pro",
+      },
+    });
     expect(mocks.toast).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -2466,8 +2476,8 @@ describe("SessionPane model switch recovery", () => {
       await flushMicrotasks();
     });
 
-    expect(mocks.sendCommand).toHaveBeenCalledTimes(1);
-    expect(mocks.sendCommand.mock.calls[0]?.[0]).toMatchObject({
+    expect(mocks.sendCommand).toHaveBeenCalledTimes(2);
+    expect(mocks.sendCommand.mock.calls[1]?.[0]).toMatchObject({
       type: "sendText",
       payload: {
         text: "use the selected model",
@@ -2554,9 +2564,15 @@ describe("SessionPane model switch recovery", () => {
       await flushMicrotasks();
     });
 
-    // payload 的 Selection 确已被执行材料覆盖为隐藏加速 Provider（证明本轮真的加速）。
-    expect(mocks.sendCommand).toHaveBeenCalledTimes(1);
-    expect(mocks.sendCommand.mock.calls[0]?.[0]).toMatchObject({
+    // 点击已先把普通选型写入 Session；随后 payload 的 Selection 被执行材料覆盖为隐藏
+    // 加速 Provider（证明本轮真的加速）。
+    const envelopes = mocks.sendCommand.mock.calls.map(([envelope]) => envelope);
+    expect(envelopes).toHaveLength(2);
+    expect(envelopes[0]).toMatchObject({
+      type: "switchModelConfig",
+      payload: { provider: "alternate-provider", model: "deepseek-v4-pro" },
+    });
+    expect(envelopes[1]).toMatchObject({
       type: "sendText",
       payload: {
         modelSelection: { providerId: "account:zai-highspeed-card", modelId: "GLM-5.3" },
@@ -3020,7 +3036,7 @@ describe("SessionPane model switch recovery", () => {
     });
   });
 
-  it("does not dispatch or recover provider state when only the Composer selection changes", async () => {
+  it("bound session applies an explicit Composer model selection immediately", async () => {
     projectionState.current = {
       status: "live",
       snapshot: makeSnapshot(),
@@ -3029,6 +3045,9 @@ describe("SessionPane model switch recovery", () => {
       optimisticCommands: [],
       loadingOlder: false,
     };
+    mocks.sendCommand.mockImplementation(async (envelope: CommandEnvelope) =>
+      ackFor(envelope, { status: "accepted" }),
+    );
     const root = await renderPane({ remoteSessionId: "remote-session-1" });
 
     await act(async () => {
@@ -3039,8 +3058,189 @@ describe("SessionPane model switch recovery", () => {
       await flushMicrotasks();
     });
 
-    expect(mocks.sendCommand).not.toHaveBeenCalled();
+    expect(mocks.sendCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.sendCommand.mock.calls[0]?.[0]).toMatchObject({
+      type: "switchModelConfig",
+      sessionId: "session-1",
+      payload: {
+        provider: "alternate-provider",
+        model: "deepseek-v4-pro",
+        thought: "high",
+      },
+    });
     expect(mocks.zcodeSessionService.updateProviderRegistry).not.toHaveBeenCalled();
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("draft Composer keeps an explicit model selection as intent only", async () => {
+    projectionState.current = {
+      status: "live",
+      snapshot: null,
+      subscriptionId: "draft-sub-1",
+      lastError: null,
+      optimisticCommands: [],
+      loadingOlder: false,
+    };
+    prewarmHookMock.binding = null;
+    const root = await renderPane({ sessionId: null });
+
+    await act(async () => {
+      captured.composerProps?.onSelectModel("alternate-provider", "deepseek-v4-pro", {
+        provider: "primary-provider",
+        model: "deepseek-v4-flash",
+      });
+      await flushMicrotasks();
+    });
+
+    expect(mocks.sendCommand).not.toHaveBeenCalled();
+    expect(draftConfigMock.draftConfigRef.current.modelSelection).toMatchObject({
+      providerId: "alternate-provider",
+      modelId: "deepseek-v4-pro",
+    });
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("bound session applies a thought-only change with the current model", async () => {
+    projectionState.current = {
+      status: "live",
+      snapshot: makeSnapshot(),
+      subscriptionId: "sub-1",
+      lastError: null,
+      optimisticCommands: [],
+      loadingOlder: false,
+    };
+    mocks.sendCommand.mockImplementation(async (envelope: CommandEnvelope) =>
+      ackFor(envelope, { status: "accepted" }),
+    );
+    const root = await renderPane();
+
+    await act(async () => {
+      captured.composerProps?.onSelectThought("max", {
+        provider: "primary-provider",
+        model: "deepseek-v4-flash",
+      });
+      await flushMicrotasks();
+    });
+
+    expect(mocks.sendCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.sendCommand.mock.calls[0]?.[0]).toMatchObject({
+      type: "switchModelConfig",
+      sessionId: "session-1",
+      payload: {
+        provider: "primary-provider",
+        model: "deepseek-v4-flash",
+        thought: "max",
+      },
+    });
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("keeps the Composer intent when the immediate model switch is rejected", async () => {
+    projectionState.current = {
+      status: "live",
+      snapshot: makeSnapshot(),
+      subscriptionId: "sub-1",
+      lastError: null,
+      optimisticCommands: [],
+      loadingOlder: false,
+    };
+    mocks.sendCommand.mockImplementation(async (envelope: CommandEnvelope) =>
+      ackFor(envelope, {
+        status: "failed",
+        reasonCode: "provider.notInRegistry",
+        revisionAtDecision: 7,
+      }),
+    );
+    const root = await renderPane();
+
+    await act(async () => {
+      captured.composerProps?.onSelectModel("alternate-provider", "deepseek-v4-pro", {
+        provider: "primary-provider",
+        model: "deepseek-v4-flash",
+      });
+      await flushMicrotasks();
+    });
+
+    expect(mocks.sendCommand).toHaveBeenCalledTimes(1);
+    expect(draftConfigMock.draftConfigRef.current.modelSelection).toMatchObject({
+      providerId: "alternate-provider",
+      modelId: "deepseek-v4-pro",
+    });
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("orders the immediate model switch before sendText", async () => {
+    projectionState.current = {
+      status: "live",
+      snapshot: makeSnapshot(),
+      subscriptionId: "sub-1",
+      lastError: null,
+      optimisticCommands: [],
+      loadingOlder: false,
+    };
+    mocks.sendCommand.mockImplementation(async (envelope: CommandEnvelope) =>
+      ackFor(envelope, { status: "accepted" }),
+    );
+    const root = await renderPane();
+
+    await act(async () => {
+      captured.composerProps?.onSelectModel("alternate-provider", "deepseek-v4-pro", {
+        provider: "primary-provider",
+        model: "deepseek-v4-flash",
+      });
+      await captured.composerProps?.onSendText("use the selected model");
+      await flushMicrotasks();
+    });
+
+    const envelopes = mocks.sendCommand.mock.calls.map(([envelope]) => envelope);
+    const switchIndex = envelopes.findIndex((envelope) => envelope.type === "switchModelConfig");
+    const sendIndex = envelopes.findIndex((envelope) => envelope.type === "sendText");
+    expect(switchIndex).toBeGreaterThanOrEqual(0);
+    expect(sendIndex).toBeGreaterThan(switchIndex);
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("coalesces rapid model picks into the latest intent", async () => {
+    projectionState.current = {
+      status: "live",
+      snapshot: makeSnapshot(),
+      subscriptionId: "sub-1",
+      lastError: null,
+      optimisticCommands: [],
+      loadingOlder: false,
+    };
+    mocks.sendCommand.mockImplementation(async (envelope: CommandEnvelope) =>
+      ackFor(envelope, { status: "accepted" }),
+    );
+    const root = await renderPane();
+
+    await act(async () => {
+      captured.composerProps?.onSelectModel("primary-provider", "deepseek-v4-flash", {
+        provider: "primary-provider",
+        model: "deepseek-v4-flash",
+      });
+      captured.composerProps?.onSelectModel("alternate-provider", "deepseek-v4-pro", {
+        provider: "primary-provider",
+        model: "deepseek-v4-flash",
+      });
+      await flushMicrotasks();
+    });
+
+    expect(mocks.sendCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.sendCommand.mock.calls[0]?.[0]).toMatchObject({
+      type: "switchModelConfig",
+      payload: { provider: "alternate-provider", model: "deepseek-v4-pro" },
+    });
     await act(async () => {
       root.unmount();
     });
@@ -3076,7 +3276,10 @@ describe("SessionPane model switch recovery", () => {
       await flushMicrotasks();
     });
 
-    expect(mocks.sendCommand).toHaveBeenCalledTimes(1);
+    const envelopes = mocks.sendCommand.mock.calls.map(([envelope]) => envelope);
+    expect(envelopes).toHaveLength(2);
+    expect(envelopes[0]).toMatchObject({ type: "switchModelConfig" });
+    expect(envelopes[1]).toMatchObject({ type: "sendText" });
     expect(mocks.zcodeSessionService.updateProviderRegistry).not.toHaveBeenCalled();
     await act(async () => {
       root.unmount();
@@ -3121,7 +3324,10 @@ describe("SessionPane model switch recovery", () => {
       await flushMicrotasks();
     });
 
-    expect(mocks.sendCommand).toHaveBeenCalledTimes(1);
+    const envelopes = mocks.sendCommand.mock.calls.map(([envelope]) => envelope);
+    expect(envelopes).toHaveLength(2);
+    expect(envelopes[0]).toMatchObject({ type: "switchModelConfig" });
+    expect(envelopes[1]).toMatchObject({ type: "sendText" });
     expect(mocks.zcodeSessionService.updateProviderRegistry).not.toHaveBeenCalled();
     await act(async () => {
       root.unmount();
@@ -3138,7 +3344,9 @@ describe("SessionPane model switch recovery", () => {
       optimisticCommands: [],
       loadingOlder: false,
     };
-    mocks.sendCommand.mockResolvedValue(undefined);
+    mocks.sendCommand.mockImplementation(async (envelope: CommandEnvelope) =>
+      ackFor(envelope, { status: "accepted" }),
+    );
 
     const root = await renderPane();
 
@@ -3153,7 +3361,11 @@ describe("SessionPane model switch recovery", () => {
       await flushMicrotasks();
     });
 
-    expect(mocks.sendCommand).not.toHaveBeenCalled();
+    expect(mocks.sendCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.sendCommand.mock.calls[0]?.[0]).toMatchObject({
+      type: "switchModelConfig",
+      payload: { provider: "alternate-provider", model: "deepseek-v4-pro" },
+    });
     expect(mocks.toast).toHaveBeenCalledWith(
       "已从 Primary Coding Plan/deepseek-v4-flash 切换至 Alternate API/deepseek-v4-pro",
     );

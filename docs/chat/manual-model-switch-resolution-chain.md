@@ -6,6 +6,12 @@
 > 同步和 `runtimeModel` 恢复不再是当前实现。当前候选由目标 Environment 的 Model Selection View
 > 提供，切换后由同一 Environment 的 Registry/ModelFactory 创建 Active Model。当前设计见
 > `docs/working-memory/provider-refactor/design/`。
+>
+> 2026-10-27：桌面 V4 已绑定 Session 的显式模型/思考选择重新即时提交 `switchModelConfig`
+> （仅影响后续 Turn；当前 Turn 保持冻结），未绑定草稿仍只保留 intent。当前规则以
+> [Composer 仅持久化文字草稿](../../ui/composer-text-draft-persistence.md) 的
+> 「已绑定会话的显式模型选择」章节为准；本文下方关于 toolbar 直接派发和偏好两阶段确认的
+> UI 描述不是当前实现。
 
 本文描述 V4 conversation 主链路中的当前实现。旧 `ChatInputToolbar`、`useToolbarModelChange`、
 `session/setModel` 和 task stream 链路已删除，不再作为实现依据。

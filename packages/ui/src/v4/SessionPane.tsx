@@ -270,7 +270,10 @@ import {
 } from "@/v4/pluginReferenceIconProjection.js";
 import { shouldResyncForStaleAuthority } from "@/v4/staleAuthorityRecovery.js";
 import { createCommandEnvelope } from "@/v4/commandFactory.js";
-import { createConfigCommandBarrier } from "@/v4/configCommandBarrier.js";
+import {
+  createConfigCommandBarrier,
+  createLatestConfigCommandScheduler,
+} from "@/v4/configCommandBarrier.js";
 import { recordV4CommandAck } from "@/v4/commandAckObservability.js";
 import { pendingCommandRegistry } from "@/v4/pendingCommandRegistry.js";
 import type {
@@ -480,6 +483,12 @@ function toComposerUiError(
     ...(sessionId ? { taskId: sessionId } : {}),
   };
 }
+
+type ConfigCasDispatcher = (
+  type: CommandType,
+  payload: Record<string, unknown>,
+  options?: { initialBaseRevision?: number; targetSessionId?: string },
+) => Promise<CommandAck | null>;
 
 function submissionConfigFromCommand(
   type: CommandType,
@@ -1665,6 +1674,14 @@ export function SessionPane({
   const composerBindingRef = useRef({ sessionId, workspaceKey });
   composerBindingRef.current = { sessionId, workspaceKey };
   const configCommandBarrier = useMemo(() => createConfigCommandBarrier(), []);
+  // 已绑定 Session 的显式选型走同一配置屏障：显示仍由 Composer draft 持有，但 CLI
+  // Session Selection 在点击时同步提交，避免自动命名等独立命令读到切换前的模型。
+  const modelConfigScheduler = useMemo(
+    () => createLatestConfigCommandScheduler<CommandAck | null>(configCommandBarrier),
+    // 每个 Session 独立合并未开始的选型；切页后旧 session 的点击不能和新 session 合并。
+    [configCommandBarrier, sessionId],
+  );
+  const dispatchConfigCasRef = useRef<ConfigCasDispatcher | null>(null);
   // 软审核不是阻塞交互，不能隐藏 Composer 或禁用选区引用。
   const blockingInteractionId =
     snapshot?.pendingInteractions.find(
@@ -3853,8 +3870,10 @@ export function SessionPane({
           ? useZCodeSessionStore.getState().getWorkspaceState(workspacePath, workspaceIdentity)
               .draftTaskGroupId
           : undefined;
-      // followupMode 仍通过 Session CAS 同步；模型和模式已封装进 Submission，不再
-      // 依赖“配置命令先到、sendText 后到”的跨命令时序。
+      // 显式模型选型已在点击时进入配置屏障；发送前 seal，保证已入队的模型/思考 CAS
+      // 一定排在 sendText 之前，发送之后再发生的点击进入新槽。followupMode 仍通过
+      // Session CAS 同步；模型和模式仍随 Submission 冻结提交。
+      modelConfigScheduler.seal();
       return configCommandBarrier.enqueue(async () => {
         try {
           return await dispatchSendTextAfterConfig(
@@ -3881,6 +3900,7 @@ export function SessionPane({
       createSubmissionFromComposer,
       dispatchSendTextAfterConfig,
       markDraftProviderNotReady,
+      modelConfigScheduler,
       sessionId,
       workspacePath,
       workspaceIdentity,
@@ -4334,10 +4354,41 @@ export function SessionPane({
     },
     [dispatchCommand, sessionId],
   );
+  dispatchConfigCasRef.current = dispatchConfigCas;
+  // 已绑定 Session 的显式选型：draft 立即显示，同时把后续 Session Selection 写入 CLI。
+  // 失败只保留 draft intent，不回滚输入框；下一次 Submission 仍携带同一选择。
+  const scheduleBoundModelSwitch = useCallback(
+    (selection: ModelSelection | undefined) => {
+      if (!sessionId || !selection?.providerId || !selection.modelId) return;
+      const targetSessionId = sessionId;
+      const payload = {
+        provider: selection.providerId,
+        model: selection.modelId,
+        thought: selection.options?.reasoningLevel ?? "",
+      };
+      void modelConfigScheduler
+        .schedule(() => {
+          const dispatch = dispatchConfigCasRef.current;
+          return dispatch
+            ? dispatch("switchModelConfig", payload, { targetSessionId })
+            : Promise.resolve(null);
+        })
+        .catch((error: unknown) => {
+          // dispatchConfigCas 已记录 rejected / transport 日志；这里只兜底它原样上抛的
+          // providerNotReady 等异常。失败不回滚 draft：下一次 Submission 仍携带同一选型。
+          logger.warn("[v4-pane] 显式模型选型提交失败", {
+            error: error instanceof Error ? error.message : String(error),
+            model: payload.model,
+            provider: payload.provider,
+          });
+        });
+    },
+    [modelConfigScheduler, sessionId],
+  );
   const ensureDraftPrewarmConfigBeforeSend = useCallback(
     async (targetSessionId: string) => {
-      // followupMode 仍是 Session 行为设置；模型与模式属于本次 Submission，随 sendText
-      // 原子提交，不能在发送前通过 CAS 改写共享 Session。
+      // 显式模型已在点击时提交；这里只同步 followupMode，模型与模式仍随 sendText 冻结提交，
+      // 不在发送前再写共享 Session。
       const desiredConfig = buildDraftCreateConfigPayload(
         draftConfigRef.current,
         appFollowupMode,
@@ -4426,15 +4477,17 @@ export function SessionPane({
         branch: "composer-submission-intent",
       });
       handleDraftSelectModel(resolvedProvider, model, reasoningLevel);
+      scheduleBoundModelSwitch(draftConfigRef.current.modelSelection);
     },
-    [activeHighspeedCard, draftConfigRef, handleDraftSelectModel, intl],
+    [activeHighspeedCard, draftConfigRef, handleDraftSelectModel, intl, scheduleBoundModelSwitch],
   );
 
   const handleSelectThought = useCallback(
     (thought: string, _modelContext: { provider: string; model: string }) => {
       handleDraftSelectThought(thought);
+      scheduleBoundModelSwitch(draftConfigRef.current.modelSelection);
     },
-    [handleDraftSelectThought],
+    [draftConfigRef, handleDraftSelectThought, scheduleBoundModelSwitch],
   );
 
   const handleRecoverCustomModelSelection = useCallback(
@@ -4499,6 +4552,7 @@ export function SessionPane({
           zcodeSessionService,
         });
         handleDraftSelectModel(modelSelection.providerId, modelSelection.modelId);
+        scheduleBoundModelSwitch(draftConfigRef.current.modelSelection);
         store.setConfigOptions(workspacePath, prepareResult.configOptions ?? [], workspaceIdentity);
         store.setConfigOptionsStatus(workspacePath, "ready", workspaceIdentity);
         store.setSlashCommands(workspacePath, prepareResult.slashCommands ?? [], workspaceIdentity);
@@ -4521,7 +4575,9 @@ export function SessionPane({
     },
     [
       provider,
+      draftConfigRef,
       handleDraftSelectModel,
+      scheduleBoundModelSwitch,
       sessionId,
       showModelChangeNotice,
       workspaceIdentity,
@@ -4531,7 +4587,7 @@ export function SessionPane({
     ],
   );
 
-  // 模式与模型一样属于下一次 Submission；选择时只更新 Composer。
+  // 模式仍属于下一次 Submission；模型已在已绑定 Session 上即时提交后续选型。
   const handleSwitchMode = useCallback(
     (mode: string) => {
       handleDraftSwitchMode(mode);

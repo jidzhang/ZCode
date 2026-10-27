@@ -51,6 +51,7 @@ goto :prep
 call pnpm --version >nul 2>&1
 if errorlevel 1 goto :no_pnpm
 
+call pnpm install
 rem Fresh clone bootstrap: build-zcode consumes root packages\* dist outputs that
 rem only "pnpm run typecheck" (tsc -b) produces. One-time; incremental afterwards.
 rem Probe several dists so a partially built tree still triggers the bootstrap.

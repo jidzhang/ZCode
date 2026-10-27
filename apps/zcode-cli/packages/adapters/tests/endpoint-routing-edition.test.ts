@@ -36,7 +36,9 @@ describe("direct-connect endpoint routing edition", () => {
     expect(network).not.toHaveBeenCalled();
   });
 
-  it.each(["string", "URL", "Request"])("sends %s input to the original endpoint", async (kind) => {
+  // 组合行为只验证一点：真实 edition 端口经公共 wrapper 后请求发往原始地址。
+  // string/URL/Request 三种输入形态的归一化已由 provider-endpoint-routing-fetch.test.ts 覆盖。
+  it("sends the composed request to the original endpoint", async () => {
     const source = "https://open.bigmodel.cn/api/anthropic/v1/messages?stream=true";
     const init = {
       method: "POST",
@@ -52,9 +54,7 @@ describe("direct-connect endpoint routing edition", () => {
         return response;
       },
     });
-    const input =
-      kind === "Request" ? new Request(source, init) : kind === "URL" ? new URL(source) : source;
-    expect(await transport(input, kind === "Request" ? undefined : init)).toBe(response);
+    expect(await transport(source, init)).toBe(response);
     expect(sent?.url).toBe(source);
     expect(sent?.method).toBe("POST");
     expect(sent?.headers.get("authorization")).toBe("Bearer example");

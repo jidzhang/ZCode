@@ -28,7 +28,7 @@ if exist "%~dp0one-click-build-local.env.bat" (
   echo.
 )
 
-if "%BUILD_PROXY%"=="" goto :direct
+if "%BUILD_PROXY%"=="" goto :direct_env
 
 set HTTPS_PROXY=%BUILD_PROXY%
 set HTTP_PROXY=%BUILD_PROXY%
@@ -36,36 +36,32 @@ set ELECTRON_GET_USE_PROXY=1
 set GLOBAL_AGENT_HTTPS_PROXY=%BUILD_PROXY%
 set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
+echo Env ready (proxy=%BUILD_PROXY%). First run downloads electron 41.0.3 + NSIS +
+echo winCodeSign via the mirror (about 10 extra minutes); later runs reuse cache.
+goto :prep
 
+:direct_env
+echo Direct-connection mode: default download sources ^(github^) will be used.
+goto :prep
+
+:prep
 call pnpm --version >nul 2>&1
 if errorlevel 1 goto :no_pnpm
 
 rem Fresh clone bootstrap: build-zcode consumes root packages\* dist outputs that
 rem only "pnpm run typecheck" (tsc -b) produces. One-time; incremental afterwards.
-if not exist "packages\shared\dist" (
-  echo Fresh clone detected: building workspace packages via pnpm run typecheck ...
-  call pnpm run typecheck
-  if errorlevel 1 goto :fail_typecheck
-)
+rem Probe several dists so a partially built tree still triggers the bootstrap.
+if not exist "packages\shared\dist" goto :bootstrap_typecheck
+if not exist "packages\client\dist" goto :bootstrap_typecheck
+if not exist "packages\ui\dist" goto :bootstrap_typecheck
+goto :run
 
-echo Env ready (proxy=%BUILD_PROXY%). First run downloads electron 41.0.3 + NSIS +
-echo winCodeSign via the mirror (about 10 extra minutes); later runs reuse cache.
-echo Starting one-click-build-github.bat ...
-echo.
-call one-click-build-github.bat
-goto :end
+:bootstrap_typecheck
+echo Fresh or partially built clone detected: building workspace packages via pnpm run typecheck ...
+call pnpm run typecheck
+if errorlevel 1 goto :fail_typecheck
 
-:direct
-call pnpm --version >nul 2>&1
-if errorlevel 1 goto :no_pnpm
-
-if not exist "packages\shared\dist" (
-  echo Fresh clone detected: building workspace packages via pnpm run typecheck ...
-  call pnpm run typecheck
-  if errorlevel 1 goto :fail_typecheck
-)
-
-echo Direct-connection mode: default download sources ^(github^) will be used.
+:run
 echo Starting one-click-build-github.bat ...
 echo.
 call one-click-build-github.bat

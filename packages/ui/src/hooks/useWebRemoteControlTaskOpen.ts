@@ -111,7 +111,12 @@ export async function openWebRemoteControlTask({
         : {}),
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    // bridge requester 拒绝的是保留 reason 的普通对象；直接 String 会丢掉错误文本，
+    // 用户侧只能看到 "[object Object]"（V1 恢复时曾丢失该提取，MRO01 用例守住此行为）。
+    const message =
+      err && typeof err === "object" && "message" in err && typeof err.message === "string"
+        ? err.message
+        : String(err);
     logger.error("[useWebRemoteControlTaskOpen] 打开远程 task 失败", {
       error: message,
       taskId: task.taskId,

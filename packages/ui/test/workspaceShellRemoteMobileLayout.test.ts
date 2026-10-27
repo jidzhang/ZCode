@@ -211,46 +211,38 @@ vi.mock("@/WindowsCaptionMenuButton.js", () => ({
 }));
 
 vi.mock("@/WebRemoteControlMobileShell.js", () => ({
+  // V1 恢复后的 MobileShell 不再接收 children / isMobileViewport / renderTaskHome：
+  // 手机首页由组件内部的 WebRemoteControlMobileTaskHome 承担（与桌面 WorkspaceSidebar
+  // 分离），这里用 mobile-task-home 标记占位，保持其余 chat/overlay 槽位与真实契约一致。
   WebRemoteControlMobileShell: ({
-    children,
-    isMobileViewport = true,
     chatContent,
-    renderTaskHome,
     chatOverlay,
     isSidePaneOpen,
     renderChatHeader,
     sidePaneContent,
   }: {
-    children?: ReactNode;
-    isMobileViewport?: boolean;
     chatContent?: ReactNode;
-    renderTaskHome?: (options: {
-      navigateToChat(): void;
-      setSwitching(switching: boolean): void;
-    }) => ReactNode;
     chatOverlay?: ReactNode;
     isSidePaneOpen?: boolean;
-    renderChatHeader?: () => ReactNode;
+    renderChatHeader?: ReactNode | (() => ReactNode);
     sidePaneContent?: ReactNode;
   }) =>
-    !isMobileViewport
-      ? children
-      : createElement(
-          "div",
-          {
-            "data-mobile-side-pane-open": isSidePaneOpen ? "true" : "false",
-            "data-testid": "web-remote-mobile-shell",
-          },
-          renderChatHeader?.(),
-          renderTaskHome?.({ navigateToChat: vi.fn(), setSwitching: vi.fn() }),
-          createElement("div", { "data-testid": "mobile-chat-content" }, chatContent),
-          chatOverlay
-            ? createElement("div", { "data-testid": "mobile-chat-overlay-prop" }, chatOverlay)
-            : null,
-          sidePaneContent
-            ? createElement("div", { "data-testid": "mobile-side-pane-overlay" }, sidePaneContent)
-            : null,
-        ),
+    createElement(
+      "div",
+      {
+        "data-mobile-side-pane-open": isSidePaneOpen ? "true" : "false",
+        "data-testid": "web-remote-mobile-shell",
+      },
+      typeof renderChatHeader === "function" ? renderChatHeader() : renderChatHeader,
+      createElement("div", { "data-testid": "mobile-task-home" }),
+      createElement("div", { "data-testid": "mobile-chat-content" }, chatContent),
+      chatOverlay
+        ? createElement("div", { "data-testid": "mobile-chat-overlay-prop" }, chatOverlay)
+        : null,
+      sidePaneContent
+        ? createElement("div", { "data-testid": "mobile-side-pane-overlay" }, sidePaneContent)
+        : null,
+    ),
 }));
 
 const capturedWorkspaceSidebarProps = vi.hoisted(() => ({
@@ -690,7 +682,10 @@ describe("WorkspaceShellLayout Web remote control mobile layout", () => {
     });
 
     expect(html).toContain('data-testid="web-remote-mobile-shell"');
-    expect(html).toContain('data-testid="workspace-sidebar"');
+    // V1 手机首页由 WebRemoteControlMobileTaskHome 承担，桌面 WorkspaceSidebar
+    // 不再进入移动分支（V1 恢复 9519fd2d 的设计）。
+    expect(html).toContain('data-testid="mobile-task-home"');
+    expect(html).not.toContain('data-testid="workspace-sidebar"');
 
     vi.unstubAllGlobals();
   });
@@ -1044,7 +1039,8 @@ it("mounts the same project sidebar in the real narrow mobile branch", async () 
       },
     });
     expect(html).toContain('data-testid="web-remote-mobile-shell"');
-    expect(html).toContain('data-testid="workspace-sidebar"');
+    expect(html).toContain('data-testid="mobile-task-home"');
+    expect(html).not.toContain('data-testid="workspace-sidebar"');
   } finally {
     vi.unstubAllGlobals();
   }

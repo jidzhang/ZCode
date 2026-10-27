@@ -111,5 +111,8 @@ it("未带首次升级标记的既有入口不执行排序修复，同路径本�
     ...before,
     projectKey(online.projects.find((p) => p.name === "remote")!),
   ]);
-  expect(names(hook.result.current.sort(online.projects))).toEqual(["a", "b", "remote"]);
+  // 未建立手动序时 sort() 不再读 order，而是按最近任务活动排序；本夹具没有任务、
+  // updatedAt 全为 1，退化为按 position 稳定排序（a 与 remote 同为 0，保持输入顺序）。
+  // 这里断言的是"首次升级修复未介入"后的默认展示顺序。
+  expect(names(hook.result.current.sort(online.projects))).toEqual(["a", "remote", "b"]);
 });

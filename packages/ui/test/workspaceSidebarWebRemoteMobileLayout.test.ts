@@ -220,35 +220,6 @@ describe("virtual-project sidebar on desktop and mobile", () => {
     fireEvent.click(screen.getByTestId("virtual-project-new-task"));
     expect(onCreateTask).toHaveBeenNthCalledWith(2, { projectId: null, taskGroupId: null });
   });
-  it("shows the Relay V2 device header only when the remote switcher provides device navigation", async () => {
-    const chooseOtherDevice = vi.fn();
-    const switcher = {
-      listWorkspaces: vi.fn(),
-      switchWorkspace: vi.fn(),
-      deviceNavigation: { deviceName: "Mac", chooseOtherDevice },
-    } as unknown as NonNullable<ProjectSidebarProps["webRemoteControlWorkspaceSwitcher"]>;
-    const { unmount } = render(
-      createElement(
-        Sidebar,
-        props({ isWebRemoteControl: true, webRemoteControlWorkspaceSwitcher: switcher }),
-      ),
-    );
-    const device = screen.getByRole("button", { name: "webRemoteControl.switchDevice" });
-    const navigation = screen.getByTestId("sidebar-primary-navigation");
-    // 设备行是导航首行：位于“新建任务”之上。
-    expect(navigation.firstElementChild).toBe(device);
-    expect(
-      device.compareDocumentPosition(screen.getByText("New task")) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    fireEvent.click(device);
-    expect(chooseOtherDevice).toHaveBeenCalledOnce();
-    unmount();
-
-    render(createElement(Sidebar, props({ isWebRemoteControl: true })));
-    await waitFor(() => expect(screen.queryByText("common.loading")).toBeNull());
-    expect(screen.queryByRole("button", { name: "webRemoteControl.switchDevice" })).toBeNull();
-  });
   it("routes a retained remote project's new task to that Host", async () => {
     remoteHost(true);
     const onCreateTask = vi.fn();

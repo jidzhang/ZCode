@@ -376,8 +376,11 @@ export function buildZCodeEndpointUrls(
     origin: normalizedOrigin,
     apiBaseUrl: `${normalizedOrigin}/api/v1`,
     remoteUrl: `${normalizedOrigin}/remote/${remoteVersion}`,
-    webRemoteCallbackUrl: `${normalizedOrigin}/web-remote/callback`,
+    // 仅 packages/web（V2 手机页）消费；桌面登录走 zcode://oauth/callback，不读该字段。
+    // V1 恢复只改桌面链路，这里保上游 V2 值，避免 fork 的 web 端与上游合并基线分叉。
+    webRemoteCallbackUrl: `${normalizedOrigin}/remote/v4`,
     webShareCallbackUrl: `${normalizedOrigin}/cn/share/callback`,
+    // 桌面 webRemoteControlManager 直接使用该值建立 V1 relay 连接（wss://zcode.z.ai/ws）。
     relayWsUrl: `${wsOrigin}/ws`,
     zcodePlanOpenAiBaseUrl: `${normalizedOrigin}/api/v1/zcode-plan`,
     zcodePlanAnthropicBaseUrl: `${normalizedOrigin}/api/v1/zcode-plan/anthropic`,

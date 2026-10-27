@@ -70,9 +70,11 @@ describe("zcodeEndpoint", () => {
       origin: "http://localhost:3030",
       apiBaseUrl: "http://localhost:3030/api/v1",
       remoteUrl: "http://localhost:3030/remote/v3",
+      // 仅 packages/web（V2 手机页）消费该字段，保持上游值；fork 桌面链路的
+      // V1 差异体现在 relayWsUrl（见下）。
       webRemoteCallbackUrl: "http://localhost:3030/remote/v4",
       webShareCallbackUrl: "http://localhost:3030/cn/share/callback",
-      relayWsUrl: "ws://localhost:3030/api/v1/remote/ws2",
+      relayWsUrl: "ws://localhost:3030/ws",
       zcodePlanOpenAiBaseUrl: "http://localhost:3030/api/v1/zcode-plan",
       zcodePlanAnthropicBaseUrl: "http://localhost:3030/api/v1/zcode-plan/anthropic",
       zcodePlanBillingCurrentUrl: "http://localhost:3030/api/v1/zcode-plan/billing/current",
@@ -134,12 +136,14 @@ describe("zcodeEndpoint", () => {
     ).toBe("https://zcode.z.ai/api/v1/zcode-plan/anthropic");
   });
 
-  it("derives V2 relay from each endpoint origin", () => {
+  // V1 免登录配对只认标准 test origin 走 test relay，其余来源落到默认 relay；
+  // 上游 V2 的按 origin 拼 /api/v1/remote/ws2 已随 V1 恢复撤销。
+  it("uses the test relay only for the standard test endpoint", () => {
     expect(
       resolveWebRemoteControlRelayWsUrl({
         endpointOrigin: TEST_ZCODE_ENDPOINT_ORIGIN,
       }),
-    ).toBe("wss://zcode.z.ai/api/v1/remote/ws2");
+    ).toBe("wss://zcode.z.ai/ws");
     expect(
       resolveWebRemoteControlRelayWsUrl({
         endpointOrigin: DEFAULT_ZCODE_ENDPOINT_ORIGIN,
@@ -149,7 +153,7 @@ describe("zcodeEndpoint", () => {
       resolveWebRemoteControlRelayWsUrl({
         endpointOrigin: "http://localhost:3030",
       }),
-    ).toBe("ws://localhost:3030/api/v1/remote/ws2");
+    ).toBe(DEFAULT_WEB_REMOTE_CONTROL_RELAY_WS_URL);
   });
 
   it("allows an explicit web remote control relay url override", () => {
@@ -216,9 +220,7 @@ describe("zcodeEndpoint", () => {
     expect(buildRuntimeZaiBusinessUrl({ ZCODE_ENV: "test" }, "/api/auth/z/login")).toBe(
       "https://api.z.ai/api/auth/z/login",
     );
-    expect(buildBigModelApiUrl({ ZCODE_ENV: "test" }, "/login")).toBe(
-      "https://bigmodel.cn/login",
-    );
+    expect(buildBigModelApiUrl({ ZCODE_ENV: "test" }, "/login")).toBe("https://bigmodel.cn/login");
   });
 
   it("keeps environment-scoped endpoint overrides centralized", () => {

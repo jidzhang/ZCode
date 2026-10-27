@@ -54,10 +54,13 @@ it("SBV04：两个消费者共用目录，视图切换不改变手动项目顺�
     ),
   );
   expect(read).toHaveBeenCalledOnce();
-  expect(screen.getByTestId("composer").textContent).toBe("pin,one,two");
+  // 默认（未拖拽）按项目内最近任务活动排序：two 有 updatedAt=10 的任务，one 无任务
+  // 以自身 updatedAt=1 兜底，故 two 在 one 之前；pin 置顶仍最前。本用例断言的是
+  // 两个消费者共用同一目录、切换视图后顺序保持一致。
+  expect(screen.getByTestId("composer").textContent).toBe("pin,two,one");
   fireEvent.click(screen.getByTestId("sidebar"));
-  expect(screen.getByTestId("composer").textContent).toBe("pin,one,two");
-  expect(screen.getByTestId("sidebar").textContent).toBe("pin,one,two");
+  expect(screen.getByTestId("composer").textContent).toBe("pin,two,one");
+  expect(screen.getByTestId("sidebar").textContent).toBe("pin,two,one");
 });
 
 it("父级草稿更新不广播等价目录，项目改名仍更新消费者", () => {

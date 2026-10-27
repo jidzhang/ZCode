@@ -62,7 +62,8 @@ vi.mock("@/hooks/useWebRemoteControlStatus.js", () => ({
   useWebRemoteControlStatus: () => ({ status: "idle" }),
 }));
 
-vi.mock("@/web-remote-control/index.js", () => ({
+// V1 恢复后弹窗组件位于 @/WebRemoteControlDialog.js（V2 目录已随 9519fd2d 删除）。
+vi.mock("@/WebRemoteControlDialog.js", () => ({
   WebRemoteControlDialog: ({
     initialTaskId,
     remoteSessionId,
@@ -87,7 +88,12 @@ async function renderTriggerWithEnv(
   },
 ) {
   vi.resetModules();
-  vi.doMock("@zcode/shared", () => ({ ZCODE_ENV: env }));
+  // 组件树（BotsDialog 等）还会从 @zcode/shared 取 BOT_BIND_CODE_TTL_MS 等运行时
+  // 导出，整模块替换会丢导出；只覆盖 ZCODE_ENV，其余走真实实现。
+  vi.doMock("@zcode/shared", async (importOriginal) => ({
+    ...((await importOriginal()) as Record<string, unknown>),
+    ZCODE_ENV: env,
+  }));
 
   const { WorkspaceWebRemoteControlTrigger } =
     await import("../src/WorkspaceWebRemoteControlTrigger.js");

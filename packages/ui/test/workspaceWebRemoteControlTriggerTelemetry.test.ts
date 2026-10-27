@@ -45,7 +45,9 @@ vi.mock("@/hooks/useWebRemoteControlStatus.js", () => ({
   useWebRemoteControlStatus: () => ({ status: "idle" }),
 }));
 
-vi.mock("@/web-remote-control/index.js", () => ({
+// V1 恢复后弹窗组件位于 @/WebRemoteControlDialog.js（V2 目录已随 9519fd2d 删除）；
+// 遥测用例只关心入口点击上报，弹窗整树 mock 掉，避免拉入 Platform/Service Provider。
+vi.mock("@/WebRemoteControlDialog.js", () => ({
   WebRemoteControlDialog: () => null,
 }));
 

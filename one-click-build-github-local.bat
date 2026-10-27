@@ -19,14 +19,17 @@ setlocal
 cd /d %~dp0
 
 set "BUILD_PROXY="
-if exist "%~dp0one-click-build-local.env.bat" (
-  call "%~dp0one-click-build-local.env.bat"
-) else (
-  echo one-click-build-local.env.bat not found - direct-connection mode
-  echo ^(no proxy, default download sources^). Need a proxy? Copy
-  echo one-click-build-local.env.example.bat and fill in BUILD_PROXY.
-  echo.
-)
+if not exist "%~dp0one-click-build-local.env.bat" goto :no_env
+call "%~dp0one-click-build-local.env.bat"
+goto :after_env
+
+:no_env
+echo one-click-build-local.env.bat not found - direct-connection mode
+echo ^(no proxy, default download sources^). Need a proxy? Copy
+echo one-click-build-local.env.example.bat and fill in BUILD_PROXY.
+echo.
+
+:after_env
 
 if "%BUILD_PROXY%"=="" goto :direct_env
 
@@ -65,7 +68,9 @@ if errorlevel 1 goto :fail_typecheck
 echo Starting one-click-build-github.bat ...
 echo.
 call one-click-build-github.bat
-goto :end
+rem The child ends with PAUSE so a human can read the result. Return here only
+rem once: do not fall through to any build label after the keypress.
+exit /b %errorlevel%
 
 :no_pnpm
 echo pnpm not found in PATH. Install it manually first:

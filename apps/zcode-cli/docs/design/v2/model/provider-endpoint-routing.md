@@ -29,6 +29,23 @@ bootstrap process registry（endpoint origin + network policy）
 导出只替换该目录，不改公共源码。动态实现的专属测试显式排除，公共 fetch 与静态实现测试两版都保留。
 公共工厂不向上暴露 snapshot、刷新预算或实现 class。网络客户端和来源标识以依赖传入，静态实现不调用它们。
 
+### 本仓库（fork）装配的 edition：直连
+
+本仓库面向自带 Provider API Key 的直连场景，部署网络可能整体封禁 z.ai 域名。静态/动态网关实现
+会把 `open.bigmodel.cn`、`api.z.ai` 的模型请求改写到 ZCode 官方网关（`/api/v1/ultra*`），该路径
+服务于官方套餐管控；API Key 用户既不需要该管控，也会因网关域名不可达而在请求发出前失败
+（2026-10-27 排查：模型请求 3-13ms 内收到代理 403，被归类为 `auth_failed`，见
+`official-coding-plan-gateway.ts` 的静态路由表）。因此本仓库的 edition 固定返回不路由：
+
+- `resolve` 对任何 URL 一律返回 `routed: false` 与原 URL，不发起网络请求、不读取 JWT 与来源标识；
+- `bootstrap` 接线、公共 fetch wrapper、进程 registry 契约保持不变；
+- 需要官方网关时，把 edition 目录换回 `createStaticProviderEndpointRoutingPort` 装配即可，
+  公共契约与测试不受影响。
+
+| Case    | Setup / Action                                        | Assertions                                       |
+| ------- | ----------------------------------------------------- | ------------------------------------------------ |
+| PER-031 | 两个官方端点、第三方 URL、query 与末尾斜杠经默认 edition | 一律 `routed: false`，URL 原样，零网络与凭据访问 |
+
 静态实现保持既有开源网关行为：
 
 | 精确匹配的 HTTPS 端点                        | 当前 runtime ZCode origin 下的目标路径    |

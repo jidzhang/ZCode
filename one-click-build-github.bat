@@ -9,6 +9,8 @@ rem Self-hosted update channel: manual check hits own Releases;
 rem auto check additionally needs auto-download ON in settings.
 set ZCODE_UPDATE_CHANNEL=github
 if "%ZCODE_UPDATE_GITHUB_REPO%"=="" set ZCODE_UPDATE_GITHUB_REPO=jidzhang/ZCode
+rem Turborepo phones home to telemetry.vercel.com after each run; keep builds offline-clean.
+set TURBO_TELEMETRY_DISABLED=1
 rem NOTE: pnpm on Windows is pnpm.cmd, must use CALL or the script never returns here
 call pnpm run build:zcode --base-url http://localhost/zcode/ %*
 if errorlevel 1 goto :fail

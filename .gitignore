@@ -98,3 +98,6 @@ LOCAL-*.md
 # wechat-channel 本地凭据（勿提交）
 packages/wechat-channel/.env.local
 .scratch/
+
+# one-click 打包本机代理配置(勿提交真实地址)
+one-click-build-local.env.bat

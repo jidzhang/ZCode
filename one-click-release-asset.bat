@@ -19,6 +19,8 @@ set ZCODE_PREVIEW_IDENTITY=0
 rem Self-hosted update channel (must match the first-platform build).
 set ZCODE_UPDATE_CHANNEL=github
 if "%ZCODE_UPDATE_GITHUB_REPO%"=="" set ZCODE_UPDATE_GITHUB_REPO=jidzhang/ZCode
+rem Turborepo phones home to telemetry.vercel.com after each run; keep builds offline-clean.
+set TURBO_TELEMETRY_DISABLED=1
 
 where gh >nul 2>&1
 if errorlevel 1 goto :no_gh

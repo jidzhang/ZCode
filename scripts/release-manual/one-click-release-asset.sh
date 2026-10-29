@@ -7,7 +7,7 @@
 # Publishing machine needs: gh auth login (once), same env below.
 # Upload goes through gh CLI (honors HTTPS_PROXY for GitHub); build itself stays offline.
 set -u
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/../.."
 
 if [ -z "${1:-}" ] || [ -z "${2:-}" ]; then
   echo "Usage: one-click-release-asset.sh <win|linux|mac> <x64|arm64>"

@@ -1,6 +1,6 @@
 @echo off
 rem GitHub-channel build (no publish): test self-hosted update channel locally.
-rem Daily driver stays on one-click-build-full.bat (official channel, update-free).
+rem This is the standard local build entry; releases go through GitHub Actions CI.
 cd /d %~dp0
 rem Production identity: installer overwrites official build (ZCode, no Preview/_TEST)
 set ZCODE_ENV=production
@@ -18,7 +18,7 @@ node packages/desktop/scripts/bundle.mjs --os win --arch x64 %*
 if errorlevel 1 goto :fail
 echo.
 echo DONE. tar.gz in dist\zcode\releases\ , installer in packages\desktop\dist\
-echo This is a github-channel build. Publish it with one-click-release.bat when ready.
+echo This is a github-channel build. Publish via GitHub Actions (push the version tag).
 goto :end
 :fail
 echo.

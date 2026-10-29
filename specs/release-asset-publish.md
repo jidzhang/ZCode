@@ -2,7 +2,7 @@
 
 ## 背景
 
-`one-click-release-asset.bat/.sh <os> <arch>` 用于向**已存在**的 GitHub Release 补发一个平台/架构的桌面安装包。
+`scripts/release-manual/one-click-release-asset.bat/.sh <os> <arch>` 用于向**已存在**的 GitHub Release 补发一个平台/架构的桌面安装包。
 原实现把 `--publish always` 透传给 electron-builder 的 GitHub publisher，存在两个已确认缺陷：
 
 1. **静默漏传**：electron-builder 默认以 draft 语义发布；当目标 tag 的 Release 已是 published 状态时，
@@ -51,7 +51,7 @@
 
 - **上传/合并/校验唯一所有者**：`publish-github-release-asset.mjs`（IO 编排）+
   `release-asset-publish-core.mjs`（纯函数：channel 文件名、yml 生成/合并、资产校验计划）。electron-builder
-  不再承担发布职责；`one-click-release-asset.bat/.sh` 只做环境预检（gh 认证、pnpm 可用性）与调用。
+  不再承担发布职责；`scripts/release-manual/one-click-release-asset.bat/.sh` 只做环境预检（gh 认证、pnpm 可用性）与调用。
 - 纯函数禁止 IO；gh 调用只出现在 glue 层。
 - YAML 解析/序列化使用工作区内已有的 js-yaml（electron-updater 的传递依赖，经 createRequire 解析），
   dump 必须 `lineWidth: -1` 防止 base64 sha512 被折叠。

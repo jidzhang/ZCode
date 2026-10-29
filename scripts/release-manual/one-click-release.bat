@@ -3,7 +3,7 @@ rem One-click self release: tag + push + bundle + publish to own GitHub Releases
 rem Version is code-driven (root package.json); never hand-written.
 rem First release was manual; this bat is for later versions.
 setlocal
-cd /d %~dp0
+cd /d %~dp0..\..
 
 rem Production identity so the installer overwrites the official build.
 set ZCODE_ENV=production

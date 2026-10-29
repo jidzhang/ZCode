@@ -1,6 +1,6 @@
 @echo off
 rem SKIP-BUILD package: reuse compiled outputs, repackage tar.gz + NSIS installer
-cd /d %~dp0
+cd /d %~dp0..\..
 rem Production identity: installer overwrites official build (ZCode, no Preview/_TEST)
 set ZCODE_ENV=production
 set ZCODE_PREVIEW_IDENTITY=0

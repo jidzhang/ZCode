@@ -44,7 +44,7 @@
 
 - workflow 是纯编排层：构建、校验、上传、yml 合并的唯一所有者仍是
   `bundle.mjs` + `publish-github-release-asset.mjs`（语义见 [release-asset-publish.md](release-asset-publish.md)）。
-- `one-click-*.bat/.sh` 保留，作为 CI 失败/不可用时的本地补发与发布机路径，语义不变。
+- 本地脚本收编进 `scripts/release-manual/`（release/release-asset/skip-build），作为 CI 失败/不可用时的本地补发与发布机路径，语义不变；根目录只保留 github 通道的本地打包入口（one-click-build-github[-local].bat）。
 - tag/版本纪律不变：版本唯一来源是根 `package.json`，tag=`v{version}`；发布脚本的
   HEAD-on-tag 预检（`git describe --tags --exact-match`）在 CI 同样生效（tag 事件 checkout
   恰好位于 tag 上；`fetch-depth: 0`，仓库为快照式历史，体积代价可忽略）。

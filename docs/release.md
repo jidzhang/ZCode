@@ -61,11 +61,11 @@
    ```bat
    set HTTPS_PROXY=http://<代理地址>:<端口>
    set HTTP_PROXY=http://<代理地址>:<端口>
-   one-click-release-asset.bat win x64
-   one-click-release-asset.bat win arm64
+   scripts\release-manual\one-click-release-asset.bat win x64
+   scripts\release-manual\one-click-release-asset.bat win arm64
    ```
-   - macOS 发布机：`./one-click-release-asset.sh mac arm64`（或 `mac x64`）
-   - Linux 发布机：`./one-click-release-asset.sh linux arm64`（或 `linux x64`）
+   - macOS 发布机：`./scripts/release-manual/one-click-release-asset.sh mac arm64`（或 `mac x64`）
+   - Linux 发布机：`./scripts/release-manual/one-click-release-asset.sh linux arm64`（或 `linux x64`）
 5. **确认输出**：脚本输出 `DONE` 表示该平台资产已上传并通过"名称 + 字节数"逐项校验、
    channel yml 已正确合并。任何失败都会列出确切原因，修复后重跑同一条命令即可
    （重跑幂等：`--clobber` 覆盖同名资产，yml 按架构条目合并）。

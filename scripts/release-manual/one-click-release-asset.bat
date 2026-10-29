@@ -8,7 +8,7 @@ rem Tree must already be checked out at the release tag on this machine.
 rem Publishing machine needs: gh auth login (once), same env below.
 rem Upload goes through gh CLI (honors HTTPS_PROXY for GitHub); build itself stays offline.
 setlocal
-cd /d %~dp0
+cd /d %~dp0..\..
 
 if "%~1"=="" goto :usage
 if "%~2"=="" goto :usage

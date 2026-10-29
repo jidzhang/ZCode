@@ -11,15 +11,15 @@ vi.mock("@/v4/ConversationTurnRow.js", async () => {
     ConversationTurnRow: ({
       row,
       userInputStatus,
-      onSteerNow,
-      onRecallEditQueued,
-      onRevokeQueued,
+      pendingGuideActions,
     }: {
       row: { text: string; entityId?: string };
       userInputStatus?: string;
-      onSteerNow?: (queueItemId: string) => void;
-      onRecallEditQueued?: (queueItemId: string) => void | Promise<void>;
-      onRevokeQueued?: (queueItemId: string) => void;
+      pendingGuideActions?: {
+        steerNow: (id: string) => void;
+        recallEdit: (id: string) => void | Promise<void>;
+        revoke: (id: string) => void;
+      };
     }) =>
       React.createElement(
         "article",
@@ -28,7 +28,13 @@ vi.mock("@/v4/ConversationTurnRow.js", async () => {
         React.createElement("small", null, userInputStatus),
         React.createElement(
           "div",
-          { "data-passed-callbacks": [onSteerNow, onRecallEditQueued, onRevokeQueued].map((cb) => (cb ? "1" : "0")).join(",") },
+          {
+            "data-passed-callbacks": pendingGuideActions
+              ? ["steerNow", "recallEdit", "revoke"]
+                  .map((key) => (pendingGuideActions[key] ? "1" : "0"))
+                  .join(",")
+              : "0,0,0",
+          },
           row.entityId ?? "",
         ),
       ),
@@ -79,9 +85,7 @@ describe("ConversationPendingGuideList", () => {
           context: {} as never,
           items: [guide],
           turnId: "turn-1",
-          onSteerNow: steerNow,
-          onRecallEditQueued: recallEdit,
-          onRevokeQueued: revoke,
+          pendingGuideActions: { steerNow, recallEdit, revoke },
         }),
       ),
     );

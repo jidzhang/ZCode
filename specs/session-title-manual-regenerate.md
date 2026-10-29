@@ -33,12 +33,14 @@ UI 右键菜单「自动命名」
 ## core 语义（runtime.regenerateSessionTitle）
 
 守卫（与自动生成的差异用 **粗体**）：
+
 - 会话必须存在、非 child（parentSessionId）、taskType=interactive；否则 fault 拒绝。
 - **不检查** turnNumber / sessionTitleGenerationAttempted / titleSource=custom（显式动作，
   允许覆盖 custom 与已生成标题）。
 - 无可见真实用户消息（synthetic / model-only / 空）→ fault `session_title_no_input`。
 
 素材拼装（opencode 两档式）：
+
 - Original request = 首条可见真实用户消息文本，截 2000 字符。
 - Recent conversation = 其余可见 user 消息 + assistant 消息的 text parts（排除
   reasoning/tool/synthetic/ignored），每条截 600，整体保尾截断到 6000。
@@ -46,6 +48,7 @@ UI 右键菜单「自动命名」
 - 只有首条时退化为单条素材（等价现状自动生成，但不受 turn 0 限制）。
 
 写回：
+
 - `expectedTitleSources: ["default","first_input","generated","custom"]`（存储层允许覆盖
   custom；并发下被用户改名抢先则乐观锁拒绝，不覆盖）。
 - titleSource=generated，不写 titleMessageID（素材非单消息）。
@@ -68,3 +71,45 @@ UI 右键菜单「自动命名」
 - 自动重触发/结果导向守卫（被否方案 P1）。
 - 生成失败自动重试、生成后相似度拒收（P2/P3）——手动入口天然给了用户重试点。
 - 专用标题小模型降档（P4）。
+
+## 覆盖贯通：三层索引粘性与命令门（2026-10-29 补）
+
+初版只在 core 写回与 product-projection 两层放行了 custom 覆盖；下游三层仍按
+custom 粘性吞掉生成标题，且命令持有会话门阻塞同会话操作。两条补丁：
+
+### 1. manual_regenerate 覆盖必须贯通到宿主任务索引
+
+问题链（rename 后点「自动命名」→ 会话内标题更新、任务列表永远旧标题）：
+
+- CLI sessions-index 投影（sessions-index-projection.ts）的 custom 降级防御把
+  generated 新标题回退为旧 custom（该防御本意只挡冷恢复未水合的降级帧）；
+- 宿主 taskIndexRepo.applyCliFacts 的 SQL 粘性（`cli_title_source='custom' AND
+source<>'custom'` 保持旧值）丢弃新标题；
+- UI mapSessionSummaryToTaskMeta 的 titleOverridden 粘性随之永真。
+
+规则：
+
+- SessionTitleUpdated(reason=manual_regenerate) 经 v4-gateway fanOut 时，该次
+  sessions-index ingest 标记为覆盖：跳过投影的 custom 回退，并在 summary 上打
+  `titleOverriddenBy:"manual_regenerate"`（协议 additive optional 字段）随
+  delta/snapshot/reconcile 下发。
+- 宿主 task-facts 见该标记时以 `titleOverridesCustom` 调 applyCliFacts：SQL 粘性
+  与 title_overridden 置位对该次放行（title_overridden 清 0，UI 粘性随之解除）。
+- 标记是单帧信号：仅覆盖那一帧携带；后续事件重新派生的 summary 无标记，sqlite
+  已是 generated 后走常规路径。自动路径（无 reason）三层行为零变化。
+
+### 2. regenerateSessionTitle 不持有会话 admission 门
+
+问题：CommandInbox 的 per-session gate 持有到 handler settle；标题生成最长
+titleGeneration.timeoutMs（默认 60s），期间同 session 的 stop/send 等 v4 命令
+全部排队无 ACK。
+
+规则：regenerateSessionTitle 声明为非会话串行命令（command-inbox 的
+NON_SERIAL_SESSION_COMMANDS）：admission 记账（pin/去重/inFlight）完成后立即
+释放 session gate，执行与 settle 照旧。依据：标题 sidecar 与 turn 执行正交
+（独立模型上下文，不改 queue/turn 状态），无需与会话变更命令串行；同
+commandId 去重仍由 key gate + pinned.final 保证。
+
+验收补充：8. rename → 「自动命名」：任务列表标题在同一刷新内更新（sqlite title=
+新标题、cli_title_source=generated、title_overridden=0），重启后仍一致。9. regenerate 执行期间同 session 下发 stop/sendText：可立即 admission（不被
+标题生成阻塞）；标题命令自身的去重/终态语义不变。

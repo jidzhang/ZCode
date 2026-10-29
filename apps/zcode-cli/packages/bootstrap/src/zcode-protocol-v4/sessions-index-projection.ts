@@ -140,15 +140,23 @@ export class SessionsIndexProjection {
     readonly logEpoch: string,
   ) {}
 
-  /** 用某会话的最新 snapshot 更新其 summary；变化则返回 upsert delta，否则空。 */
+  /**
+   * 用某会话的最新 snapshot 更新其 summary；变化则返回 upsert delta，否则空。
+   * options.titleOverriddenBy=manual_regenerate：手动「自动命名」覆盖 custom 的那一帧，
+   * 跳过下方 custom 回退并在 summary 上打单帧标记，宿主 task-facts 据此放行索引粘性。
+   */
   upsertFromConversation(
     snapshot: ConversationSnapshot,
     extra: Omit<SessionSummaryDeriveExtra, "workspaceId">,
+    options?: { titleOverriddenBy?: "manual_regenerate" },
   ): SessionsIndexDelta[] {
     const summary = deriveSessionSummary(snapshot, {
       workspaceId: this.workspaceId,
       ...extra,
     });
+    if (options?.titleOverriddenBy) {
+      summary.titleOverriddenBy = options.titleOverriddenBy;
+    }
     const prev = this.summaries.get(summary.sessionId);
     // 降级防御（stored→live 切换窗口）：冷恢复的 live 投影在 hydration 补齐
     // meta 之前 title 为空、record 时间可能被 resume 重置——store 种子里的
@@ -157,7 +165,13 @@ export class SessionsIndexProjection {
       // sessions-index 读侧要区分“存储/协议物理标题”和“用户显式重命名”。
       // 冷恢复 live 投影在 hydration 补齐前可能只有 default/generated 标题；旧 seed 若已是
       // custom，不得被这类自动标题降级，否则侧边栏会把用户手动标题闪回生成标题。
-      if (prev.titleSource === "custom" && summary.titleSource !== "custom") {
+      // 例外：manual_regenerate 覆盖帧（summary 带 titleOverriddenBy）是用户显式操作，
+      // 不属于降级，必须放行——否则任务列表永远拿不到新标题（split-brain）。
+      if (
+        !summary.titleOverriddenBy &&
+        prev.titleSource === "custom" &&
+        summary.titleSource !== "custom"
+      ) {
         summary.title = prev.title;
         summary.titleSource = prev.titleSource;
       } else if (!summary.title && prev.title) {

@@ -173,19 +173,14 @@ export function useProjectSidebarPreferences(
           (a, b) => positions.get(projectKey(a))! - positions.get(projectKey(b))!,
         );
       },
-      reorder: (section: VirtualProject[], active: string, over: string) => {
+      reorder: (section: VirtualProject[], active: string, over: string) =>
         // 首次拖拽即视为建立手动序：以拖拽那一刻的显示顺序为起点（moveProjectOrder
         // 内部自带 reconcile），之后活动排序不再自动重排，尊重用户的显式排列意图。
-        setPreferences((previous) => {
-          const next = {
-            ...previous,
-            order: moveProjectOrder(previous.order, section.map(projectKey), active, over),
-            manualOrder: true,
-          };
-          write(KEY, next);
-          return next;
-        });
-      },
+        // 拖拽是离散事件，直接走 update 写 preferences.order（memo 已依赖 preferences）。
+        update({
+          order: moveProjectOrder(preferences.order, section.map(projectKey), active, over),
+          manualOrder: true,
+        }),
       view: preferences.view,
       manualOrder: preferences.manualOrder,
       setView,

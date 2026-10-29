@@ -63,6 +63,9 @@ export function createTaskFacts(options: {
         titleSource: fact.titleSource,
         lastOutcome: fact.lastOutcome,
         deleted: fact.deleted,
+        // 手动「自动命名」覆盖帧：放行 applyCliFacts 的 custom 粘性，
+        // 否则 rename 过的任务列表永远拿不到新标题（split-brain）。
+        titleOverridesCustom: fact.titleOverriddenBy === "manual_regenerate",
       });
       if (
         publish &&
@@ -97,7 +100,13 @@ export function createTaskFacts(options: {
         ...(summary.parentSessionId ? { forkedFromTaskId: summary.parentSessionId } : {}),
         ...(lastOutcome ? { status: lastOutcome === "error" ? "error" : "completed" } : {}),
       };
-      return store.applyCliFacts({ meta, titleSource: summary.titleSource, lastOutcome });
+      return store.applyCliFacts({
+        meta,
+        titleSource: summary.titleSource,
+        lastOutcome,
+        // ingest 直推（delta 路径）同样尊重覆盖帧标记。
+        titleOverridesCustom: summary.titleOverriddenBy === "manual_regenerate",
+      });
     },
     async removed(target) {
       refreshes.delete(key(target));

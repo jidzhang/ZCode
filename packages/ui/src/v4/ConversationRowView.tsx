@@ -258,6 +258,20 @@ export interface EditWorkspaceRewindAvailability {
   reason: "available" | "noFiles" | "reverted" | "running" | "unavailable";
 }
 
+/**
+ * 待插话（pending guide）消息行的三操作，由 SessionPane 注入、经 Timeline /
+ * PendingGuideList / TurnRow 整体透传；三个操作要么全有要么全无，收敛为单对象
+ * 让 all-or-none 不变量由结构保证（此前 3 个可选回调穿过 5 层组件靠约定维持）。
+ */
+export interface PendingGuideActions {
+  /** 「立即处理」（sendQueuedNow command：中断当前运行 + 该消息立即生效）。 */
+  steerNow: (queueItemId: string) => void;
+  /** 「修改」（撤回编辑：deleteQueueItem + 文本回填 composer）。 */
+  recallEdit: (queueItemId: string) => void | Promise<void>;
+  /** 「撤销」（deleteQueueItem：从队列移除该待插话，不影响当前运行）。 */
+  revoke: (queueItemId: string) => void;
+}
+
 export interface ConversationRowViewProps {
   row: ConversationRow;
   /** 渲染上下文（theme/codePreviewSettings/workspacePath）；宿主保证引用稳定。 */
@@ -272,14 +286,10 @@ export interface ConversationRowViewProps {
   onEdit?: UserInputEditHandler;
   editWorkspaceRewindAvailability?: EditWorkspaceRewindAvailability;
   /**
-   * 待插话行的「立即处理」入口（sendQueuedNow command：中断当前运行 + 该消息立即生效）。
-   * 仅 ConversationPendingGuideList 注入；普通 user 行不传即不渲染，防止已处理消息出现入口。
+   * 待插话行的三操作；仅 ConversationPendingGuideList 注入，普通 user 行不传即
+   * 不渲染（防止已处理消息出现入口）。all-or-none 由单对象结构保证。
    */
-  onSteerNow?: (queueItemId: string) => void;
-  /** 待插话行「修改」入口（撤回编辑：deleteQueueItem + 文本回填 composer）。仅 pending guide 行注入。 */
-  onRecallEditQueued?: (queueItemId: string) => void | Promise<void>;
-  /** 待插话行「撤销」入口（deleteQueueItem：从队列移除该待插话，不影响当前运行）。仅 pending guide 行注入。 */
-  onRevokeQueued?: (queueItemId: string) => void;
+  pendingGuideActions?: PendingGuideActions;
   /** 嵌套在工具 Group 内时去掉 Reasoning 内容的重复左导线与缩进。 */
   reasoningContentVariant?: "default" | "nested";
   /** renderer-only 提交状态；不写入协议 row，也不冒充已 drain 的历史事实。 */
@@ -946,18 +956,14 @@ const SingleUserInputRowView = memo(function SingleUserInputRowView({
   onEdit,
   editWorkspaceRewindAvailability,
   status,
-  onSteerNow,
-  onRecallEditQueued,
-  onRevokeQueued,
+  pendingGuideActions,
 }: {
   row: UserInputRow;
   context: ConversationRowRenderContext;
   onEdit?: UserInputEditHandler;
   editWorkspaceRewindAvailability?: EditWorkspaceRewindAvailability;
   status?: string;
-  onSteerNow?: (queueItemId: string) => void;
-  onRecallEditQueued?: (queueItemId: string) => void | Promise<void>;
-  onRevokeQueued?: (queueItemId: string) => void;
+  pendingGuideActions?: PendingGuideActions;
 }) {
   const { intl } = useZCodeIntl();
   const confirmDialog = useConfirmDialog();
@@ -1456,7 +1462,7 @@ const SingleUserInputRowView = memo(function SingleUserInputRowView({
       >
         {/* pendingGuideRow 把 queueItemId 放进 entityId；sendQueuedNow 按该 id 提升并
             中断当前运行——guide 边界等待在单工具长跑期间没有注入点，这是唯一即时出口。 */}
-        {onSteerNow && row.entityId ? (
+        {pendingGuideActions && row.entityId ? (
           <MessageAction
             label={intl.formatMessage({ id: "chat.message.turnSteer.sendNow" })}
             tooltip={intl.formatMessage({ id: "chat.message.turnSteer.sendNow" })}
@@ -1468,7 +1474,7 @@ const SingleUserInputRowView = memo(function SingleUserInputRowView({
                   action: "send_now",
                   trigger: "button",
                 },
-                operation: () => onSteerNow(row.entityId!),
+                operation: () => pendingGuideActions.steerNow(row.entityId!),
                 completed: { resultSource: "optimistic_projection" },
                 failureStage: "pending_guide_send_now",
               })
@@ -1481,9 +1487,9 @@ const SingleUserInputRowView = memo(function SingleUserInputRowView({
             撤销=直接从队列移除，需二次确认（文本可能较长，误删不可恢复）；编辑=撤回到输入框
             重新编辑（队列面板同款撤回编辑，deleteQueueItem + 回填 composer，无确认——内容
             回到输入框不算丢失）。均复用 SessionPane 既有 handler，CLI 侧与队列面板完全同路径。
-            待插话行不注入 onEdit，编辑位由 onRecallEditQueued 占据；普通消息行相反，
+            待插话行不注入 onEdit，编辑位由 pendingGuideActions.recallEdit 占据；普通消息行相反，
             两族按钮按注入回调天然互斥。 */}
-        {onRevokeQueued && row.entityId ? (
+        {pendingGuideActions && row.entityId ? (
           <MessageAction
             label={intl.formatMessage({ id: "chat.message.turnSteer.revoke" })}
             tooltip={intl.formatMessage({ id: "chat.message.turnSteer.revoke" })}
@@ -1509,7 +1515,7 @@ const SingleUserInputRowView = memo(function SingleUserInputRowView({
                   action: "revoke",
                   trigger: "button",
                 },
-                operation: () => onRevokeQueued(row.entityId!),
+                operation: () => pendingGuideActions.revoke(row.entityId!),
                 completed: { resultSource: "optimistic_projection" },
                 failureStage: "pending_guide_revoke",
               });
@@ -1523,7 +1529,7 @@ const SingleUserInputRowView = memo(function SingleUserInputRowView({
           rowId={row.rowId}
           label={intl.formatMessage({ id: "chat.message.copy" })}
         />
-        {onRecallEditQueued && row.entityId ? (
+        {pendingGuideActions && row.entityId ? (
           <MessageAction
             label={intl.formatMessage({ id: "chat.message.turnSteer.recallEdit" })}
             tooltip={intl.formatMessage({ id: "chat.message.turnSteer.recallEdit" })}
@@ -1535,7 +1541,7 @@ const SingleUserInputRowView = memo(function SingleUserInputRowView({
                   action: "recall_edit",
                   trigger: "button",
                 },
-                operation: () => onRecallEditQueued(row.entityId!),
+                operation: () => pendingGuideActions.recallEdit(row.entityId!),
                 completed: { resultSource: "optimistic_projection" },
                 failureStage: "pending_guide_recall_edit",
               })
@@ -2450,9 +2456,7 @@ function ConversationRowViewImpl({
   assistantCodeCommentProjectionEnabled,
   reasoningContentVariant,
   userInputStatus,
-  onSteerNow,
-  onRecallEditQueued,
-  onRevokeQueued,
+  pendingGuideActions,
 }: ConversationRowViewProps) {
   switch (row.kind) {
     case "userInput":
@@ -2463,9 +2467,7 @@ function ConversationRowViewImpl({
           onEdit={onEdit}
           editWorkspaceRewindAvailability={editWorkspaceRewindAvailability}
           status={userInputStatus}
-          onSteerNow={onSteerNow}
-          onRecallEditQueued={onRecallEditQueued}
-          onRevokeQueued={onRevokeQueued}
+          pendingGuideActions={pendingGuideActions}
         />
       );
     case "assistantText":

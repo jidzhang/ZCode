@@ -101,3 +101,6 @@ packages/wechat-channel/.env.local
 
 # one-click 打包本机代理配置(勿提交真实地址)
 one-click-build-local.env.bat
+
+# CLI session-store 迁移测试在包目录生成的备份目录（migration-runner 的 dataRoot 默认值）
+apps/zcode-cli/packages/adapters/backup/

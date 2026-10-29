@@ -1190,3 +1190,175 @@ describe("ConversationV4Gateway sessions-index 工作流进度节流", () => {
     expect(lastUpsertedSummary(stub)?.workflowActivity?.runs[0]?.status).toBe("completed");
   });
 });
+
+describe("manual_regenerate 覆盖贯通到 sessions-index（specs/session-title-manual-regenerate.md）", () => {
+  it("custom 后的 regenerate 帧跳过投影回退并携带 titleOverriddenBy", async () => {
+    const stub: Stub = {
+      frames: [],
+      sessions: new Set(["live-1"]),
+      sessionWorkspace: new Map([["live-1", "ws-1"]]),
+      stored: [],
+    };
+    const gateway = makeGateway(stub, { withIndexHooks: true });
+    gateway.ingest(
+      "live-1",
+      event("live-1", 1, SessionEventType.SessionCreated, {
+        mode: "default",
+        contextWindow: 200_000,
+      }),
+    );
+    await gateway.subscribeSessionsIndex({
+      topic: "sessions-index/ws-1",
+      connectionId: "desktop-index",
+      clientMode: "desktop-continuous",
+    });
+    gateway.ingest(
+      "live-1",
+      event("live-1", 2, SessionEventType.SessionTitleUpdated, {
+        previousTitle: "",
+        source: "custom",
+        title: "用户重命名",
+      }),
+    );
+    // 自动路径（无 reason）：custom 帧后的 generated 帧被投影回退，不产新标题帧。
+    gateway.ingest(
+      "live-1",
+      event("live-1", 3, SessionEventType.SessionTitleUpdated, {
+        previousTitle: "用户重命名",
+        source: "generated",
+        title: "自动降级帧",
+      }),
+    );
+    const beforeRegenerate = indexFrames(stub).length;
+    // 手动「自动命名」覆盖帧：列表必须拿到新标题 + 单帧标记。
+    gateway.ingest(
+      "live-1",
+      event("live-1", 4, SessionEventType.SessionTitleUpdated, {
+        previousTitle: "用户重命名",
+        reason: "manual_regenerate",
+        source: "generated",
+        title: "新标题",
+      }),
+    );
+    const frames = indexFrames(stub).slice(beforeRegenerate);
+    expect(frames).toMatchObject([
+      {
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "session.upserted",
+              session: {
+                sessionId: "live-1",
+                title: "新标题",
+                titleSource: "generated",
+                titleOverriddenBy: "manual_regenerate",
+              },
+            },
+          ],
+        },
+      },
+    ]);
+    gateway.dispose();
+  });
+});
+
+describe("冷恢复闭环：水合重放补发覆盖标记", () => {
+  async function hydrateWithEvents(persisted: SessionEvent[]) {
+    const stub: Stub = {
+      frames: [],
+      sessions: new Set(["live-1"]),
+      sessionWorkspace: new Map([["live-1", "ws-1"]]),
+      stored: [],
+      loadPersistedEvents: async () => ({ events: persisted, synthesized: false }),
+    };
+    const gateway = makeGateway(stub, { withIndexHooks: true });
+    await gateway.subscribeSessionsIndex({
+      topic: "sessions-index/ws-1",
+      connectionId: "desktop-index",
+      clientMode: "desktop-continuous",
+    });
+    const before = indexFrames(stub).length;
+    // 会话订阅触发 hydration：seed 先落（stored 摘要 generated 旧标题），
+    // 重放后 publishCurrentSummaryToIndex 补发覆盖标记帧。
+    await gateway.subscribe({
+      topic: "conversation/live-1",
+      connectionId: "desktop",
+      clientMode: "desktop-continuous",
+    });
+    const frames = indexFrames(stub).slice(before);
+    gateway.dispose();
+    return frames;
+  }
+
+  it("重放历史最后一条标题事件是 manual_regenerate → 水合发布带标记", async () => {
+    const frames = await hydrateWithEvents([
+      event("live-1", 1, SessionEventType.SessionCreated, {
+        mode: "default",
+        contextWindow: 200_000,
+      }),
+      event("live-1", 2, SessionEventType.SessionTitleUpdated, {
+        previousTitle: "",
+        source: "generated",
+        title: "旧生成",
+      }),
+      event("live-1", 3, SessionEventType.SessionTitleUpdated, {
+        previousTitle: "旧生成",
+        reason: "manual_regenerate",
+        source: "generated",
+        title: "新标题",
+      }),
+    ]);
+    expect(frames).toMatchObject([
+      {
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "session.upserted",
+              session: {
+                sessionId: "live-1",
+                title: "新标题",
+                titleOverriddenBy: "manual_regenerate",
+              },
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it("regenerate 之后又被 rename 回 custom → 水合发布不带标记", async () => {
+    const frames = await hydrateWithEvents([
+      event("live-1", 1, SessionEventType.SessionCreated, {
+        mode: "default",
+        contextWindow: 200_000,
+      }),
+      event("live-1", 2, SessionEventType.SessionTitleUpdated, {
+        previousTitle: "",
+        reason: "manual_regenerate",
+        source: "generated",
+        title: "新标题",
+      }),
+      event("live-1", 3, SessionEventType.SessionTitleUpdated, {
+        previousTitle: "新标题",
+        source: "custom",
+        title: "用户又重命名",
+      }),
+    ]);
+    expect(frames).toMatchObject([
+      {
+        payload: {
+          kind: "deltas",
+          deltas: [
+            {
+              op: "session.upserted",
+              session: { sessionId: "live-1", title: "用户又重命名" },
+            },
+          ],
+        },
+      },
+    ]);
+    expect(JSON.stringify(frames)).not.toContain("titleOverriddenBy");
+  });
+});

@@ -79,8 +79,9 @@ export class SessionsIndexPublisher {
   ingestConversation(
     snapshot: ConversationSnapshot,
     extra: Omit<SessionSummaryDeriveExtra, "workspaceId">,
+    options?: { titleOverriddenBy?: "manual_regenerate" },
   ): boolean {
-    return this.record(this.projection.upsertFromConversation(snapshot, extra));
+    return this.record(this.projection.upsertFromConversation(snapshot, extra, options));
   }
 
   /** 会话移除 → remove delta 记账。返回是否有变化。 */

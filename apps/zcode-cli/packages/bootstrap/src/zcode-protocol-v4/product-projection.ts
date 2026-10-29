@@ -2014,7 +2014,10 @@ export class ProductProjection {
           ? "default"
           : "generated";
     const prev = this.snapshot.meta;
-    if (prev.titleSource === "custom" && source === "generated" && !payload.reason) return [];
+    // custom 粘性的唯一例外是手动「自动命名」（reason=manual_regenerate）；精确匹配值而非
+    // 字段存在性，避免未来任何携带 reason 的 SessionTitleUpdated 静默击穿粘性。
+    if (prev.titleSource === "custom" && source === "generated" && payload.reason !== "manual_regenerate")
+      return [];
     if (prev.title === title && prev.titleSource === source) return [];
     return [
       {

@@ -389,7 +389,10 @@ async function buildRegenerateTitleMaterial(
   );
 
   const recentLines: string[] = [];
-  for (let index = 0; index < messages.length; index += 1) {
+  let budget = REGENERATE_RECENT_CHARS;
+  // 保尾：从最新往回取，某行放不进剩余预算即停（轮次完整性优先于凑满预算）。
+  // 反向迭代让长会话只清洗尾部能进预算的少数消息，而不是全量历史。
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
     if (index === firstUserIndex) continue;
     const message = messages[index]!;
     const label = isVisibleRealUserMessage(message)
@@ -399,20 +402,15 @@ async function buildRegenerateTitleMaterial(
         : null;
     if (!label) continue;
     const text = clipSingleLine(messagePartsText(message), REGENERATE_RECENT_ITEM_CHARS);
-    if (text) recentLines.push(`${label}: ${text}`);
+    if (!text) continue;
+    const line = `${label}: ${text}`;
+    if (line.length > budget) break;
+    recentLines.unshift(line);
+    budget -= line.length;
   }
 
   if (recentLines.length === 0) return original;
-  // 保尾：从最新往回累计，超预算即停（轮次完整性优先于凑满预算）。
-  const kept: string[] = [];
-  let budget = REGENERATE_RECENT_CHARS;
-  for (const line of [...recentLines].reverse()) {
-    if (line.length > budget) break;
-    kept.unshift(line);
-    budget -= line.length;
-  }
-  if (kept.length === 0) return original;
-  return `Original request: ${original}\n\nRecent conversation:\n${kept.join("\n")}`;
+  return `Original request: ${original}\n\nRecent conversation:\n${recentLines.join("\n")}`;
 }
 
 /** compaction 摘要等合成 assistant 消息不是实质回复，不进素材。 */

@@ -107,6 +107,19 @@ class AsyncGateRegistry {
   }
 }
 
+/**
+ * 与会话执行正交的长跑命令：admission 记账（pin/去重/inFlight）完成后立即释放
+ * session gate，执行不阻塞同 session 的 stop/send 等命令 admission。
+ * Bugfix 背景：regenerateSessionTitle 持有会话门直到 settle，标题生成最长
+ * titleGeneration.timeoutMs（默认 60s），期间同 session 全部命令排队无 ACK。
+ * 依据：标题 sidecar 独立模型上下文、不改 queue/turn 状态，无需与会话变更串行；
+ * 同 commandId 去重仍由 key gate + pinned.final 保证。见
+ * specs/session-title-manual-regenerate.md「不持有会话 admission 门」。
+ */
+export const NON_SERIAL_SESSION_COMMANDS: ReadonlySet<string> = new Set([
+  "regenerateSessionTitle",
+]);
+
 export class CommandInbox {
   private readonly inFlight = new Map<string, Map<string, InFlightEntry>>();
   private readonly liveInputs = new Map<string, Map<string, LiveInputEntry>>();
@@ -172,6 +185,10 @@ export class CommandInbox {
         });
         const entry: InFlightEntry = { ack: decision.ack, final, resolveFinal };
         this.mapFor(this.inFlight, bucketKey).set(envelope.commandId, entry);
+
+        // 非会话串行命令：pin 完成（去重事实已固定）即放行 session FIFO，执行不再
+        // 持有该门；settle 里的 releaseSession 幂等。
+        if (NON_SERIAL_SESSION_COMMANDS.has(envelope.type)) releaseSession();
 
         // 旧单表 LRU 会在 >512 条 churn 时淘汰仍在执行/队列里的命令，随后
         // query 返回 unknown、重试再次执行。新命令先 pin，再释放 key gate。

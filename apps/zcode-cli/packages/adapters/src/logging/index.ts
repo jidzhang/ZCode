@@ -237,18 +237,14 @@ function getDefaultMinLevel(env: NodeJS.ProcessEnv | undefined): LogLevel {
 
 /** 把 settings.json 的 logLevel 转成 Logger 可用的阈值名；非法值返回 undefined 走回退。 */
 function parseLogLevelName(value: string | undefined): LogLevel | undefined {
-  switch (value?.trim().toLowerCase()) {
-    case "debug":
-      return LogLevel.Debug;
-    case "info":
-      return LogLevel.Info;
-    case "warn":
-      return LogLevel.Warn;
-    case "error":
-      return LogLevel.Error;
-    default:
-      return undefined;
+  if (!value) return undefined;
+  // 级别名表单一来源：从 contracts 的 LogLevelName 反转派生，contracts 增删级别时这里自动跟随。
+  const normalized = value.trim().toLowerCase();
+  for (const [level, name] of Object.entries(LogLevelName)) {
+    // LogLevelName 的键就是 LogLevel 值本身，反转结果直接是合法级别。
+    if (name.toLowerCase() === normalized) return Number(level) as LogLevel;
   }
+  return undefined;
 }
 
 function isDevelopmentMode(env: NodeJS.ProcessEnv): boolean {

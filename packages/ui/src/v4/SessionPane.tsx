@@ -198,6 +198,7 @@ import { WorkspaceHookPendingBanner } from "@/v4/WorkspaceHookPendingBanner.js";
 import { ConversationStatusPanel } from "@/v4/ConversationStatusPanel.js";
 import { SessionSubscriptionErrorPanel } from "@/v4/SessionSubscriptionErrorPanel.js";
 import { ConversationTimeline } from "@/v4/ConversationTimeline.js";
+import type { PendingGuideActions } from "@/v4/ConversationRowView.js";
 import type { ConversationLatestTurnSummary } from "@/v4/conversationTimelineLiveTail.js";
 import { ConversationShareImportNotice } from "@/v4/ConversationShareImportNotice.js";
 import { ConversationShareConfirmationDock } from "@/v4/ConversationShareConfirmationDock.js";
@@ -483,12 +484,6 @@ function toComposerUiError(
     ...(sessionId ? { taskId: sessionId } : {}),
   };
 }
-
-type ConfigCasDispatcher = (
-  type: CommandType,
-  payload: Record<string, unknown>,
-  options?: { initialBaseRevision?: number; targetSessionId?: string },
-) => Promise<CommandAck | null>;
 
 function submissionConfigFromCommand(
   type: CommandType,
@@ -1681,7 +1676,6 @@ export function SessionPane({
     // 每个 Session 独立合并未开始的选型；切页后旧 session 的点击不能和新 session 合并。
     [configCommandBarrier, sessionId],
   );
-  const dispatchConfigCasRef = useRef<ConfigCasDispatcher | null>(null);
   // 软审核不是阻塞交互，不能隐藏 Composer 或禁用选区引用。
   const blockingInteractionId =
     snapshot?.pendingInteractions.find(
@@ -4254,6 +4248,14 @@ export function SessionPane({
       prepareHighspeedTurnFrom,
       sessionId,
     ],
+  ); // 待插话三操作整包下发：all-or-none 不变量由单对象保证（见 PendingGuideActions）。
+  const pendingGuideActions = useMemo<PendingGuideActions>(
+    () => ({
+      steerNow: handleSendQueuedNow,
+      recallEdit: handleEditQueueItem,
+      revoke: handleDeleteQueueItem,
+    }),
+    [handleSendQueuedNow, handleEditQueueItem, handleDeleteQueueItem],
   );
 
   const handleReorderQueueItem = useCallback(
@@ -4354,25 +4356,20 @@ export function SessionPane({
     },
     [dispatchCommand, sessionId],
   );
-  dispatchConfigCasRef.current = dispatchConfigCas;
   // 已绑定 Session 的显式选型：draft 立即显示，同时把后续 Session Selection 写入 CLI。
   // 失败只保留 draft intent，不回滚输入框；下一次 Submission 仍携带同一选择。
   const scheduleBoundModelSwitch = useCallback(
     (selection: ModelSelection | undefined) => {
       if (!sessionId || !selection?.providerId || !selection.modelId) return;
-      const targetSessionId = sessionId;
       const payload = {
         provider: selection.providerId,
         model: selection.modelId,
         thought: selection.options?.reasoningLevel ?? "",
       };
       void modelConfigScheduler
-        .schedule(() => {
-          const dispatch = dispatchConfigCasRef.current;
-          return dispatch
-            ? dispatch("switchModelConfig", payload, { targetSessionId })
-            : Promise.resolve(null);
-        })
+        .schedule(() =>
+          dispatchConfigCas("switchModelConfig", payload, { targetSessionId: sessionId }),
+        )
         .catch((error: unknown) => {
           // dispatchConfigCas 已记录 rejected / transport 日志；这里只兜底它原样上抛的
           // providerNotReady 等异常。失败不回滚 draft：下一次 Submission 仍携带同一选型。
@@ -4383,7 +4380,7 @@ export function SessionPane({
           });
         });
     },
-    [modelConfigScheduler, sessionId],
+    [modelConfigScheduler, sessionId, dispatchConfigCas],
   );
   const ensureDraftPrewarmConfigBeforeSend = useCallback(
     async (targetSessionId: string) => {
@@ -5925,9 +5922,7 @@ export function SessionPane({
                   selectionPanelLayoutContainerRef={conversationLayoutContainerRef}
                   rows={timelineSnapshot?.rows.window ?? []}
                   pendingGuides={timelineSnapshot ? pendingGuideProjection?.pendingGuides : []}
-                  onSteerNow={handleSendQueuedNow}
-                  onRecallEditQueued={handleEditQueueItem}
-                  onRevokeQueued={handleDeleteQueueItem}
+                  pendingGuideActions={pendingGuideActions}
                   apiRetry={timelineSnapshot?.control.apiRetry ?? null}
                   totalCount={timelineSnapshot?.rows.totalCount ?? 0}
                   sessionKey={sessionId ?? "draft"}

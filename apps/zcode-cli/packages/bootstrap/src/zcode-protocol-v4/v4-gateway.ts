@@ -1204,7 +1204,15 @@ export class ConversationV4Gateway {
       this.indexFanoutThrottle.request(sessionId);
       return;
     }
-    this.publishCurrentSummaryToIndex(sessionId);
+    // 手动「自动命名」覆盖 custom 的那一帧：投影的 custom 降级防御须放行，并在
+    // summary 上打单帧标记让宿主任务索引同步放行（specs/session-title-manual-regenerate.md）。
+    this.publishCurrentSummaryToIndex(
+      sessionId,
+      event.type === SessionEventType.SessionTitleUpdated &&
+        (event.payload as { reason?: unknown }).reason === "manual_regenerate"
+        ? { titleOverriddenBy: "manual_regenerate" }
+        : undefined,
+    );
   }
 
   /**
@@ -1215,7 +1223,10 @@ export class ConversationV4Gateway {
    * hydration 完成后若没有下一条 runtime event，child 就永远停在 draft 基线，
    * task-index syncer 无法观察到 draft→visible，也就不会创建侧栏 task row。
    */
-  private publishCurrentSummaryToIndex(sessionId: string): void {
+  private publishCurrentSummaryToIndex(
+    sessionId: string,
+    titleOverride?: { titleOverriddenBy: "manual_regenerate" },
+  ): void {
     // 这一次发布带的就是窗内合并后的当前摘要：待发的 trailing 到此被满足，不重复发帧。
     this.indexFanoutThrottle.notePublished(sessionId);
     const getWorkspaceId = this.host.getSessionWorkspaceId;
@@ -1231,6 +1242,7 @@ export class ConversationV4Gateway {
       const changed = indexPublisher.ingestConversation(
         conversationPublisher.getSnapshot(),
         this.resolveIndexMeta(sessionId),
+        titleOverride,
       );
       if (changed) this.flushIndex(workspaceId);
     } catch (error) {
@@ -3465,8 +3477,33 @@ export class ConversationV4Gateway {
       }
     }
     this.hydratedSessions.add(sessionId);
-    this.publishCurrentSummaryToIndex(sessionId);
+    this.publishCurrentSummaryToIndex(
+      sessionId,
+      this.latestPersistedTitleOverride(loaded.events, replayEvents),
+    );
     return publisher;
+  }
+
+  /**
+   * 冷恢复闭环：重放历史里"最后一条标题事件"若仍是 manual_regenerate（其后没有
+   * 再被 rename 回 custom），水合终点的 sessions-index 发布补发覆盖标记——delta 在
+   * CLI 崩溃窗口丢失时，宿主 sqlite 的 custom 粘性也能在重启后第一次水合被解开
+   * （specs/session-title-manual-regenerate.md 覆盖贯通）。
+   */
+  private latestPersistedTitleOverride(
+    ...eventLists: ReadonlyArray<readonly SessionEvent[]>
+  ): { titleOverriddenBy: "manual_regenerate" } | undefined {
+    for (let listIndex = eventLists.length - 1; listIndex >= 0; listIndex -= 1) {
+      const events = eventLists[listIndex]!;
+      for (let index = events.length - 1; index >= 0; index -= 1) {
+        const event = events[index]!;
+        if (event.type !== SessionEventType.SessionTitleUpdated) continue;
+        return (event.payload as { reason?: unknown }).reason === "manual_regenerate"
+          ? { titleOverriddenBy: "manual_regenerate" }
+          : undefined;
+      }
+    }
+    return undefined;
   }
 
   /**

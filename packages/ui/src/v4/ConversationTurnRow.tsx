@@ -7,7 +7,7 @@ import type {
 import type { AssistantPreviewCard } from "@/lib/assistantPreviewCards.js";
 import type { AssistantCodeCommentCard } from "@/lib/assistantCodeComment.js";
 import { extractPlanToolCallContent } from "@/lib/planToolCall.js";
-import { ConversationRowView } from "@/v4/ConversationRowView.js";
+import { ConversationRowView, type PendingGuideActions } from "@/v4/ConversationRowView.js";
 import type {
   AssistantFeedbackHandler,
   EditWorkspaceRewindAvailability,
@@ -38,12 +38,8 @@ interface ConversationTurnRowProps {
   assistantCodeCommentProjectionEnabled?: boolean;
   reasoningContentVariant?: "default" | "nested";
   userInputStatus?: string;
-  /** 待插话行「立即处理」入口；仅 pending guide 行传入（见 ConversationRowViewProps）。 */
-  onSteerNow?: (queueItemId: string) => void;
-  /** 待插话行「修改」（撤回编辑）入口；仅 pending guide 行传入。 */
-  onRecallEditQueued?: (queueItemId: string) => void | Promise<void>;
-  /** 待插话行「撤销」入口；仅 pending guide 行传入。 */
-  onRevokeQueued?: (queueItemId: string) => void;
+  /** 待插话行三操作；仅 pending guide 行传入（见 PendingGuideActions）。 */
+  pendingGuideActions?: PendingGuideActions;
 }
 
 export function ConversationTurnRow({
@@ -63,9 +59,7 @@ export function ConversationTurnRow({
   assistantCodeCommentProjectionEnabled,
   reasoningContentVariant,
   userInputStatus,
-  onSteerNow,
-  onRecallEditQueued,
-  onRevokeQueued,
+  pendingGuideActions,
 }: ConversationTurnRowProps) {
   return (
     <ConversationRowView
@@ -85,9 +79,7 @@ export function ConversationTurnRow({
       assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
       reasoningContentVariant={reasoningContentVariant}
       userInputStatus={userInputStatus}
-      onSteerNow={onSteerNow}
-      onRecallEditQueued={onRecallEditQueued}
-      onRevokeQueued={onRevokeQueued}
+      pendingGuideActions={pendingGuideActions}
     />
   );
 }

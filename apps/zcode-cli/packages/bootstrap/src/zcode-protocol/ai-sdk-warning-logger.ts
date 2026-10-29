@@ -84,6 +84,11 @@ function elideEmbeddedJson(text: string): string {
   let result = "";
   let index = 0;
   while (index < text.length) {
+    // truncate 最终只保留前 MAX_WARNING_STRING_CHARS 个字符；输出一旦到顶，继续对
+    // 剩余全文做花括号配平扫描都是白扫（实测单条 warning 可达 17.5KB 思维链正文）。
+    if (result.length >= MAX_WARNING_STRING_CHARS) {
+      return `${result}…(+${text.length - index} chars elided)`;
+    }
     const open = text.indexOf("{", index);
     if (open === -1) {
       result += text.slice(index);

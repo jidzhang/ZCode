@@ -582,3 +582,52 @@ describe("SessionsIndexPublisher 单测（帧记账）", () => {
     expect(pub.subscriptionIds()).toEqual([replaced.subscriptionId]);
   });
 });
+
+describe("manual_regenerate 覆盖贯通（specs/session-title-manual-regenerate.md）", () => {
+  const extra = { createdAt: 1, lastActivityAt: 2 };
+
+  function snapshotWithTitle(source: "custom" | "generated", title: string) {
+    const events = buildEvents("s1", (push) => {
+      push(SessionEventType.SessionCreated, { mode: "default", contextWindow: 200_000 });
+      push(SessionEventType.SessionTitleUpdated, {
+        previousTitle: "",
+        source,
+        ...(source === "generated" ? { reason: "manual_regenerate" } : {}),
+        title,
+      });
+    });
+    return projectionFor("s1", events).getSnapshot();
+  }
+
+  it("自动路径：custom 后到达的 generated 帧仍被回退（降级防御不变）", () => {
+    const index = new SessionsIndexProjection("ws-1", "epoch-1");
+    index.upsertFromConversation(snapshotWithTitle("custom", "用户重命名"), extra);
+    const deltas = index.upsertFromConversation(snapshotWithTitle("generated", "新标题"), extra);
+    // 回退后与 prev 判等：不产 delta，列表保持 custom 标题。
+    expect(deltas).toHaveLength(0);
+    expect(index.getSnapshot().sessions[0]).toMatchObject({
+      title: "用户重命名",
+      titleSource: "custom",
+    });
+  });
+
+  it("覆盖帧：titleOverriddenBy 跳过 custom 回退并随 delta 下发标记", () => {
+    const index = new SessionsIndexProjection("ws-1", "epoch-1");
+    index.upsertFromConversation(snapshotWithTitle("custom", "用户重命名"), extra);
+    const deltas = index.upsertFromConversation(snapshotWithTitle("generated", "新标题"), extra, {
+      titleOverriddenBy: "manual_regenerate",
+    });
+    expect(deltas).toHaveLength(1);
+    const delta = deltas[0]!;
+    if (delta.op !== "session.upserted") throw new Error("expected upsert");
+    expect(delta.session).toMatchObject({
+      title: "新标题",
+      titleSource: "generated",
+      titleOverriddenBy: "manual_regenerate",
+    });
+    // 后续普通帧（无标记）正常派生，不再触发 custom 回退（prev 已是 generated）。
+    const after = index.upsertFromConversation(snapshotWithTitle("generated", "新标题"), extra);
+    expect(after).toHaveLength(0);
+    expect(index.getSnapshot().sessions[0]).toMatchObject({ title: "新标题" });
+  });
+});

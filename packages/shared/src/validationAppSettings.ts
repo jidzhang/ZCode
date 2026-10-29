@@ -1,6 +1,6 @@
 /* oxlint-disable eslint(max-lines) -- AppSettings schema 聚合历史迁移、默认值和 patch 校验，拆分会削弱设置迁移的单一入口。 */
 import { z } from "zod";
-import { appToolSearchModeSchema } from "./app-runtime-preferences.js";
+import { appLogLevelSchema, appToolSearchModeSchema } from "./app-runtime-preferences.js";
 import type { AppSettings } from "./protocol.js";
 import { REMOTE_ASSET_INSTALL_MODES } from "./remoteAssetInstallMode.js";
 import { isKnownRemoteResourcePackageId } from "./remoteResourcePackages.js";
@@ -584,8 +584,8 @@ const appSettingsObjectSchema = z.object({
   webRemoteControlLastEnabledContext: webRemoteControlLastEnabledContextSchema.optional(),
   zcodeEndpointOrigin: zcodeEndpointOriginSchema.optional(),
   // 默认 warn：实测 info 占日志字节 92%，其中大半是 RPC 成功回执与内存心跳；
-  // 需要排查时在设置页临时调到 info，改动重启生效。
-  logLevel: z.enum(["error", "warn", "info"]).default("warn"),
+  // 需要排查时在设置页临时调到 info，改动重启生效。值域单一来源见 appLogLevelSchema。
+  logLevel: appLogLevelSchema.default("warn"),
   logRetentionDays: z.number().int().min(0).max(365).default(14),
 });
 
@@ -700,6 +700,6 @@ export const appSettingsPatchSchema = z.object({
   webRemoteControlExternalRelayDevice: webRemoteControlExternalRelayDeviceSchema.optional(),
   webRemoteControlLastEnabledContext: webRemoteControlLastEnabledContextSchema.optional(),
   zcodeEndpointOrigin: zcodeEndpointOriginSchema.optional(),
-  logLevel: z.enum(["error", "warn", "info"]).optional(),
+  logLevel: appLogLevelSchema.optional(),
   logRetentionDays: z.number().int().min(0).max(365).optional(),
 });

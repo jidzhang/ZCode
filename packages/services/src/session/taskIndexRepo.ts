@@ -957,6 +957,13 @@ export class TaskIndexRepo {
     titleSource?: string;
     lastOutcome?: "completed" | "interrupted" | "error";
     deleted?: boolean;
+    /**
+     * 手动「自动命名」覆盖帧（summary.titleOverriddenBy）：custom 粘性对该次放行。
+     * Bugfix 背景：rename 后点「自动命名」，core/投影已更新而本 SQL 仍按
+     * `cli_title_source='custom' AND source<>'custom'` 保持旧值，任务列表永远
+     * 旧标题（specs/session-title-manual-regenerate.md 覆盖贯通一节）。
+     */
+    titleOverridesCustom?: boolean;
   }): Promise<ZCodeTaskMeta> {
     await this.ensureReady();
     return this.enqueueWrite(params.meta, () => {
@@ -977,27 +984,34 @@ export class TaskIndexRepo {
             titleOverridden: existing?.title_overridden === 1,
           });
         const source = params.titleSource ?? "default";
+        // 粘性开关：覆盖帧（titleOverridesCustom）为 0 时四个守卫全部按非 custom 处理，
+        // title_overridden 也随之清 0，UI 的 titleOverridden 粘性同步解除。
+        const sticky = params.titleOverridesCustom ? 0 : 1;
         db.prepare(`UPDATE tasks SET
-          cli_title=CASE WHEN cli_title_source='custom' AND ?<>'custom' THEN cli_title ELSE ? END,
-          cli_title_source=CASE WHEN cli_title_source='custom' AND ?<>'custom' THEN cli_title_source ELSE ? END,
+          cli_title=CASE WHEN ?=1 AND cli_title_source='custom' AND ?<>'custom' THEN cli_title ELSE ? END,
+          cli_title_source=CASE WHEN ?=1 AND cli_title_source='custom' AND ?<>'custom' THEN cli_title_source ELSE ? END,
           cli_created_at=?,cli_updated_at=max(coalesce(cli_updated_at,0),?),
           cli_last_outcome=coalesce(?,cli_last_outcome),cli_deleted=max(coalesce(cli_deleted,0),?),
-          title=CASE WHEN (handoff_pending & 2)<>0 THEN title WHEN cli_title_source='custom' AND ?<>'custom' THEN cli_title ELSE ? END,
-          title_overridden=CASE WHEN (handoff_pending & 2)<>0 THEN title_overridden WHEN ?='custom' OR cli_title_source='custom' THEN 1 ELSE 0 END,
+          title=CASE WHEN (handoff_pending & 2)<>0 THEN title WHEN ?=1 AND cli_title_source='custom' AND ?<>'custom' THEN cli_title ELSE ? END,
+          title_overridden=CASE WHEN (handoff_pending & 2)<>0 THEN title_overridden WHEN ?='custom' OR (?=1 AND cli_title_source='custom') THEN 1 ELSE 0 END,
           updated_at=?,created_at=?,task_status=coalesce(?,task_status),deleted=max(deleted,?),
           handoff_pending=(handoff_pending & ~4) & CASE WHEN ?=1 THEN ~1 ELSE -1 END & CASE WHEN ?=title AND ?='custom' THEN ~2 ELSE -1 END
           WHERE workspace_key=? AND task_id=?`).run(
+          sticky,
           source,
           params.meta.title,
+          sticky,
           source,
           source,
           params.meta.createdAt,
           params.meta.updatedAt,
           params.lastOutcome ?? null,
           params.deleted ? 1 : 0,
+          sticky,
           source,
           params.meta.title,
           source,
+          sticky,
           params.meta.updatedAt,
           params.meta.createdAt,
           params.lastOutcome ?? null,

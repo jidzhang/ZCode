@@ -17,6 +17,8 @@ export interface CliTaskFacts {
   titleSource?: string;
   lastOutcome?: "completed" | "interrupted" | "error";
   deleted?: boolean;
+  /** 手动「自动命名」覆盖帧（summary.titleOverriddenBy）：custom 粘性对该次放行。 */
+  titleOverridesCustom?: boolean;
 }
 
 /** 存储端口只接受 CLI 事实，不能据 Host 时钟或运行态推导会话事实。 */

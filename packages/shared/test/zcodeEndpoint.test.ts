@@ -136,14 +136,14 @@ describe("zcodeEndpoint", () => {
     ).toBe("https://zcode.z.ai/api/v1/zcode-plan/anthropic");
   });
 
-  // V1 免登录配对只认标准 test origin 走 test relay，其余来源落到默认 relay；
-  // 上游 V2 的按 origin 拼 /api/v1/remote/ws2 已随 V1 恢复撤销。
-  it("uses the test relay only for the standard test endpoint", () => {
+  // V1 免登录配对不按 origin 推导 relay：除显式 override 外一律返回默认 V1 relay
+  // （上游 V2 的按 origin 拼 /api/v1/remote/ws2 已随 V1 恢复撤销）。
+  it("resolves the V1 relay for every endpoint origin unless overridden", () => {
     expect(
       resolveWebRemoteControlRelayWsUrl({
         endpointOrigin: TEST_ZCODE_ENDPOINT_ORIGIN,
       }),
-    ).toBe("wss://zcode.z.ai/ws");
+    ).toBe(DEFAULT_WEB_REMOTE_CONTROL_RELAY_WS_URL);
     expect(
       resolveWebRemoteControlRelayWsUrl({
         endpointOrigin: DEFAULT_ZCODE_ENDPOINT_ORIGIN,

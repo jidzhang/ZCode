@@ -1,5 +1,5 @@
 import { useSourceServerDisplayNames } from "@/hooks/useSourceServerDisplayNames.js";
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useOptionalPlatform } from "@/hooks/usePlatform.js";
 import { countProjectTreeUnreadTasks, computeProjectActivityRank } from "@/project-sidebar/view.js";
 import { useProjectTree } from "@/project-sidebar/useProjectTree.js";
@@ -18,10 +18,21 @@ function useDirectoryState(isDesktop: boolean) {
     [result.factTree.projects],
   );
   // 项目内最近任务活动时间：手动序建立前侧栏默认按它排序（活跃在前、不活跃沉底）。
-  const activityRank = useMemo(
-    () => computeProjectActivityRank(result.factTree),
-    [result.factTree.tasks],
-  );
+  // 任务树刷新会产生新 tasks 引用；rank 值未变时复用上一次 Map，避免下游
+  // preferences/projects memo 因 Map 身份变化而级联重算并重播整个目录 context。
+  const activityRankRef = useRef<ReadonlyMap<string, number>>(new Map());
+  const activityRank = useMemo(() => {
+    const next = computeProjectActivityRank(result.factTree);
+    const previous = activityRankRef.current;
+    if (
+      previous.size === next.size &&
+      [...next].every(([key, value]) => previous.get(key) === value)
+    ) {
+      return previous;
+    }
+    activityRankRef.current = next;
+    return next;
+  }, [result.factTree.tasks]);
   const preferences = useProjectSidebarPreferences(
     sortedProjects,
     result.loading,
@@ -31,9 +42,10 @@ function useDirectoryState(isDesktop: boolean) {
   const projects = useMemo(() => {
     const sorted = preferences.sort(sortedProjects);
     return [...sorted.filter((p) => p.pinned), ...sorted.filter((p) => !p.pinned)];
-    // activityRank 变化（任务活动更新）在自动排序模式下需要触发重排；
-    // 仅展开/收起等偏好变化不重算，维持原有的最小广播面。
-  }, [sortedProjects, preferences.order, preferences.manualOrder, activityRank]);
+    // activityRank 变化（任务活动更新）在自动排序模式下需要触发重排；manualOrder
+    // 只随 reorder 里的 order 同次翻转，order 依赖已覆盖，不单列。仅展开/收起等
+    // 偏好变化不重算，维持原有的最小广播面。
+  }, [sortedProjects, preferences.order, activityRank]);
   // Context 不受消费方 memo 保护；父级更新 children 时，等价目录不能再次广播。
   return useMemo(
     () => ({ ...result, preferences, projects, groups, deviceNames }),

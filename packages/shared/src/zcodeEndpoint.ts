@@ -241,12 +241,9 @@ export function resolveWebRemoteControlRelayWsUrl(options?: {
     return overrideUrl;
   }
 
-  // Bugfix：标准 test endpoint 已部署独立 relay；继续固定到生产 relay 会让测试环境跨环境配对。
-  // 仅识别规范 test origin，避免改变 production、localhost 和其他自定义 endpoint 的既有行为。
-  if (options?.endpointOrigin?.trim() === TEST_ZCODE_ENDPOINT_ORIGIN) {
-    return "wss://zcode.z.ai/ws";
-  }
-
+  // V1 免登录配对（specs/web-remote-control-version-normalization.md）：V1 relay 只有
+  // 公网 zcode.z.ai 提供，不按 endpoint origin 推导；自定义端点用户走
+  // ZCODE_WEB_REMOTE_CONTROL_RELAY_WS_URL 覆盖。test 与 production origin 同值。
   return DEFAULT_WEB_REMOTE_CONTROL_RELAY_WS_URL;
 }
 

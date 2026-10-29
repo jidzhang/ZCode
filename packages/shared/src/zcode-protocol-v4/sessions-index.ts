@@ -35,6 +35,10 @@ export const sessionSummarySchema = z.object({
   // custom = 用户显式重命名；default/generated 都不是产品语义上的手动标题。
   // optional 是为了兼容旧 sessions-index frame / 旧持久化摘要。
   titleSource: sessionMetaStateSchema.shape.titleSource.optional(),
+  // 手动「自动命名」覆盖 custom 的那一帧携带（specs/session-title-manual-regenerate.md）：
+  // 宿主 task-facts 据此以 titleOverridesCustom 放行 applyCliFacts 的 custom 粘性。
+  // 单帧信号，后续事件重新派生的 summary 不带；旧 frame 缺席照常解析。
+  titleOverriddenBy: z.enum(["manual_regenerate"]).optional(),
   lastOutcome: z.enum(["completed", "error", "interrupted"]).optional(),
   phase: sessionPhaseSchema,
   sessionEnded: z.boolean(),
@@ -96,6 +100,8 @@ export const sessionsIndexReconcileResultSchema = z
               deleted: z.boolean(),
               title: z.string(),
               titleSource: sessionMetaStateSchema.shape.titleSource,
+              // 手动「自动命名」覆盖帧标记；与 sessionSummarySchema 同义，旧应答缺省照常解析。
+              titleOverriddenBy: z.enum(["manual_regenerate"]).optional(),
               createdAt: timestampSchema,
               updatedAt: timestampSchema,
               lastOutcome: z.enum(["completed", "error", "interrupted"]).optional(),

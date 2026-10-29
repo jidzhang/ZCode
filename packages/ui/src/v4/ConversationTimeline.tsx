@@ -45,7 +45,7 @@ import {
   type PluginUiRowPinResolver,
 } from "@/plugin-ui/index.js";
 import { ConversationPendingGuideList } from "@/v4/ConversationPendingGuideList.js";
-import type { AssistantFeedbackHandler } from "@/v4/ConversationRowView.js";
+import type { AssistantFeedbackHandler, PendingGuideActions } from "@/v4/ConversationRowView.js";
 import { ConversationTurnNavigator } from "@/v4/ConversationTurnNavigator.js";
 import { syncConversationShareSelectionPanelLayout } from "@/v4/conversationShareSelectionPanelLayout.js";
 import type { ConversationRowRenderContext } from "@/v4/conversationRowContext.js";
@@ -271,12 +271,8 @@ export interface ConversationTimelineProps {
   compactForRemoteControl?: boolean;
   /** CLI 权威 queue 中等待 model-step 注入的 guide；只改变 renderer 落位。 */
   pendingGuides?: readonly QueueItem[];
-  /** 待插话行「立即处理」入口（sendQueuedNow：中断当前运行 + 该消息立即生效）。 */
-  onSteerNow?: (queueItemId: string) => void;
-  /** 待插话行「修改」入口（撤回编辑：deleteQueueItem + 回填 composer）。 */
-  onRecallEditQueued?: (queueItemId: string) => void | Promise<void>;
-  /** 待插话行「撤销」入口（deleteQueueItem：移除该待插话）。 */
-  onRevokeQueued?: (queueItemId: string) => void;
+  /** 待插话行三操作（见 PendingGuideActions）；整体透传给 pending guide 列表。 */
+  pendingGuideActions?: PendingGuideActions;
   /** runtime memory 状态，只交给当前 live turn，不进入历史虚拟列表。 */
   apiRetry?: ApiRetryState | null;
   /** 投影全序行数（rows.totalCount；窗口截断后大于 rows.length，仅用于滚动条估计/诊断）。 */
@@ -386,9 +382,7 @@ function ConversationTimelineImpl({
   rows,
   compactForRemoteControl = false,
   pendingGuides = EMPTY_PENDING_GUIDES,
-  onSteerNow,
-  onRecallEditQueued,
-  onRevokeQueued,
+  pendingGuideActions,
   apiRetry = null,
   totalCount,
   sessionKey,
@@ -2140,9 +2134,7 @@ function ConversationTimelineImpl({
                   <ConversationPendingGuideList
                     context={rowContext}
                     items={pendingGuides}
-                    onSteerNow={onSteerNow}
-                    onRecallEditQueued={onRecallEditQueued}
-                    onRevokeQueued={onRevokeQueued}
+                    pendingGuideActions={pendingGuideActions}
                     turnId={
                       liveUnit?.turnId ??
                       rows.at(-1)?.productTurnId ??

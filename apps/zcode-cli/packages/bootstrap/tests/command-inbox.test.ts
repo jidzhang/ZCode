@@ -647,3 +647,59 @@ describe("CommandInbox single-flight 与 admission FIFO", () => {
     if (second.kind === "execute") second.settle({ status: "accepted" });
   });
 });
+
+describe("非会话串行命令（manual_regenerate 门释放）", () => {
+  it("regenerateSessionTitle 未 settle 时不阻塞同 session 后续命令 admission", async () => {
+    const inbox = new CommandInbox(makeHost());
+    const regenerate = await inbox.handle(
+      envelope({ commandId: "regen-1", type: "regenerateSessionTitle", payload: {} }),
+    );
+    expect(regenerate.kind).toBe("execute");
+
+    // 普通命令在同 session 上应立即完成 admission（不等待标题生成 settle）。
+    let stopResolved = false;
+    const stopPromise = inbox
+      .handle(envelope({ commandId: "stop-1", type: "stop", payload: {} }))
+      .then((outcome) => {
+        stopResolved = true;
+        return outcome;
+      });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(stopResolved).toBe(true);
+    const stop = await stopPromise;
+    expect(stop.kind).toBe("execute");
+    if (stop.kind === "execute") {
+      expect(stop.admissionSeq).toBe(2);
+      stop.settle({ status: "accepted" });
+    }
+
+    // 标题命令自身的终态与去重语义不变：settle 后重试拿 duplicate。
+    if (regenerate.kind === "execute") {
+      regenerate.settle({ status: "completed" });
+    }
+    const retry = await inbox.handle(
+      envelope({ commandId: "regen-1", type: "regenerateSessionTitle", payload: {} }),
+    );
+    expect(retry.kind).toBe("ack");
+    if (retry.kind === "ack") {
+      expect(retry.ack.status).toBe("duplicate");
+    }
+  });
+
+  it("普通长跑命令仍持有 session gate（防串行语义回归）", async () => {
+    const inbox = new CommandInbox(makeHost());
+    const first = await inbox.handle(envelope({ commandId: "slow-1" }));
+    expect(first.kind).toBe("execute");
+    let secondResolved = false;
+    const secondPromise = inbox
+      .handle(envelope({ commandId: "slow-2" }))
+      .then((outcome) => {
+        secondResolved = true;
+        return outcome;
+      });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(secondResolved).toBe(false);
+    if (first.kind === "execute") first.settle({ status: "accepted" });
+    await secondPromise;
+  });
+});

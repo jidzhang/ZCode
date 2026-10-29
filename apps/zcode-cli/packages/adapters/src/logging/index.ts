@@ -7,7 +7,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { LogContext, LogEntry, Logger, LoggerFactory, LogRedactor } from "@zcode/contracts";
 import { LogLevel, LogLevelName } from "@zcode/contracts";
-import { ZCODE_RUNTIME_ENV_KEY, normalizeZCodeRuntimeEnv } from "@zcode/shared";
+import {
+  ZCODE_LOG_LEVEL_ENV_KEY,
+  ZCODE_RUNTIME_ENV_KEY,
+  normalizeZCodeRuntimeEnv,
+} from "@zcode/shared";
 import {
   formatLocalLogDate,
   scheduleLogRetentionCleanup as scheduleRetentionCleanup,
@@ -224,7 +228,27 @@ export function getDefaultLogDir(): string {
 }
 
 function getDefaultMinLevel(env: NodeJS.ProcessEnv | undefined): LogLevel {
-  return isDevelopmentMode(env ?? process.env) ? LogLevel.Debug : LogLevel.Info;
+  const resolved = env ?? process.env;
+  // 本地开发态固定 debug：设置页默认值是 warn，若让 ZCODE_LOG_LEVEL 覆盖会静音本地调试日志。
+  if (isDevelopmentMode(resolved)) return LogLevel.Debug;
+  const configured = parseLogLevelName(resolved[ZCODE_LOG_LEVEL_ENV_KEY]);
+  return configured ?? LogLevel.Info;
+}
+
+/** 把 settings.json 的 logLevel 转成 Logger 可用的阈值名；非法值返回 undefined 走回退。 */
+function parseLogLevelName(value: string | undefined): LogLevel | undefined {
+  switch (value?.trim().toLowerCase()) {
+    case "debug":
+      return LogLevel.Debug;
+    case "info":
+      return LogLevel.Info;
+    case "warn":
+      return LogLevel.Warn;
+    case "error":
+      return LogLevel.Error;
+    default:
+      return undefined;
+  }
 }
 
 function isDevelopmentMode(env: NodeJS.ProcessEnv): boolean {

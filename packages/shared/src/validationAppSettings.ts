@@ -583,7 +583,9 @@ const appSettingsObjectSchema = z.object({
   webRemoteControlExternalRelayDevice: webRemoteControlExternalRelayDeviceSchema.optional(),
   webRemoteControlLastEnabledContext: webRemoteControlLastEnabledContextSchema.optional(),
   zcodeEndpointOrigin: zcodeEndpointOriginSchema.optional(),
-  logLevel: z.enum(["error", "warn", "info"]).default("info"),
+  // 默认 warn：实测 info 占日志字节 92%，其中大半是 RPC 成功回执与内存心跳；
+  // 需要排查时在设置页临时调到 info，改动重启生效。
+  logLevel: z.enum(["error", "warn", "info"]).default("warn"),
   logRetentionDays: z.number().int().min(0).max(365).default(14),
 });
 

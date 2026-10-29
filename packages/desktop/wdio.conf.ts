@@ -3427,6 +3427,9 @@ function seedE2EStartupState(specs: string[] = []) {
         providerFamilyDomain: shouldUseBigmodelAuth ? "bigmodel" : "zai",
         providerFamilyDomainMigrated: true,
         providerFamilyDomainUpdatedAt: now,
+        // 产品默认 logLevel 是 warn；E2E 需要读 info 行做断言（RPC 成功回执、
+        // 外部 probe skipped 审计），也需要 info 排查失败，故在基线里显式放大。
+        logLevel: "info",
         ...(modelProviderRegressionFixture
           ? {
               recentProjects: [legacyDefaultProjectPath, ...passiveWorkspacePaths],

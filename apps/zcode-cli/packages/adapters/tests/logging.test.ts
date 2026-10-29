@@ -191,6 +191,55 @@ describe("Node logging adapter", () => {
     }
   });
 
+  it("honors ZCODE_LOG_LEVEL in production so settings.json drives agent logs", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "zcode-log-prod-level-"));
+
+    try {
+      const logger = createNodeLoggerFactory({
+        env: { ZCODE_RUNTIME_ENV: "production", ZCODE_LOG_LEVEL: "warn" },
+        logDir,
+      }).createLogger("test");
+
+      logger.info("hidden");
+      logger.warn("shown");
+
+      const files = await readdir(logDir);
+      expect(files).toHaveLength(1);
+      const entries = (await readFile(join(logDir, files[0]!), "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as { level: string; message: string });
+      expect(entries.map(({ level, message }) => ({ level, message }))).toEqual([
+        { level: "warn", message: "shown" },
+      ]);
+    } finally {
+      await rm(logDir, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to info for unknown ZCODE_LOG_LEVEL values", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "zcode-log-prod-level-invalid-"));
+
+    try {
+      const logger = createNodeLoggerFactory({
+        env: { ZCODE_RUNTIME_ENV: "production", ZCODE_LOG_LEVEL: "verbose" },
+        logDir,
+      }).createLogger("test");
+
+      logger.info("shown");
+
+      const files = await readdir(logDir);
+      expect(files).toHaveLength(1);
+      const entry = JSON.parse((await readFile(join(logDir, files[0]!), "utf8")).trim()) as {
+        level: string;
+        message: string;
+      };
+      expect(entry).toMatchObject({ level: "info", message: "shown" });
+    } finally {
+      await rm(logDir, { recursive: true, force: true });
+    }
+  });
+
   it("writes error cause chains with redacted diagnostic context", async () => {
     const logDir = await mkdtemp(join(tmpdir(), "zcode-log-cause-"));
 

@@ -110,7 +110,7 @@ import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { cn } from "@/components/lib/utils.js";
 import { useSelectDirectory } from "@/hooks/usePlatform.js";
 import { ServiceProvider, useServices } from "@/hooks/useServices.js";
-import type { AppToolSearchMode } from "@zcode/shared";
+import type { AppLogLevel, AppToolSearchMode } from "@zcode/shared";
 import { useSettings } from "@/hooks/useSettingService.js";
 import type { CreateTaskRequest, RemoteConnectionOpenPreference } from "@/app-shell/types.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
@@ -785,6 +785,8 @@ export function SettingsPage({
   const memoryEnabled = sharedSettings?.memoryEnabled === true;
   const toolSearchMode = sharedSettings?.toolSearchMode ?? "off";
   const nativeSearchEnhancementsEnabled = sharedSettings?.nativeSearchEnhancementsEnabled !== false;
+  // settings.json 的 logLevel；schema 默认 warn，未显式写过时这里也回退到同一默认值。
+  const logLevel = sharedSettings?.logLevel ?? "warn";
   const askUserQuestionAutoResolutionEnabled =
     sharedSettings?.askUserQuestionAutoResolutionEnabled !== false;
   const modelIoFullRetentionEnabled = sharedSettings?.modelIoFullRetentionEnabled === true;
@@ -1025,6 +1027,19 @@ export function SettingsPage({
           resultSource: "shared_settings",
           stateAfter: enabled ? "enabled" : "disabled",
         },
+      });
+    },
+    [updateSharedSettings],
+  );
+  const handleLogLevelChange = useCallback(
+    async (level: AppLogLevel) => {
+      await runSettingsActionAsync({
+        featureId: "settings.logging",
+        action: "change_log_level",
+        trigger: "select",
+        // 唯一所有者仍是 settings.json：updateSharedSettings 内部走 settingService.update。
+        operation: () => updateSharedSettings({ logLevel: level }),
+        completed: { resultSource: "shared_settings", valueAfter: level },
       });
     },
     [updateSharedSettings],
@@ -1838,6 +1853,8 @@ export function SettingsPage({
                               toolSearchMode={toolSearchMode}
                               onToolSearchModeChange={handleToolSearchModeChange}
                               nativeSearchEnhancementsEnabled={nativeSearchEnhancementsEnabled}
+                              logLevel={logLevel}
+                              onLogLevelChange={handleLogLevelChange}
                               httpProxy={httpProxy}
                               httpProxyNoProxy={httpProxyNoProxy}
                               httpProxyCaCertPath={httpProxyCaCertPath}

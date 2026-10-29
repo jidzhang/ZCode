@@ -1,4 +1,11 @@
 export const ZCODE_RUNTIME_ENV_KEY = "ZCODE_RUNTIME_ENV";
+/**
+ * 日志阈值下发给 Agent 子进程的唯一通道。
+ *
+ * settings.json 的 logLevel 由 Host 在 spawn 时读值注入；CLI 侧 createNodeLoggerFactory
+ * 只在非 development 态采用它，开发态仍固定 debug。
+ */
+export const ZCODE_LOG_LEVEL_ENV_KEY = "ZCODE_LOG_LEVEL";
 export const ZCODE_HTTP_PROXY_ENV_KEY = "ZCODE_HTTP_PROXY";
 export const ZCODE_NO_PROXY_ENV_KEY = "ZCODE_NO_PROXY";
 /** Desktop Host 只向 desktop-attached remote server 传递一次的网络配置。 */

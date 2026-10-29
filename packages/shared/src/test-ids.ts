@@ -381,6 +381,9 @@ export const TID_SETTINGS_SECTION_NAV = "settings-section-nav";
 export const TID_SETTINGS_TOOL_SEARCH_SELECT = "settings-tool-search-select";
 export const TID_SETTINGS_TOOL_SEARCH_OPTION = "settings-tool-search-option";
 export const TID_SETTINGS_NATIVE_SEARCH_SWITCH = "settings-native-search-switch";
+/** 常规设置中的日志级别下拉 */
+export const TID_SETTINGS_LOG_LEVEL_SELECT = "settings-log-level-select";
+export const TID_SETTINGS_LOG_LEVEL_OPTION = "settings-log-level-option";
 /** 常规设置中的数据存储路径只读输入框 */
 export const TID_SETTINGS_DATA_BASE_DIR_INPUT = "settings-data-base-dir-input";
 /** 常规设置中的数据存储路径目录选择按钮 */

@@ -570,6 +570,7 @@ import {
 import {
   createOfficialMcpTrustedOriginRegistry,
   OFFICIAL_MCP_DEV_TRUSTED_ORIGINS_ENV,
+  ZCODE_LOG_LEVEL_ENV_KEY,
 } from "@zcode/shared";
 import {
   BROKER_SOCKET_ENV,
@@ -2415,6 +2416,9 @@ export function createLocalServices(options: {
           noProxy: agentNetwork.noProxy,
           caCertPath: settings.httpProxyCaCertPath,
         }),
+        // 设置页的日志级别要同时作用于 Agent 自己写的 cli/log/*.jsonl。Agent 与 Host 是
+        // 两个进程，各自读 thresholds；这里按 spawn 时的设置值下发，新起的 Agent 生效。
+        ...(settings.logLevel ? { [ZCODE_LOG_LEVEL_ENV_KEY]: settings.logLevel } : {}),
         // 把 host 解析出的权威 origin（含 settings 覆盖）下发给 agent，否则 agent 侧只按
         // env 推导，test env + 自定义端点时两侧信任判定的输入分叉、官方 MCP 整体 fail closed。
         ...buildAgentEndpointOriginEnv(await resolveCurrentZCodeEndpointOrigin()),

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   createOfficialMcpTrustedOriginRegistry,
   resolveRuntimeZCodeEndpointOrigin,
+  ZCODE_LOG_LEVEL_ENV_KEY,
 } from "@zcode/shared";
 import {
   buildAgentCaCertEnv,
@@ -254,5 +255,21 @@ describe("node.ts wires the authoritative origin into resolveSpawnEnv", () => {
     expect(spawnEnvBlock).toContain(
       "buildAgentEndpointOriginEnv(await resolveCurrentZCodeEndpointOrigin())",
     );
+  });
+});
+
+/* settings.json 的 logLevel 必须随 spawn env 下发给 Agent；漏接线时只有 desktop 侧
+   日志降级，cli/log 仍按 info 全量落盘，正是本次改动的目标缺口。 */
+describe("node.ts forwards settings.logLevel to the agent process", () => {
+  const source = readFileSync(resolve(process.cwd(), "packages/services/src/node.ts"), "utf8");
+  const spawnEnvStart = source.indexOf("resolveSpawnEnv: async (");
+  const spawnEnvBlock = source.slice(
+    spawnEnvStart,
+    source.indexOf("...buildAgentTelemetrySpawnEnv({", spawnEnvStart),
+  );
+
+  it("injects ZCODE_LOG_LEVEL from the live settings value", () => {
+    expect(spawnEnvBlock).toContain(ZCODE_LOG_LEVEL_ENV_KEY);
+    expect(spawnEnvBlock).toContain("settings.logLevel");
   });
 });

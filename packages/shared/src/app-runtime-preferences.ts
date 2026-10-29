@@ -3,6 +3,10 @@ import { z } from "zod";
 export const appToolSearchModeSchema = z.enum(["auto", "local", "off"]);
 export type AppToolSearchMode = z.infer<typeof appToolSearchModeSchema>;
 
+/** settings.json `logLevel` 的 UI 可选项；与 appSettingsSchema 同源，默认 warn。 */
+export const appLogLevelSchema = z.enum(["info", "warn", "error"]);
+export type AppLogLevel = z.infer<typeof appLogLevelSchema>;
+
 export const APP_RUNTIME_PREFERENCES_CHANGED_BROADCAST_CHANNEL = "settings:app-runtime-preferences";
 export const ASK_USER_QUESTION_E2E_CLOCK_SCALE_ENV = "ZCODE_E2E_ASK_USER_QUESTION_CLOCK_SCALE";
 

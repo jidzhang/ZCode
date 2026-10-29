@@ -2947,6 +2947,12 @@ const zhCN: Record<string, string> = {
   "settings.nativeSearchEnhancements": "增强 Find 和 Grep",
   "settings.nativeSearchEnhancementsDescription":
     "在新建会话或应用重启后恢复的会话中使用增强 Find 和 Grep。当前会话保持现有设置；Windows 的 Find 保持不变。",
+  "settings.logLevel": "日志级别",
+  "settings.logLevelDescription":
+    "作用于桌面端与 Agent 日志。警告级别只记录警告与错误；信息级别还会记录成功 RPC 调用等常规活动。重启应用后生效。",
+  "settings.logLevel.info": "信息",
+  "settings.logLevel.warn": "警告",
+  "settings.logLevel.error": "错误",
   "settings.memory": "记忆",
   "settings.memory.workspaceMemory": "工作区记忆",
   "settings.memoryDescription":

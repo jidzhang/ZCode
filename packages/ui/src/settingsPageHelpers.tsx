@@ -1,14 +1,17 @@
 /* oxlint-disable eslint(max-lines) -- settings helper 聚合多个设置分组；终端、网络与自动归档多侧能力暂时超过行数限制。 */
 import type {
+  AppLogLevel,
   AppToolSearchMode,
   IntegratedTerminalShellOption,
   IntegratedTerminalShellSelection,
   LocalePreference,
   ZCodeInteractionBehavior,
 } from "@zcode/shared";
-import { appToolSearchModeSchema } from "@zcode/shared";
+import { appLogLevelSchema, appToolSearchModeSchema } from "@zcode/shared";
 import {
   TID_SETTINGS_ASK_USER_QUESTION_AUTO_RESOLUTION_SWITCH,
+  TID_SETTINGS_LOG_LEVEL_OPTION,
+  TID_SETTINGS_LOG_LEVEL_SELECT,
   TID_SETTINGS_NATIVE_SEARCH_SWITCH,
   TID_SETTINGS_TOOL_SEARCH_SELECT,
   TID_SETTINGS_TOOL_SEARCH_OPTION,
@@ -149,6 +152,8 @@ export function GeneralSectionContent({
   toolSearchMode = "off",
   onToolSearchModeChange,
   nativeSearchEnhancementsEnabled,
+  logLevel,
+  onLogLevelChange,
   httpProxy = "",
   httpProxyNoProxy = "",
   httpProxyCaCertPath = "",
@@ -211,6 +216,8 @@ export function GeneralSectionContent({
   toolSearchMode?: AppToolSearchMode;
   onToolSearchModeChange: (mode: AppToolSearchMode) => Promise<void>;
   nativeSearchEnhancementsEnabled: boolean;
+  logLevel: AppLogLevel;
+  onLogLevelChange: (level: AppLogLevel) => Promise<void>;
   httpProxy?: string;
   httpProxyNoProxy?: string;
   httpProxyCaCertPath?: string;
@@ -576,6 +583,37 @@ export function GeneralSectionContent({
                 void onNativeSearchEnhancementsEnabledChange(checked);
               }}
             />
+          }
+        />
+        <SettingsRow
+          label={intl.formatMessage({ id: "settings.logLevel" })}
+          description={intl.formatMessage({ id: "settings.logLevelDescription" })}
+          control={
+            <Select
+              value={logLevel}
+              onValueChange={(value) => {
+                void onLogLevelChange(appLogLevelSchema.parse(value));
+              }}
+            >
+              <SelectTrigger
+                size="lg"
+                className="w-[260px] min-w-0 justify-between"
+                data-testid={TID_SETTINGS_LOG_LEVEL_SELECT}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {appLogLevelSchema.options.map((level) => (
+                  <SelectItem
+                    key={level}
+                    value={level}
+                    data-testid={testId(TID_SETTINGS_LOG_LEVEL_OPTION, level)}
+                  >
+                    {intl.formatMessage({ id: `settings.logLevel.${level}` })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           }
         />
       </SettingsGroupCard>

@@ -1,6 +1,6 @@
 {
   "name": "zcode",
-  "version": "3.16.2-safe.4",
+  "version": "3.16.2-safe.5",
   "private": true,
   "type": "module",
   "scripts": {

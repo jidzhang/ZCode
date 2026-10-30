@@ -20,7 +20,13 @@ zcode.z.ai）实测：启动窗口内自动发出的出站请求与灰度 warn �
 | 请求 | 机制 | 噪音表现 | 决策 |
 | --- | --- | --- | --- |
 | renderer-action-trace | `singleFeatureRollout` + 60s setInterval | 开关关闭/网络失败时**每分钟一条 warn**（fetcher 抛错后 TTL 不生效） | 失败设 TTL |
-| desktop-context-prompt | 同一 `singleFeatureRollout`，无定时器（Host spawn 时触发） | 启动多条重复 warn（多调用方各打各的） | 失败设 TTL |
+| desktop-context-prompt | 同一 `singleFeatureRollout`，无定时器（Host spawn 时触发） | 启动多条重复 warn（多调用方各打各的） | 失败设 TTL；**且改为 fail-open**（见下） |
+
+**desktop-context-prompt 的 fail-open 修正（2026-10-30 补）**：该开关门控的不是遥测，
+而是桌面呈现能力的系统提示教学段——Gen UI 输出目录与渲染说明、`::code-comment` 行内
+评论、文件/URL 链接格式（`context/sections/desktop.ts`）。上游 fail-closed 语义叠加
+fork 的 enableStartupOutbound 默认关，会让 fork 用户**整体失去 Gen UI 与行内评论**。
+已把默认值与服务端未下发（缺席）语义都改为开启：服务端仍可显式 `enabled:false` 关闭。
 | community 可见性探测 | `CanOpenCommunity` IPC，App 挂载即触发 | 每次**启动必现一条误导性 warn**（开关抛错被当成 fetch 失败记日志） | 探测改本地 |
 
 ## 产品规则

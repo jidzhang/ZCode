@@ -34,7 +34,7 @@ describe("desktopContextPromptRollout", () => {
     ).toBeNull();
     expect(
       resolveDesktopContextPromptConfig({ code: 0, data: { configs: {} } }),
-    ).toEqual({ enabled: false });
+    ).toEqual({ enabled: true });
     expect(
       resolveDesktopContextPromptConfig({
         code: 0,
@@ -43,7 +43,7 @@ describe("desktopContextPromptRollout", () => {
     ).toBeNull();
   });
 
-  it("服务端成功响应但未下发配置时覆盖旧缓存并按关闭处理", async () => {
+  it("服务端成功响应但未下发配置时覆盖旧缓存并按开启处理（能力 fail-open）", async () => {
     vi.useFakeTimers();
     try {
       const fetchConfig = vi
@@ -61,14 +61,37 @@ describe("desktopContextPromptRollout", () => {
         configVersion: "desktop-sp-v1",
       });
       await vi.advanceTimersByTimeAsync(1);
-      await expect(rollout.refresh()).resolves.toEqual({ enabled: false });
-      expect(rollout.getSnapshot()).toEqual({ enabled: false });
+      // 本地（2026-10-30）：缺席不再等于关闭——它门控 Gen UI 教学段，fail-closed 会让
+      // 默认不出网的用户整体失去 Gen UI；只有服务端显式 enabled:false 才关闭（见下一用例）。
+      await expect(rollout.refresh()).resolves.toEqual({ enabled: true });
+      expect(rollout.getSnapshot()).toEqual({ enabled: true });
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("首次请求失败时默认关闭，且不会阻塞读取结果", async () => {
+  it("服务端显式下发 enabled:false 时关闭能力", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchConfig = vi
+        .fn<(_: AbortSignal) => Promise<unknown>>()
+        .mockResolvedValueOnce(config(false));
+      const rollout = createDesktopContextPromptRollout({
+        fetchConfig,
+        logger: { warn: vi.fn() },
+        cacheTtlMs: 1,
+      });
+
+      await expect(rollout.refresh()).resolves.toEqual({
+        enabled: false,
+        configVersion: "desktop-sp-v1",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("首次请求失败时默认开启，且不会阻塞读取结果", async () => {
     const rollout = createDesktopContextPromptRollout({
       fetchConfig: vi.fn(async () => {
         throw new Error("offline");
@@ -76,8 +99,8 @@ describe("desktopContextPromptRollout", () => {
       logger: { warn: vi.fn() },
     });
 
-    await expect(rollout.refresh()).resolves.toEqual({ enabled: false });
-    expect(rollout.getSnapshot()).toEqual({ enabled: false });
+    await expect(rollout.refresh()).resolves.toEqual({ enabled: true });
+    expect(rollout.getSnapshot()).toEqual({ enabled: true });
   });
 
   it("请求超过 3 秒时复用最近一次成功结果", async () => {
@@ -225,8 +248,9 @@ describe("desktopContextPromptRollout", () => {
       const first = rollout.awaitFirstDecision(50);
       const second = rollout.awaitFirstDecision(50);
       await vi.advanceTimersByTimeAsync(50);
-      await expect(first).resolves.toEqual({ enabled: false });
-      await expect(second).resolves.toEqual({ enabled: false });
+      // 本地（2026-10-30）：默认快照改为 enabled:true（能力 fail-open），超时回退取默认开启。
+      await expect(first).resolves.toEqual({ enabled: true });
+      await expect(second).resolves.toEqual({ enabled: true });
 
       // 超时回退不应阻止后台请求最终把真值写入快照——后续 Host fork 同步读取即可命中。
       await vi.advanceTimersByTimeAsync(150);

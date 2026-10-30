@@ -47,8 +47,10 @@ export function resolveDesktopContextPromptConfig(
   }
   const config = envelope.data?.configs?.desktopContextPrompt;
   if (config === undefined || config === null) {
-    // 服务端成功响应但未下发该单功能配置，语义是未启用；不能继续沿用旧的开启快照。
-    return { enabled: false };
+    // 本地（2026-10-30）：这个开关门控的是桌面呈现能力（Gen UI 输出目录、行内评论、
+    // 文件链接格式的系统提示教学段），不是遥测；fail-closed 会让默认不出网的 fork 用户
+    // 整体失去 Gen UI。改为 fail-open：服务端未下发视为开启，仅显式 enabled:false 关闭。
+    return { enabled: true };
   }
   if (typeof config?.enabled !== "boolean") {
     return null;
@@ -71,7 +73,8 @@ export function createDesktopContextPromptRollout(options: {
 }): DesktopContextPromptRollout {
   return createSingleFeatureRollout<DesktopContextPromptConfig>({
     resolveConfig: resolveDesktopContextPromptConfig,
-    defaultValue: { enabled: false },
+    // 本地（2026-10-30）：默认值与缺席语义同步改为开启（fail-open），理由见 resolver 内注释。
+    defaultValue: { enabled: true },
     logTag: "desktop-context-prompt",
     fetchConfig: options.fetchConfig,
     logger: options.logger,

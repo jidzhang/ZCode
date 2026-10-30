@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -52,34 +53,61 @@ it("替换期间并发读取只见完整旧版或新版，不产生 hash 历史�
     environmentConfigRoot,
     content: release(1),
   });
-  let finished = false;
-  const writer = (async () => {
-    try {
-      // 写次数放大到 200：读者让出间隙后仍能在替换期间取得大量样本。
-      for (let index = 0; index < 200; index++) {
-        await materializeZCodeBuiltinProviderConfig({
-          environmentConfigRoot,
-          content: release((index % 2) + 1),
-        });
-      }
-    } finally {
-      finished = true;
+  // 读者跑独立进程：生产读者（desktop main / CLI）本就是另一个进程，而 Windows 上
+  // rename 覆盖"正被打开的句柄"直接 EPERM（实测：并发读循环下 200 次替换失败 147 次）。
+  // 同事件循环的读者会与 writer 重试相位锁定——Node 定时器在 Windows 按约 15.6ms
+  // 量化，读者周期与任何重试间隔落在同一刻度：实测 1/5/10/50ms 让出与 2~6400ms
+  // 重试表全部连续撞上打开窗口，而暂停读者后同一 rename 立即成功。跨进程读者没有
+  // 这条锁，重试按正常概率收敛。
+  const reader = spawn(
+    process.execPath,
+    [
+      "-e",
+      `const { readFile } = require("node:fs/promises");
+       const path = process.argv[1];
+       (async () => {
+         for (;;) {
+           let parsed;
+           try {
+             parsed = JSON.parse(await readFile(path, "utf8"));
+           } catch (error) {
+             console.error("torn read: " + (error && error.message));
+             process.exit(2);
+           }
+           if (parsed.revision !== 1 && parsed.revision !== 2) {
+             console.error("unexpected revision " + parsed.revision);
+             process.exit(3);
+           }
+           await new Promise((resolve) => setTimeout(resolve, 5));
+         }
+       })();`,
+      file,
+    ],
+    { stdio: ["ignore", "ignore", "pipe"] },
+  );
+  let readerStderr = "";
+  reader.stderr.setEncoding("utf8");
+  reader.stderr.on("data", (chunk: string) => {
+    readerStderr += chunk;
+  });
+  const readerExit = new Promise<{ code: number | null; signal: string | null }>((resolve) => {
+    reader.on("close", (code, signal) => resolve({ code, signal }));
+  });
+  try {
+    for (let index = 0; index < 200; index++) {
+      await materializeZCodeBuiltinProviderConfig({
+        environmentConfigRoot,
+        content: release((index % 2) + 1),
+      });
     }
-  })();
-  // Windows 上 rename 覆盖"正被打开的句柄"直接 EPERM（实测：无退避的并发读循环
-  // 200 次替换失败 147 次；3 个忙循环读者时 160 次密集重试仍耗尽）。因此读者不能
-  // 空转——空转会把目标文件占满整个时间窗，任何重试策略都赢不了，测的就不是原子
-  // 替换语义而是平台共享标志。生产读者是事件驱动的短读，这里每次读后让出 1ms，
-  // 既保留"替换期间并发读只见完整旧版或新版"的断言，又不制造不可能满足的争用。
-  const reader = (async () => {
-    do {
-      const fileContent = JSON.parse(await readFile(file, "utf8"));
-      expect([1, 2]).toContain(fileContent.revision);
-      expect(fileContent).toEqual(JSON.parse(release(fileContent.revision)));
-      await new Promise((resolve) => setTimeout(resolve, 1));
-    } while (!finished);
-  })();
-  await Promise.all([writer, reader]);
+  } finally {
+    reader.kill();
+  }
+  const exit = await readerExit;
+  // 收尾 kill 的退出形态随平台/Node 版本不同（实测 Windows 报 signal=SIGTERM、
+  // code=null）；读者自行退出只可能是撕裂读(2)或越界值(3)，两者都写 stderr。
+  expect(readerStderr).toBe("");
+  expect(exit.code === null || exit.code === 1).toBe(true);
   expect(await readdir(dirname(file))).toEqual(["zcode-builtin.json"]);
 });
 

@@ -145,29 +145,40 @@ describe("workspace generateText streaming aggregation", () => {
     expect(streamConsumed).toBe(true);
   });
 
-  it("binds the lowest public reasoning level for connectivity tests", async () => {
-    let boundOptions: ModelOptions | undefined;
+  it("binds the lowest public reasoning level first for connectivity tests", async () => {
+    const boundOptions: Array<ModelOptions | undefined> = [];
     const model = createStreamingModel({
       reasoningLevels: ["low", "high", "max"],
+      // 探针预算沿用模型有效 maxOutputTokens（specs/model-connectivity-probe.md），
+      // 不再硬编码 1 token——旧值会被要求 max_output_tokens>=16 的上游网关直接 400。
+      maxOutputTokens: 12_345,
       onBind: (options) => {
-        boundOptions = options;
+        boundOptions.push(options);
       },
-      streamEvents: (async function* () {
-        yield { type: "finish", finishReason: "stop" };
-      })(),
     });
+    // 逐档探针会对每个档位各发一次请求，串行复用同一个 generator 会让后续档位无 finish。
+    model.streamText = (() =>
+      (async function* () {
+        yield { type: "finish", finishReason: "stop" };
+      })()) as never;
     const runtime = createRuntimeWithModel(model);
 
     await runtime.testModelConnectivity({
       selection: { providerId: "test-provider", modelId: "glm-test" },
     });
 
-    expect(boundOptions).toEqual({ maxOutputTokens: 1, reasoningLevel: "low" });
+    // 逐档探针（specs/reasoning-degrade-retry.md D）：从最低档开始，每档都用同一预算各打一枪。
+    expect(boundOptions).toEqual([
+      { maxOutputTokens: 12_345, reasoningLevel: "low" },
+      { maxOutputTokens: 12_345, reasoningLevel: "high" },
+      { maxOutputTokens: 12_345, reasoningLevel: "max" },
+    ]);
   });
 
   it("uses the disabled baseline when the model does not reason", async () => {
     let boundOptions: ModelOptions | undefined;
     const model = createStreamingModel({
+      maxOutputTokens: 12_345,
       onBind: (options) => {
         boundOptions = options;
       },
@@ -181,7 +192,7 @@ describe("workspace generateText streaming aggregation", () => {
       selection: { providerId: "test-provider", modelId: "glm-test" },
     });
 
-    expect(boundOptions).toEqual({ maxOutputTokens: 1, reasoningLevel: "disabled" });
+    expect(boundOptions).toEqual({ maxOutputTokens: 12_345, reasoningLevel: "disabled" });
   });
 
   it.each(["stop", "length"])("accepts %s without any response text", async (finishReason) => {

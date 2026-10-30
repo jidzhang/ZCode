@@ -442,8 +442,8 @@ export interface AppSettings {
   };
   /** 设置页里的临时 endpoint override；正式/测试默认 base url 由 ZCODE_BASE_URL env 管理。 */
   zcodeEndpointOrigin?: string;
-  /** settings.json 日志级别（默认 warn）：error 只记错误，warn 以上，info 全量；debug 仅开发版。 */
-  logLevel?: "error" | "warn" | "info";
+  /** settings.json 日志级别（默认 warn）：error 只记错误，warn 以上，info 全量，off 不写；debug 仅开发版。 */
+  logLevel?: "error" | "warn" | "info" | "off";
   /** 日志保留天数（默认 14，0=仅当天，最大 365）。 */
   logRetentionDays?: number;
 }

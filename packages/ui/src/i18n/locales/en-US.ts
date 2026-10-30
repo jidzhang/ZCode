@@ -3149,10 +3149,11 @@ const enUS: Record<string, string> = {
     "Use enhanced Find and Grep in new sessions and sessions restored after an app restart. Active sessions keep their current setting; Find remains unchanged on Windows.",
   "settings.logLevel": "Log level",
   "settings.logLevelDescription":
-    "Applies to desktop and agent logs. Warn keeps only warnings and errors; Info also records routine activity such as successful RPC calls. Takes effect after restarting the app.",
+    "Applies to desktop and agent logs. Warn keeps only warnings and errors; Info also records routine activity such as successful RPC calls; Off writes no logs at all. Takes effect after restarting the app.",
   "settings.logLevel.info": "Info",
   "settings.logLevel.warn": "Warn",
   "settings.logLevel.error": "Error",
+  "settings.logLevel.off": "Off",
   "settings.memory": "Memory",
   "settings.memory.workspaceMemory": "Workspace Memory",
   "settings.memoryDescription":

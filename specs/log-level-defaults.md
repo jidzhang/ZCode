@@ -31,9 +31,14 @@ fork 早已引入 `settings.json` 的 `logLevel` 阈值（`packages/desktop/src/
      现值注入；设置变更后下一个新起的 Agent 进程生效（既有 spawn 语义，不做热更）。
    - `ZCODE_LOG_LEVEL` 只在 `ZCODE_RUNTIME_ENV` 非 development 时生效：开发态仍记录
      debug，避免本地开发被默认 warn 静音。
-3. 设置页「通用」分组新增「日志级别」下拉，三个选项 `info` / `warn` / `error`，默认选中
+3. 设置页「通用」分组新增「日志级别」下拉，选项 `info` / `warn` / `error` / `off`，默认选中
    `warn`。变更写入 `settingService.update({ logLevel })`，与 `v2/logs` 阈值同源。
    文案说明"修改后需重启应用生效"。
+   2026-10-30 修订：入口从通用分组前段下移到「数据存储路径」同组（页面尾部）——
+   日志级别是低频运维项，不占高频设置注意力。新增 `off` 选项：阈值取 Error 之上
+   （desktop `MAIN_LOG_SEVERITY.off=4`，CLI `LOG_LEVEL_OFF=Error+1`），两侧数值比较
+   天然静音全部日志。`off` 不是 LogLevel 级别而是静音阈值，CLI 解析在 LogLevelName
+   反转表之外单独识别。
 4. 选项不提供 `debug`：`debug` 是开发态专用，正式安装包恒为 production 构建，
    `createServiceLogger` 与 main logger 均对 debug 做 development 门控；列出会误导用户。
 5. 不允许出现多条写入路径：`logLevel` 的唯一所有者仍是 `settings.json`（Host 的
@@ -58,11 +63,11 @@ fork 早已引入 `settings.json` 的 `logLevel` 阈值（`packages/desktop/src/
 
 ## 状态所有者
 
-| 事实 | 所有者 | 消费者 |
-| --- | --- | --- |
-| 用户选择的日志级别 | `~/.zcode/v2/setting.json` 的 `logLevel`（Host `settingService`） | main logger、host 中继 logger、`resolveSpawnEnv` |
-| 进程内的生效阈值 | `configuredMainLogLevel` / `configuredServiceLogLevel` / `createNodeLoggerFactory.currentLevel` | 各自 logger 的 write 路径 |
-| Agent 子进程级别 | spawn env `ZCODE_LOG_LEVEL` | `getDefaultMinLevel()` |
+| 事实               | 所有者                                                                                          | 消费者                                           |
+| ------------------ | ----------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| 用户选择的日志级别 | `~/.zcode/v2/setting.json` 的 `logLevel`（Host `settingService`）                               | main logger、host 中继 logger、`resolveSpawnEnv` |
+| 进程内的生效阈值   | `configuredMainLogLevel` / `configuredServiceLogLevel` / `createNodeLoggerFactory.currentLevel` | 各自 logger 的 write 路径                        |
+| Agent 子进程级别   | spawn env `ZCODE_LOG_LEVEL`                                                                     | `getDefaultMinLevel()`                           |
 
 事件顺序：设置变更 → `settingService.onDidUpdate` → services 侧 `setServiceLogLevel` 即时生效
 （`packages/services/src/node.ts`）→ main 侧下次启动生效 → 新起 Agent 进程继承新

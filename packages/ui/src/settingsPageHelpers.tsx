@@ -585,37 +585,6 @@ export function GeneralSectionContent({
             />
           }
         />
-        <SettingsRow
-          label={intl.formatMessage({ id: "settings.logLevel" })}
-          description={intl.formatMessage({ id: "settings.logLevelDescription" })}
-          control={
-            <Select
-              value={logLevel}
-              onValueChange={(value) => {
-                void onLogLevelChange(appLogLevelSchema.parse(value));
-              }}
-            >
-              <SelectTrigger
-                size="lg"
-                className="w-[260px] min-w-0 justify-between"
-                data-testid={TID_SETTINGS_LOG_LEVEL_SELECT}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {appLogLevelSchema.options.map((level) => (
-                  <SelectItem
-                    key={level}
-                    value={level}
-                    data-testid={testId(TID_SETTINGS_LOG_LEVEL_OPTION, level)}
-                  >
-                    {intl.formatMessage({ id: `settings.logLevel.${level}` })}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          }
-        />
       </SettingsGroupCard>
 
       <SettingsGroupCard>
@@ -1007,6 +976,38 @@ export function GeneralSectionContent({
               onDataBaseDirChange={onDataBaseDirChange}
               onSelectDataBaseDir={onSelectDataBaseDir}
             />
+          }
+        />
+        {/* 日志级别是低频运维项，与数据目录同组放在页面尾部，不占高频设置注意力。 */}
+        <SettingsRow
+          label={intl.formatMessage({ id: "settings.logLevel" })}
+          description={intl.formatMessage({ id: "settings.logLevelDescription" })}
+          control={
+            <Select
+              value={logLevel}
+              onValueChange={(value) => {
+                void onLogLevelChange(appLogLevelSchema.parse(value));
+              }}
+            >
+              <SelectTrigger
+                size="lg"
+                className="w-[260px] min-w-0 justify-between"
+                data-testid={TID_SETTINGS_LOG_LEVEL_SELECT}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {appLogLevelSchema.options.map((level) => (
+                  <SelectItem
+                    key={level}
+                    value={level}
+                    data-testid={testId(TID_SETTINGS_LOG_LEVEL_OPTION, level)}
+                  >
+                    {intl.formatMessage({ id: `settings.logLevel.${level}` })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           }
         />
       </SettingsGroupCard>

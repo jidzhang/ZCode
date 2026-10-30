@@ -235,11 +235,16 @@ function getDefaultMinLevel(env: NodeJS.ProcessEnv | undefined): LogLevel {
   return configured ?? LogLevel.Info;
 }
 
-/** 把 settings.json 的 logLevel 转成 Logger 可用的阈值名；非法值返回 undefined 走回退。 */
+/** 「关闭」阈值：Error 之上，任何 entry.level < 4 都被过滤，即完全不写日志。 */
+const LOG_LEVEL_OFF = (LogLevel.Error + 1) as LogLevel;
+
+/** 把 settings.json 的 logLevel 转成 Logger 可用的阈值；非法值返回 undefined 走回退。 */
 function parseLogLevelName(value: string | undefined): LogLevel | undefined {
   if (!value) return undefined;
-  // 级别名表单一来源：从 contracts 的 LogLevelName 反转派生，contracts 增删级别时这里自动跟随。
   const normalized = value.trim().toLowerCase();
+  // 「关闭」不在 LogLevelName 表里（它不是级别而是静音阈值）。
+  if (normalized === "off") return LOG_LEVEL_OFF;
+  // 级别名表单一来源：从 contracts 的 LogLevelName 反转派生，contracts 增删级别时这里自动跟随。
   for (const [level, name] of Object.entries(LogLevelName)) {
     // LogLevelName 的键就是 LogLevel 值本身，反转结果直接是合法级别。
     if (name.toLowerCase() === normalized) return Number(level) as LogLevel;

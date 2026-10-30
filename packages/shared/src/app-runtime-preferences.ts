@@ -3,8 +3,11 @@ import { z } from "zod";
 export const appToolSearchModeSchema = z.enum(["auto", "local", "off"]);
 export type AppToolSearchMode = z.infer<typeof appToolSearchModeSchema>;
 
-/** settings.json `logLevel` 的 UI 可选项；与 appSettingsSchema 同源，默认 warn。 */
-export const appLogLevelSchema = z.enum(["info", "warn", "error"]);
+/**
+ * settings.json `logLevel` 的 UI 可选项；与 appSettingsSchema 同源，默认 warn。
+ * `off` 表示完全不写日志（阈值取 Error 之上），两侧阈值比较都是数值，天然支持。
+ */
+export const appLogLevelSchema = z.enum(["info", "warn", "error", "off"]);
 export type AppLogLevel = z.infer<typeof appLogLevelSchema>;
 
 export const APP_RUNTIME_PREFERENCES_CHANGED_BROADCAST_CHANNEL = "settings:app-runtime-preferences";

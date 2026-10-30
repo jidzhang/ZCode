@@ -30,9 +30,16 @@ if (logRetentionResult.failedFiles.length > 0) {
 type LogLevel = "debug" | "info" | "warn" | "error";
 
 /** settings.json 日志级别；main/渲染器/Host 中继日志共用本阈值，默认 info。 */
-export type MainLogLevelSetting = "error" | "warn" | "info";
+export type MainLogLevelSetting = "error" | "warn" | "info" | "off";
 
-const MAIN_LOG_SEVERITY: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
+// off=4 在 Error 之上：任何 level<4 都被过滤，即完全不写日志。
+const MAIN_LOG_SEVERITY: Record<LogLevel | "off", number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+  off: 4,
+};
 
 let configuredMainLogLevel: MainLogLevelSetting = "info";
 
@@ -162,7 +169,8 @@ export function applyLogSettingsFromSettings(settings: {
   if (
     settings.logLevel === "error" ||
     settings.logLevel === "warn" ||
-    settings.logLevel === "info"
+    settings.logLevel === "info" ||
+    settings.logLevel === "off"
   ) {
     configuredMainLogLevel = settings.logLevel;
   }

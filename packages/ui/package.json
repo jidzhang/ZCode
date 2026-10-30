@@ -101,7 +101,6 @@
     "@types/qrcode": "^1.5.5",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "jsdom": "^29.1.1",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.2",
     "unified": "^11.0.5"

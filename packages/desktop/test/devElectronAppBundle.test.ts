@@ -11,7 +11,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEV_ELECTRON_APP_BUNDLE_ID,
   DEV_ELECTRON_APP_NAME,
@@ -22,8 +22,10 @@ import {
 } from "../scripts/devElectronAppBundle.mjs";
 
 const tempRoots: string[] = [];
+const signApp = vi.fn(async (_appPath: string) => {});
 
 afterEach(async () => {
+  signApp.mockClear();
   await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
@@ -77,6 +79,7 @@ describe("dev Electron app bundle", () => {
     const outputRoot = join(root, "runtime");
 
     const result = await prepareDevElectronAppBundle({
+      signApp,
       electronAppPath: sourceApp,
       runtimeRoot: outputRoot,
       electronVersion: "41.0.3",
@@ -119,6 +122,7 @@ describe("dev Electron app bundle", () => {
       await symlink("Versions/Current/Resources", join(framework, "Resources"));
 
       const result = await prepareDevElectronAppBundle({
+        signApp,
         electronAppPath: sourceApp,
         runtimeRoot: join(root, "runtime"),
         electronVersion: "41.0.3",
@@ -157,6 +161,7 @@ describe("dev Electron app bundle", () => {
     const outputRoot = join(root, "runtime");
 
     const first = await prepareDevElectronAppBundle({
+      signApp,
       electronAppPath: sourceApp,
       runtimeRoot: outputRoot,
       electronVersion: "41.0.3",
@@ -170,6 +175,7 @@ describe("dev Electron app bundle", () => {
     await writeFile(join(first.appPath, "Contents", "MacOS", "Electron"), "stale-copy", "utf8");
 
     await prepareDevElectronAppBundle({
+      signApp,
       electronAppPath: sourceApp,
       runtimeRoot: outputRoot,
       electronVersion: "41.0.3",
@@ -201,6 +207,7 @@ describe("dev Electron app bundle", () => {
     const outputRoot = join(root, "runtime");
 
     const first = await prepareDevElectronAppBundle({
+      signApp,
       electronAppPath: sourceApp,
       runtimeRoot: outputRoot,
       electronVersion: "41.0.3",
@@ -209,6 +216,7 @@ describe("dev Electron app bundle", () => {
     await writeFile(join(sourceMacOS, "Electron"), "source-v2", "utf8");
 
     await prepareDevElectronAppBundle({
+      signApp,
       electronAppPath: sourceApp,
       runtimeRoot: outputRoot,
       electronVersion: "41.0.3",
@@ -291,6 +299,7 @@ describe("dev Electron app bundle", () => {
     const outputRoot = join(root, "runtime");
 
     const first = await prepareDevElectronAppBundle({
+      signApp,
       electronAppPath: sourceApp,
       runtimeRoot: outputRoot,
       electronVersion: "41.0.3",
@@ -301,6 +310,7 @@ describe("dev Electron app bundle", () => {
     await writeFile(marker, "kept", "utf8");
 
     await prepareDevElectronAppBundle({
+      signApp,
       electronAppPath: sourceApp,
       runtimeRoot: outputRoot,
       electronVersion: "41.0.3",
@@ -309,4 +319,56 @@ describe("dev Electron app bundle", () => {
 
     expect(await readFile(marker, "utf8")).toBe("kept");
   });
+});
+
+async function signingFixture() {
+  const root = await mkdtemp(join(tmpdir(), "zcode-dev-signing-"));
+  tempRoots.push(root);
+  const electronAppPath = join(root, "Electron.app");
+  await mkdir(join(electronAppPath, "Contents", "MacOS"), { recursive: true });
+  await writeFile(join(electronAppPath, "Contents", "MacOS", "Electron"), "fixture binary");
+  await writeFile(
+    join(electronAppPath, "Contents", "Info.plist"),
+    `<plist><dict>
+<key>CFBundleDisplayName</key><string>Electron</string>
+<key>CFBundleIdentifier</key><string>com.github.Electron</string>
+<key>CFBundleName</key><string>Electron</string>
+</dict></plist>`,
+  );
+  return {
+    electronAppPath,
+    runtimeRoot: join(root, "runtime"),
+    electronVersion: "44.7.0",
+    arch: "arm64",
+  };
+}
+
+it("开发副本在写入身份后签名，缓存命中不重复签名", async () => {
+  const input = await signingFixture();
+  const sign = vi.fn(async (path: string) => {
+    expect(await readFile(join(path, "Contents", "Info.plist"), "utf8")).toContain(
+      DEV_ELECTRON_APP_BUNDLE_ID,
+    );
+  });
+  const first = await prepareDevElectronAppBundle({ ...input, signApp: sign });
+  await prepareDevElectronAppBundle({ ...input, signApp: sign });
+  expect(sign).toHaveBeenCalledExactlyOnceWith(first.appPath);
+});
+
+it("签名失败不发布缓存指纹；下次重新准备可恢复", async () => {
+  const input = await signingFixture();
+  await expect(
+    prepareDevElectronAppBundle({
+      ...input,
+      signApp: async () => {
+        throw new Error("signer failed");
+      },
+    }),
+  ).rejects.toThrow("signer failed");
+  const stamp = join(input.runtimeRoot, "44.7.0-arm64", ".zcode-dev-electron-source.json");
+  await expect(readFile(stamp, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  const recovered = vi.fn(async () => {});
+  await prepareDevElectronAppBundle({ ...input, signApp: recovered });
+  expect(recovered).toHaveBeenCalledOnce();
+  expect(JSON.parse(await readFile(stamp, "utf8")).format).toBe(DEV_ELECTRON_BUNDLE_FORMAT);
 });

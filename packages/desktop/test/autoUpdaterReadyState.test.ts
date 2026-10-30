@@ -96,8 +96,22 @@ autoUpdaterMock.autoRunAppAfterInstall = true;
 autoUpdaterMock.installDirectory = null;
 autoUpdaterMock.downloadedUpdateHelper = null;
 
+// powershell-command.mjs（上游 3.17.1，经 default 导入调用）在 win32 安装前用
+// Get-AuthenticodeSignature 复查安装包签名并 JSON.parse stdout；单测返回一个
+// 有效的"签名通过"应答，让退出准备链路继续走到用例真正考察的失败点。
+const AUTHENTICODE_OK_JSON = JSON.stringify({ status: 0, subject: "CN=Mock Signer" });
+const execFileMock = vi.fn((_cmd: string, _args: unknown, options: unknown, callback: unknown) => {
+  const cb = typeof options === "function" ? options : callback;
+  (cb as (error: unknown, stdout: string, stderr: string) => void)?.(
+    null,
+    AUTHENTICODE_OK_JSON,
+    "",
+  );
+});
 vi.mock("node:child_process", () => ({
   spawn: spawnMock,
+  execFile: execFileMock,
+  default: { spawn: spawnMock, execFile: execFileMock },
 }));
 
 vi.mock("electron", () => ({
@@ -158,6 +172,10 @@ vi.mock("electron-updater", () => {
     Provider: ProviderMock,
     default: {
       autoUpdater: autoUpdaterMock,
+      // autoUpdater.ts 用 `autoUpdater instanceof pkg.NsisUpdater` 决定是否挂 NSIS
+      // 签名校验钩子；default 导出缺这个类会让 instanceof 右侧为 undefined 直接抛
+      // TypeError（上游 3.17.1 在删除本测试的同时加了这个 instanceof 分支）。
+      NsisUpdater: class NsisUpdaterMock {},
     },
   };
 });
@@ -370,6 +388,10 @@ describe("autoUpdater ready state sync", () => {
   });
 
   it("服务端 manifest provider 会按设置选择 stable 或 preview 通道", async () => {
+    // 上游 3.17.1：resolveEndpointOrigin 的 origin 钳制只在打包态生效、更新器初始化
+    // 需打包态或开发态开关；用例考察 provider 选项装配本身，按开发态运行。
+    appMock.isPackaged = false;
+    process.env["ZCODE_AUTO_UPDATE_DEV"] = "1";
     settingServiceMock.get.mockResolvedValue({
       recentProjects: [],
       // fork 门控：自动检查/轮询需设置开启；本文件用例考察机制本身，默认开启。
@@ -758,6 +780,8 @@ describe("autoUpdater ready state sync", () => {
   });
 
   it("启动参数中的 update feed URL 优先于环境变量", async () => {
+    // 上游 3.17.1：正式包忽略调试更新源（resolveUpdateFeedSourceFromStartupConfig 直接返回 undefined）。
+    appMock.isPackaged = false;
     const { resolveUpdateFeedSourceFromStartupConfig } = await import("../src/main/autoUpdater.js");
 
     expect(
@@ -798,6 +822,8 @@ describe("autoUpdater ready state sync", () => {
   });
 
   it("启动时可覆盖服务端 manifest 接口 URL", async () => {
+    appMock.isPackaged = false;
+    process.env["ZCODE_AUTO_UPDATE_DEV"] = "1";
     mockProcessPlatform("darwin");
     process.env["TEST_UPDATER_ARCH"] = "arm64";
     const { initAutoUpdater } = await import("../src/main/autoUpdater.js");
@@ -822,6 +848,8 @@ describe("autoUpdater ready state sync", () => {
   });
 
   it("manifest URL 覆盖不会切换到 generic feed", async () => {
+    appMock.isPackaged = false;
+    process.env["ZCODE_AUTO_UPDATE_DEV"] = "1";
     mockProcessPlatform("darwin");
     process.env["TEST_UPDATER_ARCH"] = "arm64";
     const { initAutoUpdater } = await import("../src/main/autoUpdater.js");

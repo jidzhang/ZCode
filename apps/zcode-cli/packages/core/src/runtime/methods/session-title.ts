@@ -161,6 +161,7 @@ function shouldAttemptSessionTitleGeneration(
   input: string,
   options: { bypassShortInputGuard?: boolean } = {},
 ): boolean {
+  if (runtime.shuttingDown) return false;
   if (runtime.sessionTitleGenerationAttempted) return false;
   if (runtime.config.titleGeneration?.enabled === false) return false;
   if (!runtime.config.titleGeneration) return false;

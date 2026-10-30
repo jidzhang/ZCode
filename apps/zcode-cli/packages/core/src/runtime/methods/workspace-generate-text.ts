@@ -22,6 +22,7 @@ import { createRuntimeModel } from "./runtime-model.js";
 import { resolveNormalRequestMaxOutputTokens } from "./model-token-limits.js";
 import { normalizeStreamError } from "../helpers/index.js";
 import { auxiliaryModelOptions } from "../../model/auxiliary-model-options.js";
+import { INPUT_PREDICTION_QUERY_SOURCE } from "./input-prediction-sidecar.js";
 
 const WORKSPACE_GENERATE_TEXT_TIMEOUT_MS = 60_000;
 // 探针预算沿用目标模型的有效 maxOutputTokens（用户填写值；留空时为内置/继承默认值）。
@@ -38,6 +39,8 @@ export const TEXT_PROOFREAD_QUERY_SOURCE = "text_proofread";
 const AUXILIARY_QUERY_SOURCES: ReadonlySet<string> = new Set([
   GIT_COMMIT_MESSAGE_QUERY_SOURCE,
   TEXT_PROOFREAD_QUERY_SOURCE,
+  // 输入预测按键触发、要求低延迟，同样走最低档位（上游 3.17.1 纳入）。
+  INPUT_PREDICTION_QUERY_SOURCE,
 ]);
 
 export interface WorkspaceGenerateTextInput {

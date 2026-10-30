@@ -195,6 +195,9 @@ describe("service manager adapters", () => {
       "systemctl",
       "systemctl",
       "systemctl",
+      // 上游 3.17.1 注册流程先执行 systemctl --user daemon-reload 再 enable+start，
+      // 注册 3 跳 + 注销 1 跳，linux 合计 4 次。
+      "systemctl",
       "schtasks",
       "schtasks",
       "schtasks",

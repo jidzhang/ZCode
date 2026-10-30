@@ -90,7 +90,10 @@ export function useProjectSidebarPreferences(
         setPreferences((previous) => ({
           ...previous,
           order: [...new Set(value.order)],
-          view: value.view === "timeline" || value.view === "grouped" ? value.view : "projects",
+          view:
+            value.view === "timeline" || value.view === "grouped" || value.view === "unread"
+              ? value.view
+              : "projects",
           manualOrder: value.manualOrder === true,
           expanded:
             value.expanded && typeof value.expanded === "object"

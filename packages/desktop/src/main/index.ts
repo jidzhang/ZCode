@@ -1,3 +1,4 @@
+import { createRemoteConversationTelemetryDispatcher } from "@zcode/shared/conversation-telemetry";
 import { installRequestSecurityDiagnostics } from "./request-security-edition/index.js";
 import { createLocalTtftExporter } from "./localTtftExporter.js";
 /* eslint-disable max-lines */
@@ -60,8 +61,10 @@ import {
   createTelemetryAuthorizationLoader,
   buildRuntimeProcessEnvPatch,
   captureLoginShellEnvSnapshot,
+  getAppConfigDir,
   getConversationWorkspaceDir,
   getDataBaseDir,
+  getExportLogDir,
   getZCodeDataRootDir,
   normalizeRuntimeProcessEnv,
   setDataBaseDir,
@@ -91,7 +94,12 @@ import {
   HostMessageTypes,
   InternalChannels,
 } from "@zcode/shared";
-import { applyLogSettingsFromSettings, logger, webRemoteControlRelayLogger } from "./logger.js";
+import {
+  applyLogSettingsFromSettings,
+  logger,
+  webRemoteControlRelayLogger,
+  flushLocalTtftLogs,
+} from "./logger.js";
 import { markMainLaunchAppReady } from "./desktopLaunchMarks.js";
 import { createCuaPipFocusRouter, resolveCuaPipWindowKey } from "./cuaPipFocusRouter.js";
 import { createDesktopTelemetryFetch } from "./desktopTelemetryFetch.js";
@@ -497,6 +505,7 @@ async function runBrowserCommandOnView(params: {
   requestId: string;
   browserId?: string;
   browserGeneration?: number;
+  controlScopeId?: string;
   sessionId: string;
   turnId?: string;
   workspaceKey?: string;
@@ -539,6 +548,7 @@ async function runBrowserCommandOnView(params: {
     const result = await browserGuestManager.execute(
       {
         requestId: params.requestId,
+        controlScopeId: params.controlScopeId,
         browserId: params.browserId ?? "legacy-iab",
         browserGeneration: params.browserGeneration ?? 0,
         windowId: params.win.id,
@@ -784,6 +794,19 @@ const appTelemetryRuntime = createAppTelemetryRuntime({
   telemetryCore: appTelemetryCore,
   appLaunchCoordinator,
 });
+
+const reportRemoteConversationTelemetry = createRemoteConversationTelemetryDispatcher(
+  async (event) => {
+    const locale = Intl.DateTimeFormat().resolvedOptions();
+    const context = appTelemetryRuntime.getLatestRendererContext() ?? {
+      clientTimezone: locale.timeZone,
+      clientLanguage: locale.locale,
+      screenResolution: "",
+    };
+    await appTelemetryCore.reportEvent({ ...event, context });
+  },
+  appTelemetryCore.trackPendingReport,
+);
 
 function reportRemoteUsageEventForRenderer(rendererId: number, event: TelemetryEventPayload): void {
   const context =
@@ -1228,6 +1251,7 @@ async function prepareAppQuit(reason: string, kind: AppShutdownKind = "normal"):
     // 与其它 owner 并行进入既有屏障，最多等待 2 秒，避免 telemetry 串行放大退出预算。
     appTelemetryCore.flushPendingReports({ timeoutMs: 2_000 }),
     localTtftExporter.shutdown(),
+    flushLocalTtftLogs(),
     rendererActionTraceBroker.shutdown().catch((error) => {
       logger.warn(`[app-quit] renderer action trace shutdown failed (${reason}):`, error);
     }),
@@ -1894,6 +1918,7 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
         label,
         {
           ...initMessage,
+          browserBackendIdentity: browserGuestManager.getBackendIdentity(win.id),
           zcodeBuiltinProviderConfigFilePath: resolveZCodeBuiltinProviderConfigFilePath(),
         },
         {
@@ -1918,6 +1943,9 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
           onPluginTelemetry: (message) => {
             void appTelemetryCore.reportEvent(message.event).catch(() => {});
           },
+          onRemoteConversationTelemetry: (message) => {
+            void reportRemoteConversationTelemetry(message.event);
+          },
           onSessionCreateTelemetry: (message) => {
             void appTelemetryCore.reportEvent(message.event).catch(() => {});
           },
@@ -1935,6 +1963,13 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
           // browser-use：main 用 WebContentsView+CDP 执行命令（替换 T4 占位）。
           handleBrowserExecuteRequest: ({ win: browserWin, ...request }) =>
             runBrowserCommandOnView({ win: browserWin, ...request }),
+          // 数据同步页「模型提供商」分类：最近结果与重试都以 Main 协调器的 lane 为唯一数据源。
+          providerProvisioningLanes: {
+            getStatus: (sourceServerId, laneOptions) =>
+              remoteSessionManager.getProviderProvisioningLaneStatus(sourceServerId, laneOptions),
+            retry: (sourceServerId) =>
+              remoteSessionManager.retryProviderProvisioning(sourceServerId),
+          },
         },
         {
           taskRealtime: {

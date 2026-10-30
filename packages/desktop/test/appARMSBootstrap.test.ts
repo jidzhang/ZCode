@@ -190,7 +190,9 @@ describe("appARMSBootstrap beforeReport", () => {
         {
           event_type: "resource",
           type: "api",
-          url: "https://zcode.z.ai/api/v1/event/report?state=abc123",
+          // 上游 3.17.1 会整批排除命中上报端点的 api 事件（防自采集污染网络统计），
+          // 这里换成非上报端点的 URL，继续验证 api 事件 query 凭据的脱敏路径。
+          url: "https://zcode.z.ai/api/v1/attachments?state=abc123",
         },
       ],
     }) as { events: Array<Record<string, unknown>> };
@@ -200,7 +202,7 @@ describe("appARMSBootstrap beforeReport", () => {
     expect(result.events[1]!.message).not.toContain("alice");
     expect(result.events[1]!.message).not.toContain("secret");
     expect(result.events[1]!.message).not.toContain("bob@example.com");
-    expect(result.events[2]!.url).toBe("https://zcode.z.ai/api/v1/event/report");
+    expect(result.events[2]!.url).toBe("https://zcode.z.ai/api/v1/attachments");
   });
 
   it("脱敏排在网络 ingest 之后，聚合仍拿到原始 URL", async () => {

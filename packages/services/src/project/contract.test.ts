@@ -203,6 +203,9 @@ it("routes every foreign project operation to its existing owner and never falls
     deleteProject: vi.fn(async () => {}),
     moveTask: vi.fn(async () => {}),
     reorderProjects: vi.fn(async () => {}),
+    restoreProject: vi.fn(async () => ({ id: "remote-p" }) as VirtualProject),
+    measureProjectData: vi.fn(async () => ({ projects: [] })),
+    deleteProjectData: vi.fn(),
     prepareSession: vi.fn(async () => ({
       projectId: "remote-p",
       workspacePath: "/remote",
@@ -235,12 +238,20 @@ it("routes every foreign project operation to its existing owner and never falls
     workspacePath: "/remote",
   });
   await service.resolveSessionDirectories({ workspacePath: "/remote", taskId: "s" }, "source");
-  for (const method of Object.values(remote)) expect(method).toHaveBeenCalledTimes(1);
+  await service.restoreProject("remote-p", "source"); // 3.17.1 新增：同样路由 owner
+  for (const call of [
+    () => service.measureProjectData(["remote-p"], "source"),
+    () => service.deleteProjectData("remote-p", "source"),
+  ])
+    await expect(call()).rejects.toThrow("project.data-local-only");
+  const { measureProjectData: _m, deleteProjectData: _d, ...routed } = remote;
+  for (const method of Object.values(routed)) expect(method).toHaveBeenCalledTimes(1);
+  expect(_m).not.toHaveBeenCalled();
+  expect(_d).not.toHaveBeenCalled(); // 数据操作不路由
   expect(repository).not.toHaveBeenCalled();
   await expect(service.readTree({ hostId: "offline" })).rejects.toThrow("project.host-offline");
   expect(repository).not.toHaveBeenCalled();
 });
-
 it("browses owner directories without touching project storage or admitting a session", async () => {
   const repository = vi.fn();
   const directories = { home: async () => "/owner", read: vi.fn(async () => []) };

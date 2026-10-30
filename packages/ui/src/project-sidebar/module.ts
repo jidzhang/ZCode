@@ -9,8 +9,10 @@ export const projectSidebarModule = {
     "shared",
     "ui",
     "conversation-workspace-target",
-    "web-remote-control-ui",
+    // safe-zcode：V1 远控恢复删除了 ui/src/web-remote-control（V2 手机端组件目录），
+    // 对应 web-remote-control-ui 模块在 fork 不存在，依赖声明随之移除。
     "remote-connection-flow",
+    "data-sync",
   ],
   provides: ["project-sidebar"],
   publicEntrypoints: [

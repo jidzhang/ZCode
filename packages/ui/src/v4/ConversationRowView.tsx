@@ -26,6 +26,7 @@ import {
   GitBranchIcon,
   GoalIcon,
   PencilIcon,
+  SpellCheckIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
   Trash2Icon,
@@ -33,11 +34,13 @@ import {
   XIcon,
 } from "lucide-react";
 import { parseAutomationRunId } from "@zcode/shared";
+import { TEXT_PROOFREAD_MIN_CHARS } from "@zcode/services";
 import {
   TID_V4_EDIT,
   TID_V4_EDIT_ATTACHMENT_REMOVE,
   TID_V4_EDIT_CANCEL,
   TID_V4_EDIT_INPUT,
+  TID_V4_EDIT_PROOFREAD,
   TID_V4_EDIT_SUBMIT,
   TID_V4_EDIT_REWIND_WORKSPACE,
   TID_V4_FEEDBACK_DISLIKE,
@@ -89,6 +92,8 @@ import {
 } from "@/components/ai-elements/reasoning.js";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
+import { Spinner } from "@/components/ui/spinner.js";
+import { toast } from "@/components/ui/toast.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { WorkflowToolSummary } from "@/v4/WorkflowToolSummary.js";
 import {
@@ -989,6 +994,8 @@ const SingleUserInputRowView = memo(function SingleUserInputRowView({
   );
   const [editing, setEditing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // 纠错请求进行中：只禁用纠错按钮，不阻塞取消/发送之外的编辑。
+  const [proofreading, setProofreading] = useState(false);
   const [draft, setDraft] = useState(row.text);
   const [editAttachments, setEditAttachments] = useState<AttachmentRef[]>(() => [
     ...(row.attachments ?? []),
@@ -1010,6 +1017,8 @@ const SingleUserInputRowView = memo(function SingleUserInputRowView({
   const rewindWorkspaceLabel = intl.formatMessage({
     id: "chat.edit.resetConversationAndFiles",
   });
+  const proofreadLabel = intl.formatMessage({ id: "chat.edit.proofread" });
+  const proofreadDisabled = submitting || proofreading;
   const rewindWorkspaceTooltipTitle = intl.formatMessage({
     id: "chat.edit.resetConversationAndFiles.tooltip",
   });
@@ -1158,6 +1167,59 @@ const SingleUserInputRowView = memo(function SingleUserInputRowView({
     ],
   );
   const rewindWorkspaceDisabled = submitting || editWorkspaceRewindAvailability?.enabled !== true;
+
+  /**
+   * 消息编辑窗「纠错」（specs/text-proofread-in-edit.md）：手动触发一次独立辅助调用，
+   * 只回填编辑框、绝不自动发送；原文不足 5 字时静默无效果。
+   * 替换走 setTextWithUndoStep（带 HISTORY_PUSH_TAG 的独立历史步），Ctrl+Z 一步回到原文。
+   */
+  const handleProofreadDraft = useCallback(async () => {
+    const proofread = context.onProofreadText;
+    if (!proofread || proofreading || submitting) return;
+    if (draft.trim().length < TEXT_PROOFREAD_MIN_CHARS) return;
+    setProofreading(true);
+    try {
+      const outcome = await proofread(draft);
+      if (outcome.kind === "skipped") return;
+      if (outcome.kind === "unchanged") {
+        toast(intl.formatMessage({ id: "chat.edit.proofreadNoChange" }));
+        return;
+      }
+      if (outcome.kind === "discarded") {
+        toast(intl.formatMessage({ id: "chat.edit.proofreadDiscarded" }));
+        return;
+      }
+      inputApiRef.current?.setTextWithUndoStep(outcome.text);
+      if (outcome.fallbackUsed) {
+        toast(intl.formatMessage({ id: "chat.edit.proofreadFallback" }));
+      }
+    } catch (error) {
+      logger.warn("[proofread] 纠错请求失败", { error });
+      toast(intl.formatMessage({ id: "chat.edit.proofreadFailed" }));
+    } finally {
+      setProofreading(false);
+    }
+  }, [context.onProofreadText, draft, intl, proofreading, submitting]);
+
+  const proofreadButton = context.onProofreadText ? (
+    <ControlHintTooltip title={proofreadLabel}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-lg"
+        disabled={proofreadDisabled}
+        data-testid={testId(TID_V4_EDIT_PROOFREAD, String(row.rowId))}
+        aria-label={proofreadLabel}
+        onClick={() => {
+          void handleProofreadDraft();
+        }}
+      >
+        {proofreading ? <Spinner className="size-4" /> : <SpellCheckIcon className="size-4" />}
+        <span className="sr-only">{proofreadLabel}</span>
+      </Button>
+    </ControlHintTooltip>
+  ) : undefined;
+
   const rewindWorkspaceButton = (
     <Button
       type="button"
@@ -1281,6 +1343,7 @@ const SingleUserInputRowView = memo(function SingleUserInputRowView({
           inputTestId={testId(TID_V4_EDIT_INPUT, String(row.rowId))}
           submitTestId={testId(TID_V4_EDIT_SUBMIT, String(row.rowId))}
           cancelTestId={testId(TID_V4_EDIT_CANCEL, String(row.rowId))}
+          beforeCancelAction={proofreadButton}
           betweenCancelAndSubmitAction={
             <ControlHintTooltip
               title={rewindWorkspaceTooltipTitle}

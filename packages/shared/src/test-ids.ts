@@ -626,6 +626,8 @@ export const TID_V4_EDIT_INPUT = "v4-edit-input";
 export const TID_V4_EDIT_SUBMIT = "v4-edit-submit";
 /** v4 user query 编辑取消按钮（动态后缀为 rowId） */
 export const TID_V4_EDIT_CANCEL = "v4-edit-cancel";
+/** v4 user query 编辑「纠错」按钮（动态后缀为 rowId） */
+export const TID_V4_EDIT_PROOFREAD = "v4-edit-proofread";
 /** v4 user query 编辑附件删除按钮（动态后缀为 rowId-index） */
 export const TID_V4_EDIT_ATTACHMENT_REMOVE = "v4-edit-attachment-remove";
 export const TID_V4_EDIT_REWIND_WORKSPACE = "v4-edit-rewind-workspace";

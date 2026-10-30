@@ -25,6 +25,11 @@ export {
 
 // Accessor
 export type { IServiceAccessor } from "./accessor.js";
+export { TEXT_PROOFREAD_MIN_CHARS } from "./text-proofread/contract.js";
+export type {
+  TextProofreadDiscardReason,
+  TextProofreadOutcome,
+} from "./text-proofread/contract.js";
 export {
   ConversationShareServiceError,
   createUnsupportedConversationShareService,

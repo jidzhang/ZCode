@@ -277,4 +277,35 @@ describe("workspace generateText streaming aggregation", () => {
     expect(result.text).toBe("fix: commit message");
     expect(boundOptions).toEqual({ maxOutputTokens: 5_000, reasoningLevel: "disabled" });
   });
+
+  it("binds the lowest reasoning level for text_proofread and honors an explicit override", async () => {
+    const boundOptions: Array<ModelOptions | undefined> = [];
+    const model = createStreamingModel({
+      onBind: (options) => boundOptions.push(options),
+      reasoningLevels: ["disabled", "medium"],
+    });
+    model.generateText = async () => ({
+      finishReason: "stop",
+      text: "我想适合这个方案",
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    });
+    const runtime = createRuntimeWithModel(model);
+
+    await runtime.generateWorkspaceText({
+      selection: { providerId: "test-provider", modelId: "glm-test" },
+      messages: [{ role: "user", content: "我想适和这个方案" }],
+      querySource: "text_proofread",
+    });
+    // 纠错是辅助请求：与标题/提交信息同一条最低公开档约定。
+    expect(boundOptions.at(-1)).toEqual({ maxOutputTokens: 5_000, reasoningLevel: "disabled" });
+
+    await runtime.generateWorkspaceText({
+      selection: { providerId: "test-provider", modelId: "glm-test" },
+      messages: [{ role: "user", content: "我想适和这个方案" }],
+      querySource: "text_proofread",
+      // 最低档被上游拒绝时的兜底：调用方显式指定会话档位。
+      reasoningLevel: "medium",
+    });
+    expect(boundOptions.at(-1)).toEqual({ reasoningLevel: "medium" });
+  });
 });

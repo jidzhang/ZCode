@@ -11,7 +11,7 @@ import type { WorkflowRunSettingsChange } from "@/components/workflow-timeline/w
 import type { WorkflowDraftPosition, WorkflowRunCardSummary } from "@/ToolCallBlocks/shared.js";
 import type { WorkflowFillGraph } from "@/v4/workflowRunCardJoin.js";
 import type { Theme } from "@/useTheme.js";
-import type { ModelSelectionView } from "@zcode/services";
+import type { ModelSelectionView, TextProofreadOutcome } from "@zcode/services";
 import type { ZCodeWorkflowsForRunCandidate } from "@zcode/shared";
 import type { ConversationAttachmentReadParams, ConversationTransport } from "@/v4/transport.js";
 import type {
@@ -140,6 +140,11 @@ export interface ConversationRowRenderContext {
   workflowSaveCandidatesByRunId?: ReadonlyMap<string, readonly ZCodeWorkflowsForRunCandidate[]>;
   /** 会话当前模型（「配置」弹层首项「会话模型」的名字）；读不到即缺席，首项只写「会话模型」。 */
   workflowSessionModel?: { providerId: string; modelId: string };
+  /**
+   * 消息编辑窗「纠错」：宿主注入的一次独立辅助模型调用
+   * （specs/text-proofread-in-edit.md）。缺席即编辑窗没有该按钮。
+   */
+  onProofreadText?: (text: string) => Promise<TextProofreadOutcome>;
   /**
    * 工具卡上的子代理药丸 → 该子代理的 transcript tab：与详情页子代理行同一条打开路径，宿主补齐 workspace 身份。
    */

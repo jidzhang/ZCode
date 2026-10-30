@@ -124,6 +124,7 @@ import type {
   WorkspaceConfigTopicWireCandidate,
 } from "@zcode/shared/zcode-protocol-v4";
 import { createServiceDescriptor } from "../descriptors.js";
+import type { TextProofreadOutcome } from "#src/text-proofread/contract.js";
 
 export * from "./zcodeAgentPluginParams.js";
 export * from "./zcodeAgentWorkflowParams.js";
@@ -348,6 +349,8 @@ export interface ZCodeAgentGenerateWorkspaceTextParams extends ZCodeAgentWorkspa
   tools?: ZCodeWorkspaceGenerateTextParams["tools"];
   querySource: string;
   maxOutputTokens?: number;
+  /** 显式档位覆盖（最低档被拒后的兜底重试），缺省由 core 绑定最低公开档。 */
+  reasoningLevel?: string;
   signal?: AbortSignal;
   /**
    * 协议层 RPC 超时。thinking 模型的长请求会超过协议 client 默认的
@@ -355,6 +358,21 @@ export interface ZCodeAgentGenerateWorkspaceTextParams extends ZCodeAgentWorkspa
    * 还会被 onRequestTimeout 误判 stale 杀进程。
    */
   requestTimeoutMs?: number;
+}
+
+/**
+ * 消息编辑窗「纠错」：一次不进会话历史、不建 turn 的独立辅助模型调用
+ * （specs/text-proofread-in-edit.md）。
+ *
+ * - selection = 会话当前模型+用户当前档位；主尝试由 core 绑定最低公开档。
+ * - 最低档被上游拒绝时用 selection 自带档位重试一次（fallbackUsed=true）。
+ * - 输出不合格（截断 / 空 / 与原文相差超过 10 字）抛 TextProofreadDiscardedError，
+ *   调用方提示后保留原文。
+ */
+export interface ZCodeAgentProofreadTextParams extends ZCodeAgentWorkspaceTarget {
+  text: string;
+  selection: ZCodeWorkspaceGenerateTextParams["selection"];
+  signal?: AbortSignal;
 }
 
 export interface ZCodeAgentTestModelConnectivityParams extends ZCodeAgentWorkspaceTarget {
@@ -811,6 +829,8 @@ export interface IZCodeAgentService {
   generateWorkspaceText(
     params: ZCodeAgentGenerateWorkspaceTextParams,
   ): Promise<ZCodeWorkspaceGenerateTextResult>;
+  /** 消息编辑窗「纠错」；不进会话历史，见 specs/text-proofread-in-edit.md。 */
+  proofreadText(params: ZCodeAgentProofreadTextParams): Promise<TextProofreadOutcome>;
   testModelConnectivity(
     params: ZCodeAgentTestModelConnectivityParams,
   ): Promise<ZCodeProviderTestModelConnectivityResult>;

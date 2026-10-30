@@ -65,6 +65,7 @@ export function ChatPromptEditor({
   leadingActions,
   attachmentAction,
   betweenCancelAndSubmitAction,
+  beforeCancelAction,
   submitControl,
   inputTestId,
   submitTestId,
@@ -126,6 +127,8 @@ export function ChatPromptEditor({
   };
   /** 行内编辑专用：固定插在取消与主提交之间的第二动作。 */
   betweenCancelAndSubmitAction?: ReactNode;
+  /** 行内编辑专用：渲染在取消按钮之前的动作（消息纠错）。 */
+  beforeCancelAction?: ReactNode;
   submitControl?: ReactNode;
   inputTestId?: string;
   submitTestId?: string;
@@ -455,6 +458,7 @@ export function ChatPromptEditor({
             className="ml-auto flex shrink-0 items-center justify-end gap-1.5"
             data-composer-trailing-actions
           >
+            {beforeCancelAction}
             {onCancel && cancelLabel ? (
               <ControlHintTooltip title={cancelLabel} shortcut="Esc">
                 <Button

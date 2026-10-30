@@ -31,6 +31,14 @@ const WORKSPACE_GENERATE_TEXT_TIMEOUT_MS = 60_000;
 const CONNECTIVITY_PROBE_SYSTEM = "You are ZCode connectivity probe.";
 const CONNECTIVITY_PROBE_USER = "hi";
 const GIT_COMMIT_MESSAGE_QUERY_SOURCE = "git_commit_message";
+// 消息编辑窗「纠错」：一次独立的辅助请求，只回填编辑框，不进会话历史
+// （specs/text-proofread-in-edit.md）。
+export const TEXT_PROOFREAD_QUERY_SOURCE = "text_proofread";
+/** 辅助请求统一绑定最低公开档位，与标题/提交信息生成同一约定。 */
+const AUXILIARY_QUERY_SOURCES: ReadonlySet<string> = new Set([
+  GIT_COMMIT_MESSAGE_QUERY_SOURCE,
+  TEXT_PROOFREAD_QUERY_SOURCE,
+]);
 
 export interface WorkspaceGenerateTextInput {
   selection: ModelSelection;
@@ -39,6 +47,11 @@ export interface WorkspaceGenerateTextInput {
   tools?: ModelToolContract[];
   querySource: string;
   maxOutputTokens?: number;
+  /**
+   * 显式档位覆盖：纠错的最低档被上游拒绝时，调用方改用会话当前档位重试一次。
+   * 缺省按 AUXILIARY_QUERY_SOURCES 绑定最低公开档，其他 querySource 沿用选择自带档位。
+   */
+  reasoningLevel?: string;
 }
 
 export interface WorkspaceGenerateTextResult {
@@ -186,9 +199,11 @@ async function generateWorkspaceTextImpl(
   const requestedSelection = input.selection;
   const querySource = input.querySource.trim() || "workspace_generate_text";
   const baseModel = createRuntimeModel(this, { selection: requestedSelection, scope: "workspace" });
-  // 辅助请求需要的是最低公开档位，不是扫描 off/nothink 等名称后强制关闭。
-  const model =
-    querySource === GIT_COMMIT_MESSAGE_QUERY_SOURCE
+  // 辅助请求需要的是最低公开档位，不是扫描 off/nothink 等名称后强制关闭；
+  // 调用方显式指定档位时以显式值为准（纠错的最低档被上游拒绝时换会话档位重试一次）。
+  const model = input.reasoningLevel
+    ? baseModel.bind({ reasoningLevel: input.reasoningLevel })
+    : AUXILIARY_QUERY_SOURCES.has(querySource)
       ? baseModel.bind(auxiliaryModelOptions(baseModel))
       : baseModel;
   const baseTraceContext = options?.traceContext ?? this.rootTraceContext;
@@ -244,7 +259,7 @@ async function generateWorkspaceTextImpl(
           querySource === GIT_COMMIT_MESSAGE_QUERY_SOURCE
             ? "workspace_git_commit_message"
             : "workspace_generate_text",
-        ...(querySource === GIT_COMMIT_MESSAGE_QUERY_SOURCE && model.options.reasoningLevel
+        ...(AUXILIARY_QUERY_SOURCES.has(querySource) && model.options.reasoningLevel
           ? { reasoning: { requestedLevel: model.options.reasoningLevel } }
           : {}),
       },

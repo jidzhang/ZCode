@@ -2879,6 +2879,7 @@ export async function generateWorkspaceText(
       : {}),
     querySource: params.querySource,
     ...(params.maxOutputTokens ? { maxOutputTokens: params.maxOutputTokens } : {}),
+    ...(params.reasoningLevel ? { reasoningLevel: params.reasoningLevel } : {}),
   };
   const app =
     active?.app ??

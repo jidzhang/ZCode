@@ -5,6 +5,12 @@ import {
 } from "@zcode/shared/mcp-apps";
 import { supportsHistoryFirst } from "./independentPlanSupport.js";
 import {
+  TEXT_PROOFREAD_QUERY_SOURCE,
+  buildTextProofreadMessages,
+  textProofread,
+  type TextProofreadOutcome,
+} from "#src/text-proofread/index.js";
+import {
   offPeakControlParamsSchema,
   offPeakControlResultSchema,
   offPeakLifecycleNotificationSchema,
@@ -168,6 +174,7 @@ import {
   type ZCodeToolExecResource,
   type ZCodePluginOperationProgressNotification,
   type ZCodeTaskMode,
+  type ZCodeWorkspaceGenerateTextResult,
 } from "@zcode/shared";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import { createOfficialMcpIssuanceAudit } from "#src/official-mcp/officialMcpIssuanceAudit.js";
@@ -207,6 +214,7 @@ import type {
   ZCodeAgentCreateSessionParams,
   ZCodeAgentInstallPluginParams,
   ZCodeAgentGenerateWorkspaceTextParams,
+  ZCodeAgentProofreadTextParams,
   ZCodeAgentTestModelConnectivityParams,
   ZCodeAgentGoalParams,
   ZCodeAgentGrantWorkspaceHookTrustParams,
@@ -3829,6 +3837,71 @@ export function createZCodeAgentService(
     return envelope;
   }
 
+  /**
+   * workspace 级单次文本生成的唯一 RPC 路径：generateWorkspaceText 与 proofreadText 共用，
+   * 避免两条几乎相同的协议调用各写一份（账号同步/取消语义分叉会漂移）。
+   */
+  async function requestWorkspaceGenerateText(
+    params: ZCodeAgentGenerateWorkspaceTextParams,
+  ): Promise<ZCodeWorkspaceGenerateTextResult> {
+    const client = await getClient(params);
+    // Worker 自己读取 ZCode Built-in / Personal Config；Host 只在执行前确保账号状态形成的
+    // Account Config Overlay 已同步，避免新进程先按旧套餐状态创建 Model。
+    await ensureAccountProviderConfigSynced({
+      client,
+      reason: "workspace_generate_text",
+      workspace: params,
+      refreshRegistry: true,
+    });
+    const operationId = params.signal ? randomUUID() : undefined;
+    const cancel = () => {
+      if (!operationId) return;
+      void client
+        .request(
+          zcodeProtocolMethods.workspaceCancelGenerateText,
+          { operationId },
+          zcodeWorkspaceCancelGenerateTextResultSchema,
+          { timeoutMs: 5_000 },
+        )
+        .catch((error: unknown) => {
+          // 取消是 best-effort 控制面操作，失败不能覆盖调用方原本的 AbortError；
+          // 保留 debug 轨迹用于区分“本地停止等待”和“CLI 已收到取消”。
+          logger.debug(undefined, "workspace 模型请求取消通知失败", {
+            operationId,
+            workspaceKey: resolveWorkspaceKey(params),
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    };
+    params.signal?.addEventListener("abort", cancel, { once: true });
+    try {
+      return await client.request(
+        zcodeProtocolMethods.workspaceGenerateText,
+        {
+          workspace: buildWorkspaceRef(params),
+          selection: params.selection,
+          ...(params.prompt ? { prompt: params.prompt } : {}),
+          ...(params.messages ? { messages: params.messages } : {}),
+          ...(params.tools ? { tools: params.tools } : {}),
+          querySource: params.querySource,
+          ...(params.maxOutputTokens ? { maxOutputTokens: params.maxOutputTokens } : {}),
+          ...(params.reasoningLevel ? { reasoningLevel: params.reasoningLevel } : {}),
+          ...(operationId ? { operationId } : {}),
+        },
+        zcodeWorkspaceGenerateTextResultSchema,
+        // 不传 timeoutMs 时协议 client 默认 3 分钟超时会对 thinking 模型的长请求
+        // 先于调用方自身 deadline 触发，并被 onRequestTimeout 误判 stale 杀进程。
+        // 调用方显式传入 requestTimeoutMs（自身 deadline + 取消缓冲）时以其为准。
+        {
+          signal: params.signal,
+          ...(params.requestTimeoutMs ? { timeoutMs: params.requestTimeoutMs } : {}),
+        },
+      );
+    } finally {
+      params.signal?.removeEventListener("abort", cancel);
+    }
+  }
+
   return {
     async prepareStorage(params) {
       const client = await processManager.getClient(params);
@@ -5234,61 +5307,41 @@ export function createZCodeAgentService(
     },
 
     async generateWorkspaceText(params: ZCodeAgentGenerateWorkspaceTextParams) {
-      const client = await getClient(params);
-      // Worker 自己读取 ZCode Built-in / Personal Config；Host 只在执行前确保账号状态形成的
-      // Account Config Overlay 已同步，避免新进程先按旧套餐状态创建 Model。
-      await ensureAccountProviderConfigSynced({
-        client,
-        reason: "workspace_generate_text",
-        workspace: params,
-        refreshRegistry: true,
-      });
-      const operationId = params.signal ? randomUUID() : undefined;
-      const cancel = () => {
-        if (!operationId) return;
-        void client
-          .request(
-            zcodeProtocolMethods.workspaceCancelGenerateText,
-            { operationId },
-            zcodeWorkspaceCancelGenerateTextResultSchema,
-            { timeoutMs: 5_000 },
-          )
-          .catch((error: unknown) => {
-            // 取消是 best-effort 控制面操作，失败不能覆盖调用方原本的 AbortError；
-            // 保留 debug 轨迹用于区分“本地停止等待”和“CLI 已收到取消”。
-            logger.debug(undefined, "workspace 模型请求取消通知失败", {
-              operationId,
-              workspaceKey: resolveWorkspaceKey(params),
-              error: error instanceof Error ? error.message : String(error),
-            });
+      return await requestWorkspaceGenerateText(params);
+    },
+
+    async proofreadText(params: ZCodeAgentProofreadTextParams): Promise<TextProofreadOutcome> {
+      // 纠错不读会话历史：只把编辑框当前正文交给模型，最低档由 core 绑定
+      // （specs/text-proofread-in-edit.md）。fallbackSelection 用同一选择：档位被拒时
+      // 实现侧会在档位被拒时取它自带的档位显式重试一次。
+      return await textProofread.proofread({
+        text: params.text,
+        selection: params.selection,
+        fallbackSelection: params.selection,
+        onReasoningFallback: (error) => {
+          logger.warn(undefined, "消息纠错最低思考档被上游拒绝，已改用会话档位重试", {
+            event: "text_proofread.reasoning_fallback",
+            module: "services.text_proofread",
+            workspaceKey: resolveWorkspaceKey(params),
+            model: `${params.selection.providerId}/${params.selection.modelId}`,
+            fallbackReasoningLevel: params.selection.options?.reasoningLevel,
+            error: error instanceof Error ? error.message : String(error),
           });
-      };
-      params.signal?.addEventListener("abort", cancel, { once: true });
-      try {
-        return await client.request(
-          zcodeProtocolMethods.workspaceGenerateText,
-          {
-            workspace: buildWorkspaceRef(params),
-            selection: params.selection,
-            ...(params.prompt ? { prompt: params.prompt } : {}),
-            ...(params.messages ? { messages: params.messages } : {}),
-            ...(params.tools ? { tools: params.tools } : {}),
-            querySource: params.querySource,
-            ...(params.maxOutputTokens ? { maxOutputTokens: params.maxOutputTokens } : {}),
-            ...(operationId ? { operationId } : {}),
-          },
-          zcodeWorkspaceGenerateTextResultSchema,
-          // 不传 timeoutMs 时协议 client 默认 3 分钟超时会对 thinking 模型的长请求
-          // 先于调用方自身 deadline 触发，并被 onRequestTimeout 误判 stale 杀进程。
-          // 调用方显式传入 requestTimeoutMs（自身 deadline + 取消缓冲）时以其为准。
-          {
-            signal: params.signal,
-            ...(params.requestTimeoutMs ? { timeoutMs: params.requestTimeoutMs } : {}),
-          },
-        );
-      } finally {
-        params.signal?.removeEventListener("abort", cancel);
-      }
+        },
+        generate: async (attempt) => {
+          const result = await requestWorkspaceGenerateText({
+            workspacePath: params.workspacePath,
+            ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
+            ...(params.remoteSessionId ? { remoteSessionId: params.remoteSessionId } : {}),
+            selection: attempt.selection,
+            messages: buildTextProofreadMessages(params.text),
+            querySource: TEXT_PROOFREAD_QUERY_SOURCE,
+            ...(attempt.reasoningLevel ? { reasoningLevel: attempt.reasoningLevel } : {}),
+            ...(params.signal ? { signal: params.signal } : {}),
+          });
+          return { text: result.text, finishReason: result.finishReason };
+        },
+      });
     },
 
     async testModelConnectivity(params: ZCodeAgentTestModelConnectivityParams) {

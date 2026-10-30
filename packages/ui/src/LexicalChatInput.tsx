@@ -42,6 +42,7 @@ import {
   KEY_BACKSPACE_COMMAND,
   COMMAND_PRIORITY_HIGH,
   KEY_ENTER_COMMAND,
+  HISTORY_PUSH_TAG,
   type EditorState,
   type LexicalEditor,
 } from "lexical";
@@ -86,6 +87,8 @@ export interface LexicalChatInputHandle {
   setMention: (mention: ComposerMentionPrefill, trailingText?: string) => void;
   insertMention: (mention: ComposerMentionPrefill, selectionState?: EditorState) => void;
   setText: (text: string) => void;
+  /** 作为独立撤销步替换正文：Ctrl+Z 一步回到替换前（消息纠错用）。 */
+  setTextWithUndoStep: (text: string) => void;
   setTextWithPluginMentions: (text: string) => void;
   setEditorStateJson: (editorStateJson: string) => void;
   setSkillMention: (skillName: string, markdown?: string, trailingText?: string) => void;
@@ -186,7 +189,7 @@ function getEditorMarkdown(editorState: EditorState): string {
   return text;
 }
 
-function replaceEditorText(editor: LexicalEditor, text: string) {
+function replaceEditorText(editor: LexicalEditor, text: string, options?: { undoStep?: boolean }) {
   editor.update(
     () => {
       const root = $getRoot();
@@ -203,7 +206,13 @@ function replaceEditorText(editor: LexicalEditor, text: string) {
 
       root.getLastChild()?.selectEnd();
     },
-    { tag: PROGRAMMATIC_UPDATE_TAG },
+    // undoStep：HISTORY_PUSH_TAG 强制成为独立历史步，避免与紧邻的打字合并，
+    // 保证一次 Ctrl+Z 只回退这次替换（消息纠错）。
+    {
+      tag: options?.undoStep
+        ? [PROGRAMMATIC_UPDATE_TAG, HISTORY_PUSH_TAG]
+        : PROGRAMMATIC_UPDATE_TAG,
+    },
   );
 }
 
@@ -907,7 +916,8 @@ function E2ELexicalInputBridgePlugin({ inputTestId }: { inputTestId?: string }) 
       getEditorState: () => editor.getEditorState(),
       getText: () => getEditorMarkdown(editor.getEditorState()),
       setText: (text: string) => replaceEditorText(editor, text),
-      setTextWithPluginMentions: (text: string) => replaceEditorTextWithPluginMentions(editor, text),
+      setTextWithPluginMentions: (text: string) =>
+        replaceEditorTextWithPluginMentions(editor, text),
       setEditorStateJson: (editorStateJson: string) =>
         replaceEditorStateJson(editor, editorStateJson),
     };
@@ -1287,7 +1297,9 @@ function EditorApiPlugin({
       setMention: (mention, trailingText) =>
         replaceEditorWithMention(editor, mention, trailingText),
       setText: (text: string) => replaceEditorText(editor, text),
-      setTextWithPluginMentions: (text: string) => replaceEditorTextWithPluginMentions(editor, text),
+      setTextWithUndoStep: (text: string) => replaceEditorText(editor, text, { undoStep: true }),
+      setTextWithPluginMentions: (text: string) =>
+        replaceEditorTextWithPluginMentions(editor, text),
       setEditorStateJson: (editorStateJson: string) =>
         replaceEditorStateJson(editor, editorStateJson),
       setSkillMention: (skillName: string, markdown = `$${skillName}`, trailingText = " ") =>

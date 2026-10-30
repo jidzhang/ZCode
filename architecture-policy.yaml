@@ -281,6 +281,15 @@ modules:
     layerOrder: [domain, app, adapters]
     owner: conversation
 
+  # text-proofread：消息编辑窗「纠错」的纯逻辑（prompt/清洗/安全闸/档位兜底）。
+  - id: text-proofread
+    roots: [packages/services/src/text-proofread]
+    managed: true
+    requires: [shared]
+    publicEntrypoints: [packages/services/src/text-proofread/index.ts, packages/services/src/text-proofread/contract.ts]
+    layers: {domain: "."}
+    owner: conversation
+
   - id: gen-ui
     roots: [packages/ui/src/gen-ui]
     managed: true

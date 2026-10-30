@@ -2476,6 +2476,9 @@ export const zcodeWorkspaceGenerateTextParamsSchema = z
     tools: z.array(zcodeWorkspaceModelToolSchema).optional(),
     querySource: nonEmptyString,
     maxOutputTokens: z.number().int().positive().optional(),
+    // 显式档位覆盖：辅助调用默认绑定模型最低公开档；最低档被上游拒绝时，
+    // 调用方（消息纠错）用会话当前档位重试一次，见 specs/text-proofread-in-edit.md。
+    reasoningLevel: nonEmptyString.optional(),
     operationId: nonEmptyString.optional(),
   })
   .strict()

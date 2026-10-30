@@ -2971,6 +2971,12 @@ const enUS: Record<string, string> = {
   "chat.changeSummary.rewindDialog.reason.fileReadFailed": "current file unreadable",
   "chat.changeSummary.rewindDialog.reason.unsupportedCheckpoint":
     "old checkpoint cannot be safely restored",
+  "chat.edit.proofread": "Fix typos",
+  "chat.edit.proofreadFailed": "Could not fix typos",
+  "chat.edit.proofreadNoChange": "No obvious typos found",
+  "chat.edit.proofreadDiscarded": "Typo fix was not applied; edit the text manually",
+  "chat.edit.proofreadFallback":
+    "Lowest thinking level unavailable; used the current chat level instead",
   "chat.edit.resetConversationAndFiles": "Reset chat + files",
   "chat.edit.resetConversationAndFiles.tooltip": "Reset with files",
   "chat.edit.resetConversationAndFiles.available":

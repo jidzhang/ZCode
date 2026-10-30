@@ -68,6 +68,7 @@ import type {
   ConversationShareAllowedArtifact,
   ConversationShareTurnPreflightResult,
   ImportedConversationShare,
+  TextProofreadOutcome,
 } from "@zcode/services";
 import { useCodingPlanBillingDiscountFromService } from "@/CodingPlanBillingDiscount.js";
 import { toast } from "@/components/ui/toast.js";
@@ -132,7 +133,7 @@ import {
 } from "@/components/workflow-timeline/workflowRunSettings.js";
 import { useWorkflowRunJournalSummaries } from "@/hooks/useWorkflowRunJournalSummaries.js";
 import { usePlanIdentitySnapshot } from "@/hooks/usePlanIdentitySnapshot.js";
-import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
+import { useBaseWorkspaceServices, useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { buildGenUiModelContext } from "@zcode/shared/gen-ui";
 import { useWorkspaceHomePath } from "@/hooks/useWorkspaceHomePath.js";
 import { prepareWorkspaceWithZCodeSessionService } from "@/hooks/useWorkspacePrepare.js";
@@ -687,6 +688,9 @@ export function SessionPane({
   const { intl, locale } = useZCodeIntl();
   const slashCommands = useSlashCommands(workspacePath, workspaceIdentity);
   const baseWorkspaceServices = useBaseWorkspaceServices();
+  // 「纠错」必须打到持有 workspace 的 Host（远端 tab 走 remote host），
+  // 不能用窗口级 context services。
+  const workspaceServices = useWorkspaceServices(workspacePath, remoteSessionId, workspaceIdentity);
   const composerClientNamespace = useComposerClientNamespace();
   const composerProjectId = useZCodeSessionStore(
     (store) => store.getWorkspaceState(workspacePath, workspaceIdentity).draftProjectId,
@@ -2985,6 +2989,26 @@ export function SessionPane({
     if (result !== "sent") throw new Error(`workflow save request not sent: ${result}`);
   }, []);
 
+  /**
+   * 消息编辑窗「纠错」（specs/text-proofread-in-edit.md）：会话当前模型 + 用户当前档位，
+   * 一次不进会话历史的辅助调用；档位兜底与输出验收都在 services 侧完成。
+   */
+  const handleProofreadText = useCallback(
+    async (text: string): Promise<TextProofreadOutcome> => {
+      const selection =
+        modelSelectionView?.effectiveSelection ?? modelSelectionView?.preferredSelection ?? null;
+      if (!selection) throw new Error("proofread_model_unavailable");
+      return await workspaceServices.zcodeAgentService.proofreadText({
+        workspacePath,
+        ...(workspaceIdentity ? { workspaceIdentity } : {}),
+        ...(remoteSessionId ? { remoteSessionId } : {}),
+        text,
+        selection,
+      });
+    },
+    [modelSelectionView, remoteSessionId, workspaceIdentity, workspacePath, workspaceServices],
+  );
+
   const rowContext = useMemo<ConversationRowRenderContext>(
     () => ({
       workspacePath,
@@ -3050,6 +3074,7 @@ export function SessionPane({
           : undefined,
       workflowSaveCandidatesByRunId,
       ...(workflowSessionModel === undefined ? {} : { workflowSessionModel }),
+      onProofreadText: handleProofreadText,
       workflowRunByToolCallId,
       workflowRunByRunId,
       workflowRunPendingQuestionsByRunId,
@@ -3070,6 +3095,7 @@ export function SessionPane({
       workspaceIdentity,
       remoteSessionId,
       modelSelectionView,
+      handleProofreadText,
       snapshot?.logEpoch,
       theme,
       codePreviewSettings,

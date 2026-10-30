@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  existsSync,
   copyFileSync,
   mkdirSync,
   mkdtempSync,
@@ -56,7 +57,14 @@ export function extractPrebuiltArchive({ archivePath, archiveExt, extractDir, cw
 
   const tarCwd = cwd ?? process.cwd();
   runCommand(
-    "tar",
+    // 修复原因（2026-10-30，上游 3.17.1 合并后首包）：Git Bash 会把 /usr/bin 的
+    // GNU tar 1.35 注入 PATH 最前，归档位于 cwd 之外时相对化退回 `D:/...` 绝对路径，
+    // GNU tar 把盘符冒号解析成远程主机名直接 code 2。Windows 上显式用 System32 的
+    // bsdtar（无盘符冒号问题，且这台开发机的历史打包链路都按 bsdtar 语义验证）；
+    // 找不到时保持裸 "tar"，POSIX CI 行为不变。
+    process.platform === "win32" && existsSync(join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe"))
+      ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe")
+      : "tar",
     ["-xzf", resolveTarArchiveArg(archivePath, tarCwd), "-C", toTarPosixPath(extractDir)],
     { cwd: tarCwd },
   );

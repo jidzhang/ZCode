@@ -407,6 +407,9 @@ export function registerPlatformIpcHandlers(options: {
     const communityUrl = await resolveCommunityUrl({
       locale: result.data,
       fetchRemoteConfig: options.fetchHelpConfig,
+      // 可见性探测在 App 挂载时就会触发，只读本地配置避免启动期多一条出站请求；
+      // 远端覆盖在真正点击社区入口（openCommunity）时才解析。
+      remote: false,
       logger: options.logger,
     });
 

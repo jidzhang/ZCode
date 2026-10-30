@@ -37,6 +37,14 @@ export interface SingleFeatureRolloutLogger {
 
 export const SINGLE_FEATURE_REQUEST_TIMEOUT_MS = 3_000;
 export const SINGLE_FEATURE_CACHE_TTL_MS = 60 * 60 * 1_000;
+/**
+ * 失败退避窗口：请求失败后同样进入短 TTL，窗口内 refresh() 直接返回快照。
+ *
+ * 修前行为：snapshotExpiresAt 只在成功时赋值，失败后保持 0，调用方的周期任务
+ * （renderer-action-trace 的 60s 定时器）在阻断网络下每分钟重发一次、永不停止。
+ * 旁路灰度 fail-closed 本就默认关闭，10 分钟内不可自愈的代价可接受。
+ */
+export const SINGLE_FEATURE_FAILURE_CACHE_TTL_MS = 10 * 60 * 1_000;
 
 export interface CreateSingleFeatureRolloutOptions<T extends SingleFeatureRolloutConfig> {
   /** 解析 /api/v1/client/configs 响应体；null 表示响应无效（按失败处理，沿用旧快照）。 */
@@ -49,6 +57,8 @@ export interface CreateSingleFeatureRolloutOptions<T extends SingleFeatureRollou
   logger: SingleFeatureRolloutLogger;
   timeoutMs?: number;
   cacheTtlMs?: number;
+  /** 失败退避窗口；省略用 SINGLE_FEATURE_FAILURE_CACHE_TTL_MS（10 分钟）。 */
+  failureCacheTtlMs?: number;
 }
 
 export function createSingleFeatureRollout<T extends SingleFeatureRolloutConfig>(
@@ -59,6 +69,10 @@ export function createSingleFeatureRollout<T extends SingleFeatureRolloutConfig>
   let inFlight: Promise<T> | undefined;
   const timeoutMs = Math.max(options.timeoutMs ?? SINGLE_FEATURE_REQUEST_TIMEOUT_MS, 1);
   const cacheTtlMs = Math.max(options.cacheTtlMs ?? SINGLE_FEATURE_CACHE_TTL_MS, 1);
+  const failureCacheTtlMs = Math.max(
+    options.failureCacheTtlMs ?? SINGLE_FEATURE_FAILURE_CACHE_TTL_MS,
+    1,
+  );
 
   const refresh = (): Promise<T> => {
     if (Date.now() < snapshotExpiresAt) {
@@ -95,6 +109,8 @@ export function createSingleFeatureRollout<T extends SingleFeatureRolloutConfig>
         return snapshot;
       } catch (error) {
         // 灰度配置是旁路能力：服务端异常或超时不能阻塞客户端；有成功结果时沿用，首次失败回退默认。
+        // 失败也进入退避窗口，否则 60s 周期调用方在阻断网络下会每分钟重发（spec：startup-egress-policy）。
+        snapshotExpiresAt = Date.now() + failureCacheTtlMs;
         options.logger.warn(`[${options.logTag}] config unavailable, using cached decision`, {
           error,
           enabled: snapshot.enabled,

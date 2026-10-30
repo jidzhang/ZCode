@@ -227,6 +227,46 @@ describe("desktopCommandHandlers resolveFeedbackUrl", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("可见性探测（remote:false）只读本地配置且不调用远端 fetcher", async () => {
+    const logger = {
+      warn: vi.fn(),
+    };
+    const { resolveCommunityUrl } = await import("../src/main/desktopCommandHandlers.js");
+    const fetchRemoteConfig = vi.fn(async () => ({
+      community_urls: { "zh-CN": "https://remote.example.com/zh-community" },
+    }));
+
+    // 本地配置提供 zh 入口；远端即便有覆盖也不该被读到（探测不出网）。
+    await expect(
+      resolveCommunityUrl({
+        locale: "zh-CN",
+        logger,
+        remote: false,
+        fetchRemoteConfig,
+        readLocalConfig: () => ({
+          community_urls: { "zh-CN": "https://local.example.com/zh-community" },
+        }),
+      }),
+    ).resolves.toBe("https://local.example.com/zh-community");
+
+    expect(fetchRemoteConfig).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalled();
+
+    // 本地缺失该语言：保持隐藏，同样不触碰远端、不告警。
+    await expect(
+      resolveCommunityUrl({
+        locale: "en-US",
+        logger,
+        remote: false,
+        fetchRemoteConfig,
+        readLocalConfig: () => ({
+          community_urls: { "zh-CN": "https://local.example.com/zh-community" },
+        }),
+      }),
+    ).resolves.toBeUndefined();
+    expect(fetchRemoteConfig).not.toHaveBeenCalled();
+  });
+
   it("英文界面优先使用本地英文入口，不被远端中文入口截获", async () => {
     const logger = {
       warn: vi.fn(),

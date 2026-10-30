@@ -226,15 +226,22 @@ export async function resolveCommunityUrl(options: {
   locale: Locale;
   fetchRemoteConfig?: () => Promise<unknown>;
   readLocalConfig?: () => unknown;
+  /**
+   * 启动期的入口可见性探测传 false：只读本地内置配置，不出网。
+   * 远端覆盖（服务端可按语言下线社区）只在用户真正点击社区入口时生效。
+   */
+  remote?: boolean;
   logger: {
     warn: (...args: unknown[]) => void;
   };
 }): Promise<string | undefined> {
   let remoteConfig: unknown;
-  try {
-    remoteConfig = await fetchRemoteAppConfig(options.fetchRemoteConfig);
-  } catch (error) {
-    options.logger.warn("[community] failed to fetch remote config:", error);
+  if (options.remote !== false) {
+    try {
+      remoteConfig = await fetchRemoteAppConfig(options.fetchRemoteConfig);
+    } catch (error) {
+      options.logger.warn("[community] failed to fetch remote config:", error);
+    }
   }
 
   let localConfig: unknown;

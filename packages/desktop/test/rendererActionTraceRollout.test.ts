@@ -79,4 +79,29 @@ describe("renderer action trace rollout", () => {
     await new Promise((resolve) => setTimeout(resolve, 2));
     expect(await rollout.refresh()).toMatchObject({ enabled: true, configVersion: "v1" });
   });
+
+  it("失败后进入退避窗口：窗口内 60s 定时器触发不再调 fetcher 也不再告警", async () => {
+    // 修前行为：snapshotExpiresAt 只在成功时赋值，失败后 60s 定时器每分钟重打一次
+    // fetcher（enableStartupOutbound 关闭时是本地抛错）→ 每分钟一条 warn 刷屏。
+    const warn = vi.fn();
+    const fetchConfig = vi.fn<() => Promise<unknown>>().mockRejectedValue(
+      new Error("startup outbound disabled by setting"),
+    );
+    const rollout = createRendererActionTraceRollout({
+      fetchConfig,
+      logger: { warn },
+    });
+
+    // 首次失败：调用一次 fetcher，记一条 warn，返回默认关闭快照。
+    expect((await rollout.refresh()).enabled).toBe(false);
+    expect(fetchConfig).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    // 退避窗口内（默认 10 分钟）的三次定时器触发：全部走缓存，零新增调用/告警。
+    for (let tick = 0; tick < 3; tick += 1) {
+      expect((await rollout.refresh()).enabled).toBe(false);
+    }
+    expect(fetchConfig).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
 });

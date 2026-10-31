@@ -689,12 +689,19 @@ describe("v4 原生 sendQueuedNow", () => {
     });
     // 抢占后作为新输入立即生效，不是 steer 进已中断的旧 turn；guide 项的权威
     // admittedDelivery 原样带入新 turn，不伪造成普通 queue 提交。
+    // 上游 3.17.1 把 sendInput 选项从 inputPresentation:"user_steer" 改写为
+    // delivery:"start_turn" + 完整 queue intent（见本文件 556 行上游同款断言），
+    // 语义不变：开新 turn、guide 投递权威透传（queueDelivery/intent 均为 guide）。
     expect(app.steerTurn).not.toHaveBeenCalled();
     expect(app.sendInput).toHaveBeenCalledWith(
       { text: "排队原文" },
       expect.objectContaining({
-        inputPresentation: "user_steer",
-        intent: expect.objectContaining({ admittedDelivery: "guide" }),
+        delivery: "start_turn",
+        queueDelivery: "guide",
+        intent: expect.objectContaining({
+          admittedDelivery: "guide",
+          requestedDelivery: "guide",
+        }),
       }),
     );
     expect(app.removeQueueItem).toHaveBeenCalledWith(

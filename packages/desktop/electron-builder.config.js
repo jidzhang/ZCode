@@ -681,6 +681,11 @@ function signWindowsBrowserImportHelper(context) {
 /** @type {import("electron-builder").Configuration} */
 export default {
   appId: desktopProductIdentity.appId,
+  // safe-zcode（2026-10-31）：LZMA 固实压缩极限档（根级选项，win/nsis 块内无效——
+  // 首次误放 win 块实测体积无变化）。normal 下裁剪包 176.2 MiB；maximum 代价是
+  // NSIS 阶段打包时长数倍（CI 单 job 可接受）。blockmap 差分更新按 4KB 分块哈希
+  // 不受压缩档位影响，但压得越实相邻版本块差异率越高，差分更新可能退化——
+  // 发布节奏快时可改回 "normal"。
   // Linux deb 打包（fpm）会校验 package metadata 中的 homepage、author.email、maintainer。
   // CI 环境下若这些字段缺失会在产物阶段直接失败。这里统一在构建配置补齐，避免依赖外部注入。
   extraMetadata: {

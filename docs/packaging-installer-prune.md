@@ -59,6 +59,27 @@ highlight.js 5.2。合计约 219.5 MiB（未压缩），NSIS 压缩后 ≈ 39 Mi
 行再重新打包即可。若上游后续让 main/host 直接依赖其中某个包（源码出现 import），
 启动时会立即 `ERR_MODULE_NOT_FOUND <pkg>`——按报错包名从清单中移除该行是自我修复路径。
 
+## NSIS 压缩档位实测（2026-10-31，结论：无可挤空间）
+
+electron-builder 的 NSIS target **默认就是 `SetCompressor /SOLID lzma`**（与手写
+NSIS 脚本常见的 `/SOLID lzma` 一致）。根级 `compression` 选项三档实测
+（同一份裁剪后 win-unpacked，skip-build 仅重跑 NSIS 阶段）：
+
+| 档位                    | 体积                    | NSIS 阶段耗时 |
+| ----------------------- | ----------------------- | ------------- |
+| normal（上游默认）      | 176.2 MiB               | ~3 分钟       |
+| maximum（LZMA ultra）   | 176.2 MiB（字节级相同） | ~3 分钟       |
+| store（完全不压缩对照） | 177.2 MiB               | ~2 分钟       |
+
+store 仅比 maximum 大 1 MiB：安装包主体在 NSIS 之前已被 electron-builder 打成
+高熵的 app-64.7z，NSIS 的 solid LZMA 对它压不动，最终体积被收敛到同一水平线，
+档位只影响 7z/NSIS 两层怎么分工，不改地板。
+
+结论：**176.2 MiB 就是当前数据集的体积地板**；compression 配置已从
+electron-builder.config.js 移除（还原上游默认 normal，避免留一个无效选项误导
+后来者）。再想减体积只有两条路：继续减数据（收益递减），或换收发形态
+（如差分更新、按需下载组件），均不在本期范围。
+
 ## 附：审计脚本要点（可复现）
 
 - 体积清单：`asar.getRawHeader(app.asar).header.files.node_modules` 递归求和。

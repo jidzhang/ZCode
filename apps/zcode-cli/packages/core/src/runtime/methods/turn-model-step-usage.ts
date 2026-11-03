@@ -60,10 +60,22 @@ export function querySourceForTask(taskType: AgentRuntimeInternal["config"]["tas
 
 export function findLatestCommittedAssistantUsage(
   sourceEntries: readonly (RuntimeMessageEntry | undefined)[],
+  model?: Pick<Model, "providerId" | "modelId">,
 ): { messageIndex: number; baseline: PersistedTokenUsageBaseline } | undefined {
   for (let messageIndex = sourceEntries.length - 1; messageIndex >= 0; messageIndex--) {
     const entry = sourceEntries[messageIndex];
     if (!entry || entry.kind === "attachment" || entry.message.role !== "assistant") continue;
+    // usage 锚点必须来自同一个 provider/model：切模型后旧模型的计数口径可能差 50%+
+    // （11-02 同段历史 GLM 692k、deepseek 1.09M），继续沿用会直接发出超限请求。
+    // 历史消息缺身份时按兼容路径接受，避免旧会话完全失去锚点。
+    if (
+      model &&
+      entry.message.providerId !== undefined &&
+      entry.message.modelId !== undefined &&
+      (entry.message.providerId !== model.providerId || entry.message.modelId !== model.modelId)
+    ) {
+      continue;
+    }
     const baseline = persistedTokenUsageBaseline(entry.tokens);
     if (baseline) return { messageIndex, baseline };
   }

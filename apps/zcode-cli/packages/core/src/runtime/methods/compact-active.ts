@@ -31,6 +31,7 @@ import {
   defaultCompactReasonForTrigger,
   countCompactPreservedRuntimeMessages,
   buildPostCompactRuntimeEntries,
+  capReactiveCompactSummaryInput,
   compactFailureReasonFromError,
   estimateRuntimeEntryTokens,
   getRuntimeEntriesToSummarize,
@@ -41,6 +42,8 @@ import {
   throwIfTurnAborted,
   isTurnCancellationError,
   isModelContextExceededError,
+  isModelEngineAbortError,
+  isModelContextWindowPressure,
   isModelMediaTooLargeError,
   logMediaBudgetProjection,
   logMediaCapabilityProjection,
@@ -212,7 +215,32 @@ async function compactActiveConversationImpl(
     trigger,
     useMidConversationSystem,
   });
-  let currentSelection = initialSelection;
+  // Reactive 发生在上下文已经贴墙之后：summary 请求自身也可能超上游上限。
+  // 先按窗口 60% 收缩 summary 输入，避免"压缩请求也被 abort"。
+  const summaryBudget =
+    trigger === CompactTrigger.Reactive
+      ? capReactiveCompactSummaryInput({
+          selection: initialSelection,
+          entries: activeEntries,
+          trigger,
+          contextWindow: compactModel.properties.contextWindow,
+          useMidConversationSystem,
+        })
+      : null;
+  if (
+    summaryBudget &&
+    (summaryBudget.preservedMoreGroups > 0 || summaryBudget.prunedOldestGroups > 0)
+  ) {
+    this.logger?.warn("Reactive compact summary input budget applied", {
+      ...traceContextToLogContext(turnTraceContext),
+      event: "compact.summary.input_budget",
+      module: "core.runtime",
+      budgetTokens: summaryBudget.budgetTokens,
+      preservedMoreGroups: summaryBudget.preservedMoreGroups,
+      prunedOldestGroups: summaryBudget.prunedOldestGroups,
+    });
+  }
+  let currentSelection = summaryBudget?.selection ?? initialSelection;
   let preservedEntries = currentSelection.preservedEntries;
   const initialEntriesForSummary = currentSelection.entriesForSummary;
   let entriesForSummary = initialEntriesForSummary;
@@ -470,7 +498,14 @@ async function compactActiveConversationImpl(
             );
             continue;
           }
-          if (isModelContextExceededError(error)) {
+          if (
+            isModelContextExceededError(error) ||
+            (isModelEngineAbortError(error) &&
+              isModelContextWindowPressure(
+                estimateRuntimeEntryTokens(entriesForSummary, { useMidConversationSystem }),
+                compactModel.properties.contextWindow,
+              ))
+          ) {
             if (reselectEntriesAfterPromptTooLong(error)) continue;
             if (truncateEntriesAfterPromptTooLong(error)) continue;
             throw createCompactPromptTooLongError({
@@ -779,7 +814,9 @@ function isAutoCompactRetryableError(error: unknown): boolean {
 }
 
 function canUseCompactSummaryTruncationFallback(trigger: CompactTrigger): boolean {
-  return trigger !== CompactTrigger.Auto && trigger !== CompactTrigger.Reactive;
+  // Reactive 已经按 60% 预算主动收缩；若单轮仍过大，允许继续裁最旧 round，
+  // 否则压缩请求会反复撞同一堵墙。Auto 仍不允许，避免正常压缩静默丢历史。
+  return trigger !== CompactTrigger.Auto;
 }
 
 function selectInitialCompactEntriesForActiveConversation(input: {

@@ -23,6 +23,8 @@ export {
 export type { CompactEntrySelection } from "./compact-selection.js";
 export { countCompactPreservedRuntimeMessages } from "./compact-preservation.js";
 export {
+  REACTIVE_COMPACT_SUMMARY_INPUT_RATIO,
+  capReactiveCompactSummaryInput,
   estimateRuntimeEntryTokens,
   getRuntimeEntriesToSummarize,
   hasEnoughRuntimeEntriesToCompact,

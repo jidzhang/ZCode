@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   estimateMessageTokens,
   getAutoCompactOutputReserveTokens,
+  getAutoCompactRequestMarginTokens,
   getAutoCompactThreshold,
   getEffectiveContextWindowSize,
   shouldAutoCompact,
@@ -141,7 +142,7 @@ describe("auto compact policy", () => {
       outputReserveTokens: 21_000,
       shouldCompact: true,
       threshold: 94_000,
-      thresholdPercent: 100,
+      thresholdPercent: 73,
     });
   });
 
@@ -192,7 +193,7 @@ describe("auto compact policy", () => {
     expect(above).toMatchObject({
       reason: "above_threshold",
       shouldCompact: true,
-      thresholdPercent: 100,
+      thresholdPercent: 73,
       modelContextBudgetStrategy: "preflight-v1",
     });
   });
@@ -206,6 +207,33 @@ describe("auto compact policy", () => {
         thresholdPercentOverride: 50,
       }),
     ).toBe(166_000);
+  });
+
+  it("caps 1M windows at 90% and keeps small windows on the existing budget bound", () => {
+    expect(getAutoCompactThreshold({ contextWindow: 1_000_000, maxOutputTokens: 384_000 })).toBe(
+      900_000,
+    );
+    expect(getAutoCompactThreshold({ contextWindow: 200_000, maxOutputTokens: 64_000 })).toBe(
+      166_000,
+    );
+    expect(getAutoCompactRequestMarginTokens(1_000_000)).toBe(20_000);
+    expect(getAutoCompactRequestMarginTokens(128_000)).toBe(6_400);
+  });
+
+  it("compacts before the 11-03 deepseek failure point (91.6%)", () => {
+    // 11-03 09:38 最后一次成功 914,774，下一请求估算 916,466 时上游 abort。
+    expect(
+      shouldAutoCompact({
+        config: { contextWindow: 1_000_000, maxOutputTokens: 384_000 },
+        messages: ENOUGH_MESSAGES,
+        tokenOverride: { source: "provider_usage", tokenCount: 916_466 },
+      }),
+    ).toMatchObject({
+      reason: "above_threshold",
+      shouldCompact: true,
+      threshold: 900_000,
+      thresholdPercent: 90,
+    });
   });
 
   it("surfaces provider context usage as the token count truth source", () => {
@@ -250,21 +278,31 @@ describe("normal request output target", () => {
   });
 
   it.each([
-    { available: 62_999, expected: 62_999 },
-    { available: 3_000, expected: 3_000 },
-    { available: 2_999, expected: 2_999 },
-    { available: 1, expected: 1 },
-    { available: 0, expected: 64_000 },
-    { available: -1, expected: 64_000 },
-  ])("preflight-v1 sends the positive available budget $available", ({ available, expected }) => {
+    { usage: 58_601, expected: 32_000 },
+    { usage: 90_600, expected: 31_000 },
+    { usage: 113_600, expected: 8_000 },
+    { usage: 121_600, expected: 1_024 },
+    { usage: 130_000, expected: 1_024 },
+  ])("caps the preflight output budget at 32k (usage=$usage)", ({ usage, expected }) => {
     expect(
       resolveModelStepMaxOutputTokens({
         baselineMaxOutputTokens: 64_000,
         contextWindow: 128_000,
-        estimatedCurrentUsage: 127_000 - available,
+        estimatedCurrentUsage: usage,
         modelContextBudgetStrategy: "preflight-v1",
       }),
     ).toBe(expected);
+  });
+
+  it("caps deepseek-like 384k output budget to 32k at 91.6% usage", () => {
+    expect(
+      resolveModelStepMaxOutputTokens({
+        baselineMaxOutputTokens: 384_000,
+        contextWindow: 1_000_000,
+        estimatedCurrentUsage: 916_466,
+        modelContextBudgetStrategy: "preflight-v1",
+      }),
+    ).toBe(32_000);
   });
 
   it("legacy 也应用 preflight cap，非法估算仍保留 baseline", () => {
@@ -278,7 +316,7 @@ describe("normal request output target", () => {
         estimatedCurrentUsage: 64_001,
         modelContextBudgetStrategy: "legacy",
       }),
-    ).toBe(62_999);
+    ).toBe(32_000);
     expect(
       resolveModelStepMaxOutputTokens({
         ...common,
@@ -296,7 +334,7 @@ describe("normal request output target", () => {
         estimatedCurrentUsage: 64_001,
         modelContextBudgetStrategy: undefined,
       }),
-    ).toBe(62_999);
+    ).toBe(32_000);
   });
 
   it("keeps provider-specific reasoning out of the Core preflight calculation", () => {
@@ -307,6 +345,6 @@ describe("normal request output target", () => {
         estimatedCurrentUsage: 116_000,
         modelContextBudgetStrategy: "preflight-v1",
       }),
-    ).toBe(11_000);
+    ).toBe(5_600);
   });
 });

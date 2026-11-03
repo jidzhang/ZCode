@@ -1,8 +1,4 @@
-export {
-  buildCompactPrompt,
-  buildCompactSummaryMessage,
-  formatCompactSummary,
-} from "./prompt.js";
+export { buildCompactPrompt, buildCompactSummaryMessage, formatCompactSummary } from "./prompt.js";
 export {
   COMPACT_PROMPT_TOO_LONG_RETRY_MARKER,
   COMPACT_PROMPT_TOO_LONG_USER_MESSAGE,
@@ -22,6 +18,7 @@ export {
   MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES,
   MAX_OUTPUT_TOKENS_FOR_SUMMARY,
   getAutoCompactOutputReserveTokens,
+  getAutoCompactRequestMarginTokens,
   getAutoCompactThreshold,
   getEffectiveContextWindowSize,
   shouldAutoCompact,

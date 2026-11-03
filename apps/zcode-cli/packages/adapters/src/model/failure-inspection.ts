@@ -240,7 +240,11 @@ function isContextExceededMessage(value: string | undefined): boolean {
     message.includes("range of input length should be") ||
     (message.includes("total message token length") &&
       message.includes("exceed") &&
-      message.includes("model limit"))
+      message.includes("model limit")) ||
+    // 2026-11-03 deepseek 路由的文案：「Input too long: model limit N tokens,
+    // requested M tokens」。没有 context/prompt 关键词，必须单独识别。
+    (message.includes("input too long") &&
+      (message.includes("model limit") || message.includes("tokens")))
   );
 }
 

@@ -207,6 +207,110 @@ export function truncateCompactSummaryRequestEntriesAfterPromptTooLong(options: 
   return truncated;
 }
 
+export const REACTIVE_COMPACT_SUMMARY_INPUT_RATIO = 0.6;
+
+export interface ReactiveCompactSummaryBudgetResult {
+  selection: CompactEntrySelection;
+  budgetTokens: number;
+  preservedMoreGroups: number;
+  prunedOldestGroups: number;
+}
+
+/**
+ * Reactive 压缩发生在"上下文已经贴墙"之后，summary 请求本身也可能超过上游上限。
+ * 按窗口 60% 给 summary 输入设硬预算：优先把最近 round 移出 summary（不丢数据），
+ * 只有单个 round 过大时才裁掉最旧的 summary round。
+ */
+export function capReactiveCompactSummaryInput(input: {
+  selection: CompactEntrySelection;
+  entries: readonly RuntimeMessageEntry[];
+  trigger: CompactTrigger;
+  contextWindow: number | undefined;
+  useMidConversationSystem?: boolean;
+}): ReactiveCompactSummaryBudgetResult | null {
+  const contextWindow = input.contextWindow;
+  if (contextWindow === undefined || !Number.isFinite(contextWindow) || contextWindow <= 0) {
+    return null;
+  }
+  const budgetTokens = Math.floor(contextWindow * REACTIVE_COMPACT_SUMMARY_INPUT_RATIO);
+  const estimate = (entries: readonly RuntimeMessageEntry[]): number =>
+    entries.length === 0
+      ? 0
+      : estimateRuntimeEntryTokens(entries, {
+          useMidConversationSystem: input.useMidConversationSystem,
+        });
+
+  if (estimate(input.selection.entriesForSummary) <= budgetTokens) {
+    return {
+      selection: input.selection,
+      budgetTokens,
+      preservedMoreGroups: 0,
+      prunedOldestGroups: 0,
+    };
+  }
+
+  const split = splitRuntimeEntriesForCompactSelection(input.entries, input.trigger);
+  if (!split.shouldPreserveRecent || split.groups.length < 3) {
+    return null;
+  }
+
+  const maxGroupsToPreserve = split.groups.length - 1;
+  const groupTokens = split.groups.map((group) => estimate(group));
+  const prefixTokens = estimate(split.prefixEntries);
+  const totalGroupTokens = groupTokens.reduce((total, tokens) => total + tokens, 0);
+
+  for (
+    let preserve = Math.max(1, input.selection.groupsPreserved + 1);
+    preserve <= maxGroupsToPreserve;
+    preserve += 1
+  ) {
+    const preservedTokens = groupTokens
+      .slice(split.groups.length - preserve)
+      .reduce((total, tokens) => total + tokens, 0);
+    if (prefixTokens + totalGroupTokens - preservedTokens > budgetTokens) continue;
+    const selection = selectCompactEntries({
+      entries: input.entries,
+      minimumGroupsToPreserve: preserve,
+      trigger: input.trigger,
+    });
+    if (estimate(selection.entriesForSummary) <= budgetTokens) {
+      return {
+        selection,
+        budgetTokens,
+        preservedMoreGroups: preserve - input.selection.groupsPreserved,
+        prunedOldestGroups: 0,
+      };
+    }
+  }
+
+  // 单个 round 本身超预算：保留既有 recent 段，裁掉最旧的 summary round，至少留 2 组。
+  const preserved = Math.max(0, Math.min(input.selection.groupsPreserved, split.groups.length - 2));
+  const summaryEnd = split.groups.length - preserved;
+  let start = 0;
+  let summarizedTokens = groupTokens.slice(start, summaryEnd).reduce((total, t) => total + t, 0);
+  while (start < summaryEnd - 2 && prefixTokens + summarizedTokens > budgetTokens) {
+    summarizedTokens -= groupTokens[start] ?? 0;
+    start += 1;
+  }
+  if (prefixTokens + summarizedTokens > budgetTokens) {
+    return null;
+  }
+
+  const summaryGroups = split.groups.slice(start, summaryEnd);
+  const preservedGroups = preserved > 0 ? split.groups.slice(summaryEnd) : [];
+  return {
+    selection: {
+      entriesForSummary: [...split.prefixEntries, ...summaryGroups.flat()].map(cloneRuntimeEntry),
+      groupsPreserved: preserved,
+      preservedEntries: preservedGroups.flat().map(cloneRuntimeEntry),
+      totalGroups: split.groups.length,
+    },
+    budgetTokens,
+    preservedMoreGroups: Math.max(0, preserved - input.selection.groupsPreserved),
+    prunedOldestGroups: start,
+  };
+}
+
 function splitRuntimeEntriesForCompactSelection(
   inputEntries: readonly RuntimeMessageEntry[],
   trigger: CompactTrigger,
@@ -391,11 +495,38 @@ function getPromptTooLongTokenGap(cause: unknown): number | undefined {
 }
 
 function parsePromptTooLongTokenGap(message: string): number | undefined {
-  const match = message.match(/(\d[\d,]*)\s*tokens?\s*>\s*(\d[\d,]*)/i);
-  if (!match) return undefined;
+  const greaterThan = message.match(/(\d[\d,]*)\s*tokens?\s*>\s*(\d[\d,]*)/i);
+  if (greaterThan) {
+    return tokenGap(greaterThan[1], greaterThan[2]);
+  }
 
-  const actual = Number(match[1]?.replace(/,/g, ""));
-  const limit = Number(match[2]?.replace(/,/g, ""));
+  // 2026-11-03 deepseek 路由：「Input too long: model limit 1048576 tokens,
+  // requested 1094684 tokens」。没有 ">" 关系，必须按 limit/requested 两个词取数。
+  const modelLimit = message.match(
+    /model limit\s+(\d[\d,]*)\s*tokens?[\s\S]*?requested\s+(\d[\d,]*)\s*tokens?/i,
+  );
+  if (modelLimit) {
+    return tokenGap(modelLimit[2], modelLimit[1]);
+  }
+
+  // OpenAI 风格：「maximum context length is 128000 tokens. However, your messages
+  // resulted in 130000 tokens」。
+  const maximumContextLength = message.match(
+    /maximum context length is\s+(\d[\d,]*)\s*tokens?[\s\S]*?(?:resulted in|requested)\s+(\d[\d,]*)\s*tokens?/i,
+  );
+  if (maximumContextLength) {
+    return tokenGap(maximumContextLength[2], maximumContextLength[1]);
+  }
+
+  return undefined;
+}
+
+function tokenGap(
+  actualValue: string | undefined,
+  limitValue: string | undefined,
+): number | undefined {
+  const actual = Number(actualValue?.replace(/,/g, ""));
+  const limit = Number(limitValue?.replace(/,/g, ""));
   if (!Number.isFinite(actual) || !Number.isFinite(limit) || actual <= limit) {
     return undefined;
   }

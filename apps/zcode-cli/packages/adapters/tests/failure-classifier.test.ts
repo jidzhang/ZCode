@@ -10,6 +10,8 @@ const AZURE_CONTEXT_LENGTH_ERROR =
   "This model's maximum context length is 300000 tokens. However, your messages resulted in 350564 tokens (100 in the messages, 350464 in the functions). Please reduce the length of the messages or functions.";
 const GEMINI_CONTEXT_LENGTH_ERROR =
   "The input token count (131137) exceeds the maximum number of tokens allowed (131072).";
+const DEEPSEEK_INPUT_TOO_LONG =
+  "Upstream request failed: [invalid_request_error] Input too long: model limit 1048576 tokens, requested 1094684 tokens trace_id: e63b7e5a1bcbf7146c6f4d89554c987f";
 
 describe("classifyModelFailure context length errors", () => {
   it("maps the reported maximum context length message to context exceeded", () => {
@@ -17,6 +19,13 @@ describe("classifyModelFailure context length errors", () => {
       code: "model_context_exceeded",
       reason: "context_exceeded",
       retryable: false,
+    });
+  });
+
+  it("maps deepseek's input too long wording to context exceeded", () => {
+    expect(classifyModelFailure(new Error(DEEPSEEK_INPUT_TOO_LONG))).toMatchObject({
+      code: "model_context_exceeded",
+      reason: "context_exceeded",
     });
   });
 

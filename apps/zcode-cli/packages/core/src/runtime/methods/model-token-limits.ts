@@ -1,8 +1,14 @@
 import { DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY as DEFAULT_BUDGET_STRATEGY } from "@zcode/shared";
+import { getAutoCompactRequestMarginTokens } from "../../compact/policy.js";
 import { traceContextToLogContext } from "../deps.js";
 import type { TraceContext } from "../deps.js";
 
 const DEFAULT_NORMAL_REQUEST_MAX_OUTPUT_TOKENS = 32_000;
+// 单步请求的输出预算上限。模型声明 384k/64k 只代表能力上限，用它把剩余窗口填满
+// 会把 prompt + max_tokens 顶到窗口边缘（2026-11-03 deepseek 在 ~999k 总量时被上游 abort）。
+const MODEL_STEP_MAX_OUTPUT_TOKENS = 32_000;
+// 输入已经吃掉安全余量时，不再回退到 baseline，只保留最小可发送输出。
+const MIN_MODEL_STEP_MAX_OUTPUT_TOKENS = 1_024;
 
 export function resolveNormalRequestMaxOutputTokens(input: {
   modelMaxOutputTokens: number | undefined;
@@ -31,12 +37,21 @@ export function resolveModelStepMaxOutputTokens(input: {
     return input.baselineMaxOutputTokens;
   }
 
-  const estimatedAvailable = Math.floor(input.contextWindow - input.estimatedCurrentUsage - 1_000);
+  const estimatedAvailable = Math.floor(
+    input.contextWindow -
+      input.estimatedCurrentUsage -
+      getAutoCompactRequestMarginTokens(input.contextWindow),
+  );
   if (estimatedAvailable <= 0) {
-    // 本地估算不是 provider 权威拒绝；无正数可发送时保留 baseline 走既有错误恢复。
-    return input.baselineMaxOutputTokens;
+    // 估算已吃掉安全余量：保留 baseline 会把请求总量重新顶到窗口边缘。
+    // 只发最小输出；上游若仍拒绝，超窗错误会进入 reactive compact。
+    return Math.min(input.baselineMaxOutputTokens, MIN_MODEL_STEP_MAX_OUTPUT_TOKENS);
   }
-  const candidate = Math.min(input.baselineMaxOutputTokens, estimatedAvailable);
+  const candidate = Math.min(
+    input.baselineMaxOutputTokens,
+    MODEL_STEP_MAX_OUTPUT_TOKENS,
+    estimatedAvailable,
+  );
   return candidate;
 }
 

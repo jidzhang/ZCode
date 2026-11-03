@@ -11,7 +11,7 @@ import { createTestSessionEventStore } from "./test-event-store.js";
 import { createTestModelFactory } from "./test-runtime-model.js";
 
 describe("AgentRuntime model anomaly guards", () => {
-  it("passes model capability through on main model requests", async () => {
+  it("caps main model requests at 32k even when the model declares more", async () => {
     const sessionId = createSessionId("runtime-max-output-tokens");
     const eventStore = createTestSessionEventStore();
     let capturedMaxOutputTokens: number | undefined;
@@ -38,7 +38,8 @@ describe("AgentRuntime model anomaly guards", () => {
 
     await runtime.executeTurn("check max output token passthrough");
 
-    expect(capturedMaxOutputTokens).toBe(131_072);
+    // 单步输出统一封顶 32k：模型声明只作为能力上限，不再把剩余窗口全部预留给输出。
+    expect(capturedMaxOutputTokens).toBe(32_000);
   });
 
   it("uses the 32k fallback on main requests when the model does not declare a limit", async () => {

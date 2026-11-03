@@ -3608,7 +3608,7 @@ describe("Explore subagent", () => {
       })),
     ).toEqual([
       {
-        maxOutputTokens: 64_000,
+        maxOutputTokens: 32_000,
         modelId: "gpt-5.4",
         providerId: "custom-openai",
       },
@@ -4037,11 +4037,11 @@ describe("Explore subagent", () => {
       ),
     ).toEqual([
       {
-        maxOutputTokens: 64_000,
+        maxOutputTokens: 32_000,
         querySource: "subagent",
       },
       {
-        maxOutputTokens: 64_000,
+        maxOutputTokens: 32_000,
         querySource: "subagent",
       },
       {

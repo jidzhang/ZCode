@@ -205,7 +205,11 @@ export async function autoCompactIfNeeded(
     model: context.model,
   });
   const { messages: activeMessages, sourceEntries } = activeProjection;
-  const tokenOverride = buildProviderUsageTokenOverride(activeMessages, sourceEntries);
+  const tokenOverride = buildProviderUsageTokenOverride(
+    activeMessages,
+    sourceEntries,
+    context.model,
+  );
   const decision = shouldAutoCompact({
     messages: activeMessages,
     config,
@@ -317,8 +321,9 @@ export async function autoCompactIfNeeded(
 function buildProviderUsageTokenOverride(
   messages: RunModelTextRequestOptions["messages"],
   sourceEntries: readonly (RuntimeMessageEntry | undefined)[],
+  model?: Pick<Model, "providerId" | "modelId">,
 ): AutoCompactTokenOverride | undefined {
-  const latestUsage = findLatestCommittedAssistantUsage(sourceEntries);
+  const latestUsage = findLatestCommittedAssistantUsage(sourceEntries, model);
   if (!latestUsage || latestUsage.messageIndex >= messages.length) {
     return undefined;
   }
@@ -346,9 +351,10 @@ function buildProviderUsageTokenOverride(
 export function estimateCurrentModelInputTokens(
   messages: RunModelTextRequestOptions["messages"],
   sourceEntries: readonly (RuntimeMessageEntry | undefined)[] = [],
+  model?: Pick<Model, "providerId" | "modelId">,
 ): number {
   return (
-    buildProviderUsageTokenOverride(messages, sourceEntries)?.tokenCount ??
+    buildProviderUsageTokenOverride(messages, sourceEntries, model)?.tokenCount ??
     estimateMessageTokens(messages)
   );
 }
@@ -397,7 +403,11 @@ export async function reactiveCompactAfterContextExceeded(
     return "skipped";
   }
 
-  const tokenOverride = buildProviderUsageTokenOverride(activeMessages, sourceEntries);
+  const tokenOverride = buildProviderUsageTokenOverride(
+    activeMessages,
+    sourceEntries,
+    context.model,
+  );
   const contextWindow = context.model.properties.contextWindow;
 
   this.logger?.warn("Reactive compact started after model context overflow", {

@@ -357,8 +357,57 @@ function isModelContextExceededMessage(value: string | undefined): boolean {
   return (
     (message.includes("context") && message.includes("exceed")) ||
     (message.includes("context") && message.includes("too long")) ||
-    (message.includes("prompt") && message.includes("too long"))
+    (message.includes("prompt") && message.includes("too long")) ||
+    // 2026-11-03：deepseek 路由只报
+    // "Input too long: model limit 1048576 tokens, requested 1094684 tokens"，
+    // 没有 context/prompt 关键词；这一条正是 11-02 反复卡死的触发文案。
+    (message.includes("input too long") &&
+      (message.includes("model limit") || message.includes("tokens"))) ||
+    (message.includes("maximum context length") &&
+      message.includes("tokens") &&
+      (message.includes("requested") || message.includes("resulted"))) ||
+    (message.includes("input token count") &&
+      message.includes("exceed") &&
+      message.includes("maximum number of tokens allowed")) ||
+    (message.includes("total message token length") &&
+      message.includes("exceed") &&
+      message.includes("model limit"))
   );
+}
+
+/** 上游推理引擎在超长 prefill 处直接中止；仅在估算贴近窗口时才归因为超窗。 */
+export function isModelEngineAbortError(error: unknown): boolean {
+  let current: unknown = error;
+  const seen = new WeakSet<object>();
+
+  for (let depth = 0; depth <= 6; depth += 1) {
+    if (current === undefined || current === null || typeof current !== "object") return false;
+    if (seen.has(current)) return false;
+    seen.add(current);
+
+    const record = current as Record<string, unknown>;
+    if (stringProperty(record, "message")?.toLowerCase().includes("inference engine abort")) {
+      return true;
+    }
+    current = record.cause ?? record.lastError ?? record.error;
+  }
+
+  return false;
+}
+
+export const MODEL_CONTEXT_PRESSURE_RATIO = 0.85;
+
+/** 估算是否已进入窗口高位；用于给 engine abort 这类无明确上限文案的失败定性。 */
+export function isModelContextWindowPressure(
+  tokenCount: number,
+  contextWindow: number | undefined,
+  ratio = MODEL_CONTEXT_PRESSURE_RATIO,
+): boolean {
+  if (!Number.isFinite(tokenCount) || tokenCount <= 0) return false;
+  if (contextWindow === undefined || !Number.isFinite(contextWindow) || contextWindow <= 0) {
+    return false;
+  }
+  return tokenCount >= contextWindow * ratio;
 }
 
 function isModelMediaTooLargeMessage(value: string | undefined): boolean {

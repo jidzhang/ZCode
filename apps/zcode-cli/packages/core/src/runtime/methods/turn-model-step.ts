@@ -38,6 +38,8 @@ import {
   readRawFinishReason,
   throwIfTurnAborted,
   isModelContextExceededError,
+  isModelEngineAbortError,
+  isModelContextWindowPressure,
   isTurnCancellationError,
   buildTurnFileChangeSummary,
 } from "../helpers/index.js";
@@ -172,6 +174,13 @@ async function runModelBackedTurnStepImpl(
   // ModelFactory 不再把该请求参数伪装成长期 ModelSelection/Active Model 状态。
   const executionMaxOutputTokens = model.optionSpecs.maxOutputTokens.max;
   const executionContextWindow = model.properties.contextWindow;
+  // 同一次请求的预算与失败归因必须用同一份估算：engine abort 没有明确上限文案，
+  // 只能按"发送时的估算是否已进入窗口高位"来判断是不是超窗。
+  const estimatedRequestInputTokens = estimateCurrentModelInputTokens(
+    options.messages,
+    options.sourceEntries,
+    model,
+  );
   const modelTraceContext = createChildTraceContext(state.turnTraceContext, {
     attributes: {
       providerId: String(model.providerId),
@@ -257,10 +266,7 @@ async function runModelBackedTurnStepImpl(
       maxOutputTokens: resolveModelStepMaxOutputTokens({
         baselineMaxOutputTokens,
         contextWindow: executionContextWindow,
-        estimatedCurrentUsage: estimateCurrentModelInputTokens(
-          options.messages,
-          options.sourceEntries,
-        ),
+        estimatedCurrentUsage: estimatedRequestInputTokens,
         modelContextBudgetStrategy: this.config.modelContextBudgetStrategy,
       }),
       latestRealUserMessageIndex: options.latestRealUserMessageIndex,
@@ -530,7 +536,9 @@ async function runModelBackedTurnStepImpl(
       model,
     );
     if (
-      isModelContextExceededError(finalError) &&
+      (isModelContextExceededError(finalError) ||
+        (isModelEngineAbortError(finalError) &&
+          isModelContextWindowPressure(estimatedRequestInputTokens, executionContextWindow))) &&
       (await recoverModelStepAfterContextExceeded.call(
         this,
         state,

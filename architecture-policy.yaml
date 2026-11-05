@@ -1519,3 +1519,9 @@ exceptions:
     paths:
       - packages/zcode-cua/src/**
     reason: The whole zcode-cua producer package (broker, native adapters, tools) entered the repo after the gate timestamp as pre-existing code moved from a separate repository; adopting its internal layers needs a dedicated CONTRACT pass (it has known internal cycles by design), not a mechanical split in this branch.
+  - id: guarded-default-mode-unmanaged-new-files
+    rule: unmanaged-new-file
+    paths:
+      - packages/shared/src/execution-state.ts
+      - apps/zcode-cli/packages/core/src/tool/handlers/guarded/command.ts
+    reason: 已准入的 fork guarded 机制文件在原文件内扩展（2026-11 默认模式收口 specs/session-default-mode.md + 网兜加密 specs/guarded-safety-net.md）：execution-state 只改默认 current 常量，guarded/command 只在既有规则引擎内补 pipe-execute/registry-write/disk 规则与管道判定；owner、签名与模块边界不变，接管整个 shared/src 或 core/src 不在本次范围。

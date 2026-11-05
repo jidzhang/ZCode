@@ -31,7 +31,7 @@
 
 ## 界面文案（2026-09-23）
 
-`guarded` 的界面名称为“自主模式 / Autonomous mode”，下方单行描述为“在有风险时询问 / Ask when there’s risk”。Desktop/手机 Composer、Automation/OffPeak 共用中英文翻译与模式目录；内部 mode 值、CLI 命令、权限语义、默认值和保存恢复不变，继续使用浅蓝色与 Edit 图标。验收覆盖中英文名称、单行描述及模式值不变。
+`guarded` 的界面名称为“自主模式 / Guarded mode”（2026-11-05 英文由 Autonomous mode 改名，与枚举值对齐、避免与预留未实现的 auto 枚举混淆；中文不变），下方单行描述为“在有风险时询问 / Ask when there’s risk”。Desktop/手机 Composer、Automation/OffPeak 共用中英文翻译与模式目录；内部 mode 值、CLI 命令、权限语义、默认值和保存恢复不变，继续使用浅蓝色与 Edit 图标。验收覆盖中英文名称、单行描述及模式值不变。
 
 ## 审批 E2E 录屏依赖修复（2026-09-17）
 

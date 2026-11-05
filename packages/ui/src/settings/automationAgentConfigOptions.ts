@@ -16,7 +16,7 @@ import { resolveV4ModelTriggerLabel } from "@/v4/composer/modelTriggerDisplay.js
 // 定时任务表单必须是纯本地草稿，不能借用 workspace 默认配置写接口来获取选项；
 // 否则仅打开或取消编辑也会改掉当前项目和 draft session 的运行配置。
 
-/** 权限模式默认值：Autonomous mode（与对话默认一致，specs/session-default-mode.md）。 */
+/** 权限模式默认值：Guarded mode（与对话默认一致，specs/session-default-mode.md）。 */
 export const AUTOMATION_DEFAULT_MODE = "guarded";
 
 /** 新建任务必须把目标 Host 的 preferredSelection 固化为具体模型，而不是保存虚拟“默认模型”。 */

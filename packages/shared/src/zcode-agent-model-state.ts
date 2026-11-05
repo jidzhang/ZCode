@@ -24,7 +24,8 @@ const ZCODE_AGENT_MODE_OPTIONS = [
   },
   {
     id: "guarded",
-    name: "Autonomous mode",
+    // 英文界面名与枚举值对齐（中文仍为"自主模式"）；不叫 Auto mode：协议预留的 auto 枚举尚未实现。
+    name: "Guarded mode",
     description: "Ask when there’s risk",
   },
   {

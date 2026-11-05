@@ -7389,7 +7389,7 @@ const enUS: Record<string, string> = {
   "mode.label.glm.build": "Ask before changes",
   "mode.label.glm.edit": "Edit automatically",
   "mode.label.glm.plan": "Plan mode",
-  "mode.label.glm.guarded": "Autonomous mode",
+  "mode.label.glm.guarded": "Guarded mode",
   "mode.description.glm.guarded": "Ask when there’s risk",
   "mode.yoloConfirmation.title": "Enable full access?",
   "mode.yoloConfirmation.description":

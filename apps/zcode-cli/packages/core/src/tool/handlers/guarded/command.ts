@@ -1,5 +1,5 @@
 import type { ExecutionShellSelection } from "@zcode/contracts";
-import { analyzeBashCommand } from "../bash-command-parser.js";
+import { analyzeBashCommand, type BashCommandOperator } from "../bash-command-parser.js";
 import { analyzeCmdCommand } from "./cmd.js";
 import { matchGit, type RuleMatch } from "./git.js";
 import { matchFindDelete } from "./find.js";
@@ -11,6 +11,37 @@ import { commandBasename, type CommandWord } from "./word.js";
 export type DangerousCommandResult =
   | { status: "matched"; ruleId: string; start: number; end: number }
   | { status: "notMatched" | "unsupported" };
+
+// 管道执行远程脚本（specs/guarded-safety-net.md P1b）：接收方为解释器且来源是网络取数命令。
+// 解释器收管道时 matchInvocation 返回 undefined 会被标 unsupported 放行，这里必须先行判定。
+const PIPE_RECEIVERS = new Set([
+  "sh",
+  "bash",
+  "zsh",
+  "dash",
+  "ksh",
+  "python",
+  "python3",
+  "node",
+  "perl",
+  "ruby",
+]);
+const REMOTE_FETCHERS = new Set([
+  "curl",
+  "wget",
+  "iwr",
+  "irm",
+  "invoke-webrequest",
+  "invoke-restmethod",
+]);
+const REGISTRY_WRITE_SUBCOMMANDS = new Set([
+  "add",
+  "delete",
+  "import",
+  "load",
+  "restore",
+  "unload",
+]);
 
 const RM = optionTable(
   "-r -R --recursive -f --force -i -I --one-file-system --preserve-root --no-preserve-root -v --verbose -d --dir --help --version",
@@ -55,6 +86,8 @@ export function matchDangerousCommand(
   if (command.length > MAX_LENGTH || dialect === "legacy-shell") return { status: "unsupported" };
   const windows = dialect === "cmd" || dialect === "git-bash";
   let commands: CommandWord[][];
+  // bash 方言保留管道关系用于 pipe-execute 判定；cmd 方言的 | 与 && 不区分，不支持该规则。
+  let operators: (BashCommandOperator | undefined)[] | undefined;
   let unsupported: boolean;
   if (dialect === "cmd") {
     ({ commands, unsupported } = analyzeCmdCommand(command));
@@ -63,15 +96,33 @@ export function matchDangerousCommand(
     // 解析失败没有可依赖的定位；局部 unsupported 节点则不丢弃其它独立命令。
     if (analysis.hasParseErrors) return { status: "unsupported" };
     commands = analysis.commands.map((c) => c.words);
+    operators = analysis.commands.map((c) => c.operatorBefore);
     unsupported = analysis.hasUnsupportedSyntax;
   }
-  for (const invocation of commands) {
-    const words = unwrapCommand(invocation, windows);
+  for (let index = 0; index < commands.length; index += 1) {
+    const words = unwrapCommand(commands[index]!, windows);
     if (!words?.[0]) {
       unsupported = true;
       continue;
     }
     const name = commandBasename(words[0], windows);
+    // 管道执行远程脚本：当前命令经 | / |& 接收且来源是网络取数命令（specs P1b）。
+    // 证据范围从来源命令首词到接收命令末词，覆盖整条管道。
+    if (
+      operators &&
+      index > 0 &&
+      (operators[index] === "|" || operators[index] === "|&") &&
+      name &&
+      PIPE_RECEIVERS.has(name) &&
+      isRemoteFetcherCommand(commands[index - 1]!, windows)
+    ) {
+      return {
+        status: "matched",
+        ruleId: "safety.bash.pipe-execute",
+        start: commands[index - 1]![0]?.start ?? words[0].start,
+        end: words.at(-1)!.end,
+      };
+    }
     const result = name ? matchInvocation(name, words.slice(1), dialect) : undefined;
     if (result)
       return {
@@ -85,6 +136,12 @@ export function matchDangerousCommand(
   return { status: unsupported ? "unsupported" : "notMatched" };
 }
 
+function isRemoteFetcherCommand(invocation: CommandWord[], windows: boolean): boolean {
+  const words = unwrapCommand(invocation, windows);
+  const firstName = words?.[0] ? commandBasename(words[0], windows) : undefined;
+  return firstName !== undefined && REMOTE_FETCHERS.has(firstName);
+}
+
 function matchInvocation(
   name: string,
   args: CommandWord[],
@@ -92,6 +149,27 @@ function matchInvocation(
 ): RuleMatch {
   if (name === "git") return matchGit(args);
   if (INTERPRETERS.has(name)) return undefined;
+  // 注册表写入（specs P1b）：query/compare/export 只读豁免；子命令动态时按未知处理。
+  if ((dialect === "cmd" || dialect === "git-bash") && name === "reg") {
+    const subcommand = args[0];
+    if (!subcommand) return false;
+    if (subcommand.dynamic) return undefined;
+    return REGISTRY_WRITE_SUBCOMMANDS.has(subcommand.value.toLowerCase()) && "registry-write";
+  }
+  // 磁盘底层（specs P1b）：diskpart 交互式可 clean 整盘、format 直接格式化卷；
+  // 仅豁免独立且明确的帮助查询（cmd 的 /? 与通用 --help）。
+  if (
+    (dialect === "cmd" || dialect === "git-bash") &&
+    (name === "diskpart" || name === "format")
+  ) {
+    if (
+      args.length === 1 &&
+      !args[0]!.dynamic &&
+      ["/?", "--help", "-h"].includes(args[0]!.value)
+    )
+      return false;
+    return "system-storage";
+  }
   if (dialect === "cmd" && ["rd", "rmdir", "del", "erase"].includes(name))
     return matchCmdDelete(name, args);
   if (dialect !== "cmd" && name === "find") return matchFindDelete(args);

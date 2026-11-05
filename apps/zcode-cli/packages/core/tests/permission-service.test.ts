@@ -1547,4 +1547,108 @@ describe("PermissionService workflow owner rule", () => {
       ),
     ).toMatchObject({ decision: "deny", ruleId: "rule.project.deny" });
   });
+
+  // specs/guarded-safety-net.md P1a：guarded 下项目 deny/ask 规则不再被自主放行短路。
+  describe("guarded honors project rules before autonomous allow", () => {
+    const guardedWrite = {
+      input: {},
+      mode: "guarded" as const,
+      riskLevel: "medium",
+      toolName: "Write",
+    };
+
+    it("denies when a project deny rule matches", () => {
+      const service = new PermissionService();
+      expect(
+        service.checkPermission(guardedWrite, writeCapability, {
+          version: 1,
+          deny: [{ toolName: "Write" }],
+        }),
+      ).toMatchObject({ decision: "deny", ruleId: "rule.project.deny" });
+    });
+
+    it("asks when a project ask rule matches", () => {
+      const service = new PermissionService();
+      expect(
+        service.checkPermission(guardedWrite, writeCapability, {
+          version: 1,
+          ask: [{ toolName: "Write" }],
+        }),
+      ).toMatchObject({ decision: "ask", ruleId: "rule.project.ask" });
+    });
+
+    it("project deny beats the dangerous single-use ask", () => {
+      const service = new PermissionService();
+      expect(
+        service.checkPermission(
+          { ...guardedWrite, toolName: "Bash", riskLevel: "high" },
+          { ...writeCapability, userApprovalRule: "safety.test.rule" },
+          { version: 1, deny: [{ toolName: "Bash" }] },
+        ),
+      ).toMatchObject({ decision: "deny", ruleId: "rule.project.deny" });
+    });
+
+    it("yolo still bypasses project deny and ask rules", () => {
+      const service = new PermissionService();
+      for (const ruleset of [
+        { version: 1, deny: [{ toolName: "Write" }] },
+        { version: 1, ask: [{ toolName: "Write" }] },
+      ] as const) {
+        expect(
+          service.checkPermission({ ...guardedWrite, mode: "yolo" }, writeCapability, ruleset),
+        ).toMatchObject({ decision: "allow", ruleId: "mode.yolo" });
+      }
+    });
+  });
+
+  // specs/guarded-safety-net.md P1c：危险单询计数熔断，触发后本会话 guarded 退回逐动作询问。
+  describe("guarded circuit breaker", () => {
+    const guarded = (toolName: string, riskLevel = "medium") => ({
+      input: {},
+      mode: "guarded" as const,
+      riskLevel,
+      toolName,
+    });
+    const dangerousRead = { ...readCapability, userApprovalRule: "safety.test.rule" };
+
+    it("trips after three dangerous single-use asks and degrades to per-action asking", () => {
+      const service = new PermissionService();
+      expect(service.checkPermission(guarded("Write"), writeCapability)).toMatchObject({
+        decision: "allow",
+        ruleId: "mode.yolo",
+      });
+      for (let index = 0; index < 3; index += 1) {
+        expect(service.checkPermission(guarded("Read"), dangerousRead)).toMatchObject({
+          decision: "ask",
+          approvalMode: "user-once",
+          ruleId: "safety.test.rule",
+        });
+      }
+      // 熔断后：普通写工具从自主放行退回 build 逐动作询问。
+      expect(service.checkPermission(guarded("Write"), writeCapability)).toMatchObject({
+        decision: "ask",
+        ruleId: "mode.build.sideEffect",
+      });
+      // 危险命令单询仍在最前，熔断不豁免危险确认。
+      expect(service.checkPermission(guarded("Read"), dangerousRead)).toMatchObject({
+        decision: "ask",
+        approvalMode: "user-once",
+        ruleId: "safety.test.rule",
+      });
+      // 新实例（新会话）复位。
+      expect(new PermissionService().checkPermission(guarded("Write"), writeCapability)).toMatchObject(
+        { decision: "allow", ruleId: "mode.yolo" },
+      );
+    });
+
+    it("yolo is unaffected by the guarded fuse", () => {
+      const service = new PermissionService();
+      for (let index = 0; index < 3; index += 1) {
+        service.checkPermission(guarded("Read"), dangerousRead);
+      }
+      expect(
+        service.checkPermission({ ...guarded("Write"), mode: "yolo" }, writeCapability),
+      ).toMatchObject({ decision: "allow", ruleId: "mode.yolo" });
+    });
+  });
 });

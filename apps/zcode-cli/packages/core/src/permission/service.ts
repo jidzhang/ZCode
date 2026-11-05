@@ -95,6 +95,12 @@ export class PermissionService {
    */
   private sessionRules: PermissionRuleset = { version: 1 };
 
+  /**
+   * Guarded 熔断计数（specs/guarded-safety-net.md P1c）：会话内危险命令单询每发出一次 +1，
+   * 达到阈值后本会话 guarded 不再自主放行，退回逐动作询问。随实例消亡，不落盘。
+   */
+  private guardedDangerousAsks = 0;
+
   constructor(private config: PermissionConfig = defaultPermissionConfig) {}
 
   grantSessionPermission(updates: PermissionUpdate[]): void {
@@ -136,6 +142,36 @@ export class PermissionService {
 
     // 独立 Plan 优先于 Guarded 的 YOLO 基础策略，审批不能解除 Plan 的执行限制。
     const planEnabled = context.planEnabled ?? context.mode === "plan";
+    // guarded 成为默认模式后按 Claude auto 的网兜语义收紧（specs/guarded-safety-net.md）：
+    // 用户显式 disallow 与项目 deny/ask 规则不能被自主放行短路，deny 先于危险命令单询
+    // （拒绝优先于询问）。只约束 guarded——yolo 的语义就是全绕过；plan+guarded 本就
+    // 走到下方常规规则评估。
+    if (!planEnabled && context.mode === "guarded") {
+      if (this.config.disallowedTools.has(context.toolName)) {
+        return this.deny(
+          context,
+          capability,
+          "rule.disallowedTools",
+          `Tool ${context.toolName} is explicitly disallowed`,
+        );
+      }
+      if (this.matchesProjectRules(projectRules, "deny", context, capability, rulePolicy)) {
+        return this.deny(
+          context,
+          capability,
+          "rule.project.deny",
+          `Tool ${context.toolName} is denied by project permission rules`,
+        );
+      }
+      if (this.matchesProjectRules(projectRules, "ask", context, capability, rulePolicy)) {
+        return this.ask(
+          context,
+          capability,
+          "rule.project.ask",
+          `Tool ${context.toolName} requires approval by project permission rules`,
+        );
+      }
+    }
     if (!planEnabled && context.mode === "guarded" && toolCapability?.userApprovalRule) {
       return this.guardedSingleUseAsk(context, capability, toolCapability.userApprovalRule);
     }
@@ -145,7 +181,12 @@ export class PermissionService {
       return this.checkAlwaysAsk(context, capability, projectRules, rulePolicy);
     }
 
-    if ((context.mode === "yolo" || context.mode === "guarded") && !planEnabled) {
+    // guarded 熔断后不再自主放行，落回下方 build 逐动作判定；yolo 不受熔断影响。
+    const guardedFuseOpen = context.mode === "guarded" && this.guardedDangerousAsks >= 3;
+    if (
+      (context.mode === "yolo" || (context.mode === "guarded" && !guardedFuseOpen)) &&
+      !planEnabled
+    ) {
       return this.allow(context, capability, "mode.yolo", "Yolo mode bypasses permission prompts");
     }
 
@@ -481,6 +522,8 @@ export class PermissionService {
     capability: ResolvedPermissionCapability,
     ruleId: string,
   ): PermissionDecisionResult {
+    // 单询发出即视为一次拦截（动作获批前不执行），计入熔断；见类字段 guardedDangerousAsks。
+    this.guardedDangerousAsks += 1;
     return {
       ...this.ask(
         context,

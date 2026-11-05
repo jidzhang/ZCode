@@ -326,7 +326,7 @@ export async function persistAssistantMessage(
       // 消息的模型。默认值只保留给不经过模型结果的既有 synthetic/fallback 路径。
       modelId,
       providerId,
-      mode: this.config.mode ?? "build",
+      mode: this.config.mode ?? "guarded",
       planEnabled: this.getPlanEnabled(),
       agent: this.config.agentName ?? "zcode-agent",
       path: {

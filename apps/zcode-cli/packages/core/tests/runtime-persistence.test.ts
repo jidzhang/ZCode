@@ -289,7 +289,8 @@ describe("AgentRuntime session persistence", () => {
       },
     );
     await runtime.resumeFromStore();
-    expect(runtime.getMode()).toBe("build");
+    // 旧 mode=plan 归一化落回默认档 guarded（specs/session-default-mode.md），不猜测 yolo。
+    expect(runtime.getMode()).toBe("guarded");
     expect(runtime.getPlanEnabled()).toBe(true);
     expect(
       store.savedSessionEntries.some((entry) => entry.type === "runtime/execution_state"),
@@ -1288,7 +1289,8 @@ describe("AgentRuntime session persistence", () => {
       { eventStore, modelFactory: createTestModelFactory({} as never), sessionStore: store },
     );
     await interactiveRuntime.resumeFromStore();
-    expect(interactiveRuntime.config.mode).toBe("build");
+    // 恢复的 plan 语义归一化落回默认档 guarded（specs/session-default-mode.md）。
+    expect(interactiveRuntime.config.mode).toBe("guarded");
     expect(interactiveRuntime.getPlanEnabled()).toBe(true);
   });
 

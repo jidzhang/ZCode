@@ -280,7 +280,8 @@ export function useDraftConfigControl(params: {
     };
     const firstSnapshot = !previous;
     const mode = submissionModeSchema.safeParse(sessionConfig.mode);
-    const currentMode = mode.success && mode.data !== "plan" ? mode.data : "build";
+    // 默认模式 guarded（specs/session-default-mode.md）；plan 不是提交模式，落到默认档。
+    const currentMode = mode.success && mode.data !== "plan" ? mode.data : "guarded";
     const currentPlan = resolveExecutionState(sessionConfig).planEnabled;
     if (firstSnapshot && currentState.initialization === "session") {
       // 历史授权曾被当成新指令重放，覆盖最新确认模式。恢复直接采用当前事实，文字只恢复模型。
@@ -529,7 +530,7 @@ export function useDraftConfigControl(params: {
         mode: mode.success ? mode.data : current.mode,
         modelSelection: next.modelSelection,
         // 导入等待目录期间的显式选择也是有效选择，不能再被默认初始化覆盖。
-        ...(current.mode ? {} : { mode: mode.success ? mode.data : "build" }),
+        ...(current.mode ? {} : { mode: mode.success ? mode.data : "guarded" }),
       }));
     },
     [updateComposerDraft],
@@ -991,7 +992,8 @@ export function useDraftConfigControl(params: {
       if (mode === "plan" || mode === "plan-off") {
         updateComposerDraft((current) => ({
           ...current,
-          mode: current.mode === "plan" ? "build" : (current.mode ?? "build"),
+          // plan 不驻留草稿；退出 plan 落回默认档 guarded（specs/session-default-mode.md）。
+          mode: current.mode === "plan" ? "guarded" : (current.mode ?? "guarded"),
           planEnabled: mode === "plan",
         }));
         return;

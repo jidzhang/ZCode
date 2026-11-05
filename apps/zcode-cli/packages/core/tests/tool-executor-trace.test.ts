@@ -1641,6 +1641,8 @@ describe("ToolExecutor trace propagation", () => {
       sessionId,
       turnId,
       traceContext,
+      // 显式钉 build：hook 批准与 broker 的竞争必须走询问分支（specs/session-default-mode.md）。
+      mode: "build",
     });
 
     const result = await executor.execute(
@@ -1649,7 +1651,8 @@ describe("ToolExecutor trace propagation", () => {
         input: { file_path: "demo.txt" },
         name: "WriteLike",
       },
-      { traceContext },
+      // 显式钉 build：该用例验证 hook 批准与 broker 的竞争，必须走询问分支。
+      { traceContext, mode: "build" },
     );
 
     expect(result.success).toBe(true);

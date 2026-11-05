@@ -90,7 +90,8 @@ function V4ComposerModeSwitchImpl({
       name: "Mode",
       category: "mode",
       type: "select",
-      currentValue: draftConfig?.mode ?? "build",
+      // 默认模式 guarded（specs/session-default-mode.md）。
+      currentValue: draftConfig?.mode ?? "guarded",
       options: getZCodeAgentAvailableModes()
         .filter((mode) => mode.id !== "plan")
         .map((mode) => ({ value: mode.id, name: mode.name })),

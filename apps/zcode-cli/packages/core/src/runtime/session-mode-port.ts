@@ -5,7 +5,7 @@ import { applyRuntimeExecutionState, readRuntimeExecutionState } from "./executi
 export function createRuntimeSessionModePort(runtime: AgentRuntimeInternal): SessionModePort {
   return {
     supportsPermissionFullAccess: () => Boolean(runtime.sessionStore?.commitPermissionFullAccess),
-    getMode: () => runtime.config.mode ?? "build",
+    getMode: () => runtime.config.mode ?? "guarded",
     getPrePlanMode: () => undefined,
     isPlanEnabled: () => readRuntimeExecutionState(runtime).planEnabled,
     async enterPlanMode(input) {

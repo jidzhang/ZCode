@@ -27,7 +27,7 @@ describe("resolveDraftDisplayedConfig", () => {
       thought: "",
       thoughtLevels: [],
       followupMode: "guide",
-      mode: "build",
+      mode: "guarded",
     });
   });
 

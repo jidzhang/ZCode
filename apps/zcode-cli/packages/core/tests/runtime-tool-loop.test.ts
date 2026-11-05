@@ -7729,7 +7729,8 @@ describe("AgentRuntime tool loop", () => {
     expect(result.response).toBe("Here is the proposed plan.");
     expect(modelCallCount).toBe(1);
     expect(permissionRequestCount).toBe(1);
-    expect(runtime.getMode()).toBe("build");
+    // plan 归一化落回默认档 guarded（specs/session-default-mode.md）。
+    expect(runtime.getMode()).toBe("guarded");
     expect(runtime.getPlanEnabled()).toBe(true);
     expect(events.filter((event) => event.type === SessionEventType.ModelRequest)).toHaveLength(1);
     expect(
@@ -7820,7 +7821,8 @@ describe("AgentRuntime tool loop", () => {
     expect(result.response).toBe("I will revise the plan with tests first.");
     expect(modelCallCount).toBe(2);
     expect(permissionRequestCount).toBe(1);
-    expect(runtime.getMode()).toBe("build");
+    // plan 归一化落回默认档 guarded（specs/session-default-mode.md）。
+    expect(runtime.getMode()).toBe("guarded");
     expect(runtime.getPlanEnabled()).toBe(true);
     expect(providerContentToText(exitPlanToolResult?.content)).toContain(
       "The plan was not approved by the user.",

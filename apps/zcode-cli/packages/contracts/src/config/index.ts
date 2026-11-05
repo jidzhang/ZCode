@@ -292,7 +292,9 @@ export const DefaultRuntimeConfig: RuntimeConfig = {
     idleTimeoutMs: DEFAULT_MODEL_STREAM_IDLE_TIMEOUT_MS,
   },
   permission: {
-    mode: "build",
+    // 默认模式 guarded（specs/session-default-mode.md）：无 --mode、配置未写 permission.mode、
+    // 项目无持久化模式时的兜底；与 Desktop/Web 新会话默认保持一致。
+    mode: "guarded",
     allowedTools: [],
     disallowedTools: [],
     autoApproveHighRisk: false,

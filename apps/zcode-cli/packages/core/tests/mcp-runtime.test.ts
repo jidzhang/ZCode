@@ -326,7 +326,10 @@ describe("AgentRuntime MCP integration", () => {
     const runtime = createTestAgentRuntime(
       sessionId,
       {
-        mode: "plan",
+        // 显式 build+plan：该用例验证 Plan 下非只读 MCP 的询问分支；legacy "plan" 会归一化到
+        // 默认档 guarded，而 guarded+Plan 的 MCP 放行是另一条既有语义（specs/session-default-mode.md）。
+        mode: "build",
+        planEnabled: true,
         mcp: {
           enabled: true,
           servers: {

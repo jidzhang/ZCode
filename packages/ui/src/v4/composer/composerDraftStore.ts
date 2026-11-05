@@ -288,7 +288,8 @@ function readDraft(value: unknown): V4ComposerDraft | null {
       ? { editorStateJson: value.editorStateJson }
       : {}),
     ...(hasMention ? { mention: mention as unknown as ComposerMentionPrefill } : {}),
-    ...(mode.success ? { mode: mode.data === "plan" ? ("build" as const) : mode.data } : {}),
+    // plan 不驻留草稿，持久化时重映射为默认档 guarded（specs/session-default-mode.md）。
+    ...(mode.success ? { mode: mode.data === "plan" ? ("guarded" as const) : mode.data } : {}),
     ...(typeof value.planEnabled === "boolean"
       ? { planEnabled: value.planEnabled }
       : mode.success

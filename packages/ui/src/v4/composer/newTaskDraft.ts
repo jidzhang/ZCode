@@ -21,7 +21,8 @@ export function initializeNewTaskDraft(
   const recent = readComposerRecent(workspacePath, workspaceIdentity, undefined, scope);
   return {
     ...draft,
-    mode: recent?.mode === "plan" ? "build" : (recent?.mode ?? "build"),
+    // 默认模式 guarded（specs/session-default-mode.md）；Recent 继承仍优先，plan 不作为草稿初值。
+    mode: recent?.mode === "plan" ? "guarded" : (recent?.mode ?? "guarded"),
     planEnabled: false,
     modelSelection:
       recent?.modelSelection ??

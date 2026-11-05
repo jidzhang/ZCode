@@ -9,7 +9,7 @@ export async function handleModeCommand(
   args: string,
   deps: CommandCenterDeps,
 ): Promise<TuiSubmitPromptResult> {
-  const current = deps.getMode?.() ?? "build";
+  const current = deps.getMode?.() ?? "guarded";
   if (args.length === 0) {
     return {
       mode: current,

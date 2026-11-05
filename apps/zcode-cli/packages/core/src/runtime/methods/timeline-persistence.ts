@@ -120,7 +120,7 @@ export async function persistAssistantTimelinePartForSession(
       parentID: options.parentID ?? this.latestConversationMessageId ?? messageID,
       modelId: selection && createModelId(selection.modelId),
       providerId: selection && createModelProviderId(selection.providerId),
-      mode: this.config.mode ?? "build",
+      mode: this.config.mode ?? "guarded",
       planEnabled: this.getPlanEnabled(),
       agent: this.config.agentName ?? "zcode-agent",
       path: {

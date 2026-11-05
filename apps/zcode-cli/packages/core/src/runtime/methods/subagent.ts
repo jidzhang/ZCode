@@ -623,9 +623,9 @@ function resolveSubagentPermissionMode(
 ): AgentRuntimeInternal["config"]["mode"] {
   // 修复原因：插件 profile 按用户级解析，声明 bypassPermissions 时父会话 build 的子会话
   // 也会变成 yolo，模型生成的命令全部免审批。插件声明只能收紧：取父会话与声明中更严格的一个。
-  // 父会话未设置模式时按 build 比较，与 getMode 的默认值一致。
+  // 父会话未设置模式时按 guarded 比较，与 getMode 的默认值一致（specs/session-default-mode.md）。
   const applyDeclared = (mode: CollaborationMode): CollaborationMode =>
-    restrictOnly ? restrictPermissionMode(parentMode ?? "build", mode) : mode;
+    restrictOnly ? restrictPermissionMode(parentMode ?? "guarded", mode) : mode;
   switch (permissionMode) {
     case "bypassPermissions":
     case "dontAsk":

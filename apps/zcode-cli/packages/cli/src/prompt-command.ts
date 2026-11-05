@@ -533,7 +533,7 @@ async function runPromptCommandCenterCommand(
 ): Promise<number> {
   const commandCenter = createCommandCenter({
     getApp: async () => app as unknown as CommandCenterApp,
-    getMode: () => app.getMode?.() ?? mode ?? "build",
+    getMode: () => app.getMode?.() ?? mode ?? "guarded",
     listCustomCommands: () => listCustomCommandsForPrompt(deps),
     loadCustomCommand: (name) => loadCustomCommandForPrompt(deps, name),
     recordInputHistory: async (input, kind) => {

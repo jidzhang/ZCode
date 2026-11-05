@@ -406,6 +406,8 @@ describe("tool execution input normalization", () => {
       sessionId,
       turnId,
       traceContext,
+      // 显式钉 build：该用例验证 broker 修改链路，必须走询问分支而非默认模式的放行分支。
+      mode: "build",
     });
 
     const result = await executor.execute(
@@ -462,6 +464,8 @@ describe("tool execution input normalization", () => {
       sessionId,
       turnId,
       traceContext,
+      // 显式钉 build：同上，broker 校验链路只在询问分支触发。
+      mode: "build",
     });
 
     const result = await executor.execute(

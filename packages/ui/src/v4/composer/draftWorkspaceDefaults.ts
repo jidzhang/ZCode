@@ -16,7 +16,8 @@ export function resolveDraftDisplayedConfig(
     thought: selection.options?.reasoningLevel ?? "",
     thoughtLevels: [],
     followupMode: composer.followupMode ?? "guide",
-    mode: composer.mode ?? "build",
+    // 默认模式 guarded（specs/session-default-mode.md）。
+    mode: composer.mode ?? "guarded",
   };
 }
 

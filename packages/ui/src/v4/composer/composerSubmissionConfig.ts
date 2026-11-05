@@ -32,8 +32,9 @@ export function createComposerSubmissionConfig(
   if (!mode.success || !selection || !model || !validateModelSelectionOptions(model, selection).ok)
     return null;
   // 不读取 Session 或显示别名；复制所有选择叶子，防止 await 后用户切模改变本次请求。
+  // plan 在冻结时重映射为默认档 guarded（specs/session-default-mode.md）。
   return Object.freeze({
-    mode: mode.data === "plan" ? "build" : mode.data,
+    mode: mode.data === "plan" ? "guarded" : mode.data,
     planEnabled: resolveExecutionState(composer).planEnabled,
     modelSelection: Object.freeze({
       providerId: selection.providerId,

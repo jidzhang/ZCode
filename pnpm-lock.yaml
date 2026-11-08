@@ -1163,8 +1163,8 @@ importers:
         specifier: ^17.4.2
         version: 17.4.2
       electron:
-        specifier: 44.7.0
-        version: 44.7.0
+        specifier: 43.8.7
+        version: 43.8.7
       electron-builder:
         specifier: 26.17.0
         version: 26.17.0(electron-builder-squirrel-windows@26.17.0)
@@ -1203,7 +1203,7 @@ importers:
         version: 8.0.8(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0)
       wdio-electron-service:
         specifier: ^9.2.1
-        version: 9.2.1(patch_hash=52481dae5e76772fcb8c2a9ff42feb3d0e1478e28815a4b975c81b9287e3385f)(electron@44.7.0)(expect-webdriverio@5.6.5)(webdriverio@9.27.0(puppeteer-core@22.15.0))
+        version: 9.2.1(patch_hash=52481dae5e76772fcb8c2a9ff42feb3d0e1478e28815a4b975c81b9287e3385f)(electron@43.8.7)(expect-webdriverio@5.6.5)(webdriverio@9.27.0(puppeteer-core@22.15.0))
       webdriverio:
         specifier: ^9.27.0
         version: 9.27.0(puppeteer-core@22.15.0)
@@ -8482,8 +8482,8 @@ packages:
     resolution: {integrity: sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==}
     engines: {node: '>=8.0.0'}
 
-  electron@44.7.0:
-    resolution: {integrity: sha512-aUq9/zLAAFYc+a9gy6cd0C3Y/N/RmovLCD8TV8LhIzNhuND6HEgsu96jJz9cbAxvckSPv+Trf2PKEjktoZgFkw==}
+  electron@43.8.7:
+    resolution: {integrity: sha512-F3Z7xEYlS62Re9Y2WCRhB8jFIkDwpUO7wjJ85l8NpPEgQ/CEyBvwtYEsNY2lioT7VOWi2vBrnMckCvXBkq+Cnw==}
     engines: {node: '>= 22.12.0'}
     hasBin: true
 
@@ -19964,7 +19964,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron@44.7.0:
+  electron@43.8.7:
     dependencies:
       '@electron-internal/extract-zip': 1.0.5
       '@electron/get': 5.1.0
@@ -25934,7 +25934,7 @@ snapshots:
     dependencies:
       defaults: 1.0.4
 
-  wdio-electron-service@9.2.1(patch_hash=52481dae5e76772fcb8c2a9ff42feb3d0e1478e28815a4b975c81b9287e3385f)(electron@44.7.0)(expect-webdriverio@5.6.5)(webdriverio@9.27.0(puppeteer-core@22.15.0)):
+  wdio-electron-service@9.2.1(patch_hash=52481dae5e76772fcb8c2a9ff42feb3d0e1478e28815a4b975c81b9287e3385f)(electron@43.8.7)(expect-webdriverio@5.6.5)(webdriverio@9.27.0(puppeteer-core@22.15.0)):
     dependencies:
       '@babel/parser': 7.29.2
       '@electron/fuses': 2.1.1
@@ -25955,7 +25955,7 @@ snapshots:
       tinyspy: 4.0.4
       webdriverio: 9.27.0(puppeteer-core@22.15.0)
     optionalDependencies:
-      electron: 44.7.0
+      electron: 43.8.7
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer

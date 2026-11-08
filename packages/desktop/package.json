@@ -116,7 +116,7 @@
     "@wdio/mocha-framework": "^9.27.0",
     "@wdio/spec-reporter": "^9.27.0",
     "dotenv": "^17.4.2",
-    "electron": "44.7.0",
+    "electron": "43.8.7",
     "electron-builder": "26.17.0",
     "electron-to-chromium": "1.5.452",
     "http-mitm-proxy": "^1.1.0",

@@ -24,12 +24,12 @@ async function fixture(name = "latest-mac.yml") {
   return { outputDir, file, manifest };
 }
 
-it.each(macosManifestNames)("%s 保留下载与日志字段，并写入 Darwin 22 下限", async (name) => {
+it.each(macosManifestNames)("%s 保留下载与日志字段，并写入 Darwin 21 下限", async (name) => {
   const { outputDir, file, manifest } = await fixture(name);
   await stampMacosUpdateManifests({ outputDir, platform: "mac" });
   expect(parse(await readFile(file, "utf8"))).toEqual({
     ...parse(manifest),
-    minimumSystemVersion: "22.0.0",
+    minimumSystemVersion: "21.0.0",
   });
 });
 
@@ -58,5 +58,5 @@ it("macOS 构建不修改同一输出目录里的 Windows/Linux 清单，并覆�
   await stampMacosUpdateManifests({ outputDir, platform: "mac" });
   expect(await readFile(windows, "utf8")).toBe(manifest);
   expect(await readFile(linux, "utf8")).toBe(manifest);
-  expect(parse(await readFile(preview, "utf8")).minimumSystemVersion).toBe("22.0.0");
+  expect(parse(await readFile(preview, "utf8")).minimumSystemVersion).toBe("21.0.0");
 });

@@ -1,20 +1,16 @@
 # 桌面端自动发布：push tag v* 触发全平台构建并直传 GitHub Release。
 # 行为与设计依据见 specs/ci-release-workflow.md；构建/校验/上传的唯一所有者是
 # packages/desktop/scripts/bundle.mjs 与 publish-github-release-asset.mjs，本文件只做编排。
+#
+# macos12 分支：去掉 tag 触发、固定不发布（见 docs/electron/macos12-branch.md）。本分支用 Electron 43，
+# Release 与自动更新通道和 main 共用，分支产物一旦发布会被推给 macOS 13+ 与 Windows 用户；
+# 手动触发只构建并上传 workflow artifacts。
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
-    inputs:
-      publish:
-        description: "构建后上传 GitHub Release（必须以发布 tag 作为 ref 运行）"
-        type: boolean
-        default: false
 
-# tag 推送 = 自动发布；手动触发默认只构建（产物作为 workflow artifacts 上传供装机验证）。
+# 手动触发只构建（产物作为 workflow artifacts 上传供装机验证）。
 # ZCODE_PUBLISH 是 bundle.mjs 的既有环境变量入参（与 --publish 等价）。必须始终显式给值：
 # electron-builder 26 在 CI=true 且缺省 --publish 时默认 onTagOrDraft，
 # 手动构建演练若 ref 恰好在 tag 上会触发它自家 GitHub publisher 的缺陷路径（draft 语义/yml 覆盖）。
@@ -23,8 +19,8 @@ env:
   ZCODE_PREVIEW_IDENTITY: "0"
   ZCODE_UPDATE_CHANNEL: github
   ZCODE_UPDATE_GITHUB_REPO: jidzhang/ZCode
-  ZCODE_PUBLISH: ${{ (github.event_name == 'push' || inputs.publish == true) && 'always' || 'never' }}
-  PUBLISH: ${{ github.event_name == 'push' || inputs.publish == true }}
+  ZCODE_PUBLISH: never
+  PUBLISH: false
   # runner 在海外，覆盖本地默认的 npmmirror 镜像直连官方源（覆盖路径由 bundle.mjs 既有 env 解析提供）。
   # ELECTRON_MIRROR 尾部不能带 v：@electron/get 会在 mirror 后拼接自带 v 前缀的 customDir（v{version}），
   # 带尾 v 会拼出 .../download/vv41.0.3/ 的 404（首次实跑三平台同挂于此）。

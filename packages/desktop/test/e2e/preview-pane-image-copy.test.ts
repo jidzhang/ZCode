@@ -74,16 +74,9 @@ describe("右侧图片预览复制 E2E", () => {
       await copy.click();
       await browser.waitUntil(
         async () => {
-          const result = await browser.electron.execute(async (electron) => {
-            // Electron 44 移除了 readImage；读取 PNG 后仍验证原始图片的非空状态和尺寸。
-            const item = (await electron.clipboard.read()).find((entry) =>
-              entry.types.includes("image/png"),
-            );
-            if (!item) return { empty: true, width: 0, height: 0 };
-            const png = await item.getType("image/png");
-            const image = electron.nativeImage.createFromBuffer(
-              Buffer.from(await png.arrayBuffer()),
-            );
+          const result = await browser.electron.execute((electron) => {
+            // macos12 分支（Electron 43）：同步 readImage 直接取剪贴板图片，仍验证非空状态和原始尺寸。
+            const image = electron.clipboard.readImage();
             return { empty: image.isEmpty(), ...image.getSize() };
           });
           return !result.empty && result.width === width && result.height === height;

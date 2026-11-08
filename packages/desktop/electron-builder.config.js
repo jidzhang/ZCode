@@ -962,7 +962,8 @@ export default {
     },
   ],
   mac: {
-    minimumSystemVersion: "13.0.0",
+    // macos12 分支：Electron 43（Chromium 150）仍支持 macOS 12；main 用 Electron 44，此处为 13.0.0。
+    minimumSystemVersion: "12.0.0",
     target: ["dmg", "zip"],
     category: "public.app-category.developer-tools",
     artifactName: buildDesktopArtifactName("mac"),

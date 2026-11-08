@@ -3,8 +3,9 @@ import { join } from "node:path";
 import { gte } from "semver";
 import { parseDocument } from "yaml";
 
-// electron-updater 比较 os.release()；macOS 13 对应 Darwin 22，不能填营销版本 13。
-const MINIMUM_DARWIN_VERSION = "22.0.0";
+// electron-updater 比较 os.release()；macOS 12 对应 Darwin 21，不能填营销版本 12。
+// macos12 分支用 Electron 43，下限是 macOS 12；main 用 Electron 44，此处为 22.0.0（macOS 13）。
+const MINIMUM_DARWIN_VERSION = "21.0.0";
 
 export async function stampMacosUpdateManifests({ outputDir, platform }) {
   if (platform !== "mac") return;

@@ -117,12 +117,12 @@ afterEach(() => {
   vi.resetModules();
 });
 
-it("精确锁定 Electron 44 与配套打包更新工具链", async () => {
+it("精确锁定 Electron 43（macos12 分支）与配套打包更新工具链", async () => {
   const desktopPackage = JSON.parse(
     await readFile(new URL("../package.json", import.meta.url), "utf8"),
   );
 
-  expect(desktopPackage.devDependencies.electron).toBe("44.7.0");
+  expect(desktopPackage.devDependencies.electron).toBe("43.8.7");
   expect(desktopPackage.devDependencies["electron-builder"]).toBe("26.17.0");
   expect(desktopPackage.dependencies["electron-updater"]).toBe("6.8.10");
   expect(require("electron-builder/package.json").version).toBe("26.17.0");
@@ -136,7 +136,7 @@ it("安装包使用 desktop 依赖中的唯一 Electron 版本，并声明 macOS
   const { default: config } = await import("../electron-builder.config.js");
 
   expect(config.electronVersion).toBe(desktopPackage.devDependencies.electron);
-  expect(config.mac?.minimumSystemVersion).toBe("13.0.0");
+  expect(config.mac?.minimumSystemVersion).toBe("12.0.0");
 });
 
 it("macOS afterExtract 从 app Resources 保留 Electron 原始许可", async () => {

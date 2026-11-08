@@ -13,6 +13,12 @@
    导致客户端 updater（electron-updater 6.8.3）按 `process.arch` 在 files[] 里找不到匹配，
    静默回退到第一个条目，下载到错误架构的安装包。
    （linux 无此问题：updater 按架构找 `latest-linux.yml` / `latest-linux-arm64.yml`，文件名天然隔离。）
+3. **macOS 系统下限丢失**：Electron 44 起要求 macOS 13，`bundle.mjs` 构建后用 `macos-update-manifest.mjs`
+   给 dist 中的 `latest-mac.yml` 写入 `minimumSystemVersion: 22.0.0`（Darwin 22 = macOS 13）。但上传脚本新建
+   channel yml 时只写 version/files/path/sha512/releaseDate，合并时又只继承 Release 上已有的字段，
+   v3.17.1-safe.1 与 v3.17.2-safe.2 发布的 `latest-mac.yml` 都没有该字段。electron-updater 6.8.10 的
+   `checkIfUpdateSupported` 只在字段存在时按 `os.release()` 跳过不兼容版本，于是 macOS 12 上的旧版
+   会被推送无法启动的 Electron 44 安装包。
 
 ## 行为
 
@@ -40,10 +46,16 @@
    - files[] 条目字段：`url`（产物文件名）、`sha512`（base64，本地计算）、`size`、`arch`。
      electron-updater 6.8.3 的 `findFile` 按 URL 是否包含 `process.arch` 选择条目，找不到才回退第一个；
      因此**每个架构一个条目、命名含架构**是合并方案成立的硬约束。
+   - 系统下限：覆盖写 dist 中的同名 yml 之前，先读取构建期生成的版本（electron-builder 生成，mac 由
+     `bundle.mjs` 经 `macos-update-manifest.mjs` 盖章）。其 version 与本次一致时，`minimumSystemVersion`
+     必须带进上传的 yml；与 Release 上现有 yml 的下限取更严格者，只升不降。mac 的 yml 最终缺少该字段时
+     拒绝发布（非零退出），win/linux 不要求也不凭空添加。下限数值的唯一所有者是
+     `macos-update-manifest.mjs`，上传脚本只搬运，不定义数值。
 4. **上传**：安装包、对应 `.blockmap`、平台其他安装器（mac dmg / linux deb、rpm）、合并后的 channel yml，
    一次性 `gh release upload --clobber`。gh 走标准 `HTTPS_PROXY/HTTP_PROXY` 环境变量。
 5. **上传后校验（DONE 的唯一依据）**：`gh release view --json assets` 确认每个预期资产**名称与字节数**精确匹配；
-   并从 Release 重新下载 channel yml，解析后确认本次架构条目的 url 与 sha512 正确。
+   并从 Release 重新下载 channel yml，解析后确认本次架构条目的 url 与 sha512 正确；
+   上传的 yml 带有 `minimumSystemVersion` 时，回读结果必须保留同一值。
    任一失败 → 非零退出，不输出 DONE。
 6. `--dry-run`：完整走预检/发现/合并逻辑并打印计划与 yml 内容，不产生任何 GitHub 写操作。
 
@@ -69,4 +81,5 @@
 - linux 的 arm64 yml 命名规则与 electron-updater/electron-builder 现状一致，不引入新约定。
 - 测试：`release-asset-publish-core.test.mjs`（node:test，零新增依赖）覆盖文件名解析、yml 生成/合并、
   资产校验，并用工作区内 electron-updater 的真实 `parseUpdateInfo/resolveFiles/findFile` 做跨模块回归
-  （多架构 yml 必须让 x64/arm64 各自解析到正确安装包与校验和）。
+  （多架构 yml 必须让 x64/arm64 各自解析到正确安装包与校验和）。mac 按 CI 顺序先发 x64、再合并 arm64，
+  上传 yml 必须保留系统下限，并用真实 `checkIfUpdateSupported` 确认 Darwin 21 跳过、Darwin 22 放行。

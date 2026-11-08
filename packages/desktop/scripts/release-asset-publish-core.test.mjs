@@ -9,6 +9,7 @@ import { test } from "node:test";
 import {
   buildUpdateInfoEntry,
   buildUpdateInfoFile,
+  composeChannelUpdateInfo,
   findReleaseAssetMismatches,
   mergeUpdateInfoFile,
   parseUpdateInfoFile,
@@ -20,6 +21,39 @@ import {
 
 const requireFromHere = createRequire(import.meta.url);
 const updaterProvider = requireFromHere("electron-updater/out/providers/Provider.js");
+const { AppUpdater } = requireFromHere("electron-updater/out/AppUpdater.js");
+const nodeOs = requireFromHere("node:os");
+
+// electron-updater 6.8.10 的 checkIfUpdateSupported 内部直接读 os.release()（Darwin 内核版本），
+// 测试里按目标系统临时替换后还原。
+function isUpdateSupportedOnDarwin(info, darwinRelease) {
+  const originalRelease = nodeOs.release;
+  nodeOs.release = () => darwinRelease;
+  try {
+    const logger = { info() {}, warn() {} };
+    return AppUpdater.prototype.checkIfUpdateSupported.call({ _logger: logger }, info);
+  } finally {
+    nodeOs.release = originalRelease;
+  }
+}
+
+// dist 中 electron-builder 生成、bundle.mjs 盖章后的构建期 latest-mac.yml（只保留发布脚本会读的字段）。
+function macBuiltInfo(version, minimumSystemVersion) {
+  return minimumSystemVersion ? { version, files: [], minimumSystemVersion } : { version, files: [] };
+}
+
+function composeMac({ existingInfo = null, builtInfo, arch = "x64", sha512 = "eDY0LXppcA==" }) {
+  return composeChannelUpdateInfo({
+    os: "mac",
+    existingInfo,
+    builtInfo,
+    version: "1.0.0",
+    arch,
+    artifactName: `App-1.0.0-mac-${arch}.zip`,
+    sha512,
+    size: arch === "x64" ? 100 : 200,
+  });
+}
 
 function resolveUpdateFileForArch(info, arch) {
   // process.arch 是 updater 内部直接读取的全局量，测试里按目标架构覆写后再还原。
@@ -154,6 +188,70 @@ test("合并: 版本不一致直接失败", () => {
       ),
     /版本不一致/,
   );
+});
+
+test("mac 发布: x64 新建再 arm64 合并后，上传的 yml 保留构建期系统下限（v3.17.x 曾丢失）", () => {
+  const x64 = composeMac({ builtInfo: macBuiltInfo("1.0.0", "22.0.0") });
+  // Release 上存的是序列化文本，arm64 发布时下载回来再合并，这里按真实往返走一遍。
+  const uploadedX64 = parseUpdateInfoFile(serializeUpdateInfoFile(x64));
+  const merged = composeMac({
+    existingInfo: uploadedX64,
+    builtInfo: macBuiltInfo("1.0.0", "22.0.0"),
+    arch: "arm64",
+    sha512: "YXJtNjQtemlw",
+  });
+  const uploaded = parseUpdateInfoFile(serializeUpdateInfoFile(merged));
+
+  assert.equal(uploaded.files.length, 2);
+  assert.equal(uploaded.minimumSystemVersion, "22.0.0");
+  assert.equal(isUpdateSupportedOnDarwin(uploaded, "21.6.0"), false, "macOS 12 不能收到 Electron 44 安装包");
+  assert.equal(isUpdateSupportedOnDarwin(uploaded, "22.6.0"), true, "macOS 13 照常收到更新");
+});
+
+test("mac 合并: Release 上的旧 yml 缺下限时补回，已有更严格下限不被降低", () => {
+  const legacy = buildUpdateInfoFile({
+    version: "1.0.0",
+    arch: "x64",
+    artifactName: "App-1.0.0-mac-x64.zip",
+    sha512: "eDY0LXppcA==",
+    size: 100,
+  });
+  const repaired = composeMac({
+    existingInfo: legacy,
+    builtInfo: macBuiltInfo("1.0.0", "22.0.0"),
+    arch: "arm64",
+  });
+  assert.equal(repaired.minimumSystemVersion, "22.0.0");
+
+  const stricter = composeMac({
+    existingInfo: { ...legacy, minimumSystemVersion: "23.0.0" },
+    builtInfo: macBuiltInfo("1.0.0", "22.0.0"),
+    arch: "arm64",
+  });
+  assert.equal(stricter.minimumSystemVersion, "23.0.0");
+});
+
+test("mac 拿不到同版本的构建期下限时拒绝发布", () => {
+  // dist 里没有构建期 yml、残留旧版本 yml、或 yml 未盖章，都不能发布不带下限的 latest-mac.yml。
+  for (const builtInfo of [null, macBuiltInfo("0.9.0", "22.0.0"), macBuiltInfo("1.0.0")]) {
+    assert.throws(() => composeMac({ builtInfo }), /minimumSystemVersion/);
+  }
+});
+
+test("win/linux 不要求系统下限，也不凭空添加", () => {
+  for (const os of ["win", "linux"]) {
+    const info = composeChannelUpdateInfo({
+      os,
+      existingInfo: null,
+      builtInfo: null,
+      version: "1.0.0",
+      arch: "x64",
+      artifactName: `App-1.0.0-${os}-x64.bin`,
+      sha512: "eDY0",
+      size: 100,
+    });
+    assert.equal("minimumSystemVersion" in info, false);
+  }
 });
 
 test("上传后校验: 名称与字节数必须精确匹配", () => {

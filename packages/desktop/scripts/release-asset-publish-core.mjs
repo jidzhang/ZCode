@@ -3,6 +3,7 @@
 // 依赖约束：YAML 解析用工作区内 electron-updater 的传递依赖 js-yaml（createRequire 解析），
 // dump 必须 lineWidth: -1，否则 base64 sha512 会被折行，updater 校验和解析直接失败。
 import { createRequire } from "node:module";
+import { gt } from "semver";
 
 const requireFromHere = createRequire(import.meta.url);
 const jsYaml = requireFromHere("js-yaml");
@@ -89,6 +90,49 @@ export function mergeUpdateInfoFile(existingInfo, incomingEntry, { version, arti
     path: topLevelPointsToIncoming ? artifactName : existingInfo.path,
     sha512: topLevelPointsToIncoming ? sha512 : existingInfo.sha512,
   };
+}
+
+// 组装本次要上传的 channel yml：Release 上已有同名 yml 时合并，否则以本次产物新建。
+// builtInfo 是 dist 中构建期生成的同名 yml（覆盖写之前由 glue 层读出），os 用于平台约束。
+//
+// Bugfix: 新建分支只写 version/files/path/sha512/releaseDate，合并分支只继承 Release 上已有的字段，
+// bundle.mjs 盖在构建期 yml 上的 minimumSystemVersion 两条路都带不过来——v3.17.1-safe.1 与
+// v3.17.2-safe.2 的 latest-mac.yml 均缺该字段，electron-updater 便把 Electron 44（要求 macOS 13）
+// 的安装包推给 macOS 12，装完无法启动。修复：从同版本构建期 yml 搬运下限，与现有 yml 取更严格者；
+// mac 最终没有下限就拒绝发布。数值的唯一所有者是 macos-update-manifest.mjs，这里只搬运不定义。
+export function composeChannelUpdateInfo({
+  os,
+  existingInfo,
+  builtInfo,
+  version,
+  arch,
+  artifactName,
+  sha512,
+  size,
+}) {
+  const info = existingInfo
+    ? mergeUpdateInfoFile(
+        existingInfo,
+        buildUpdateInfoEntry({ artifactName, sha512, size, arch }),
+        { version, artifactName, sha512 },
+      )
+    : buildUpdateInfoFile({ version, arch, artifactName, sha512, size });
+  // 版本不同的构建期 yml 是 dist 残留，不能作为本次发布的下限来源。
+  const builtMinimum = builtInfo?.version === version ? builtInfo.minimumSystemVersion : undefined;
+  const minimumSystemVersion = strictestSystemVersion([info.minimumSystemVersion, builtMinimum]);
+  if (os === "mac" && !minimumSystemVersion) {
+    throw new Error(
+      `latest-mac.yml 缺少 minimumSystemVersion：dist 中没有 ${version} 的构建期 yml 或其未盖章，` +
+        "拒绝发布（否则低版本 macOS 会被推送无法启动的安装包）",
+    );
+  }
+  return minimumSystemVersion ? { ...info, minimumSystemVersion } : info;
+}
+
+// 只升不降：多个来源同时声明下限时取更严格（更高）的 Darwin 版本。
+function strictestSystemVersion(candidates) {
+  const declared = candidates.filter((value) => typeof value === "string" && value.length > 0);
+  return declared.reduce((strictest, value) => (gt(value, strictest) ? value : strictest), declared[0]);
 }
 
 export function serializeUpdateInfoFile(info) {

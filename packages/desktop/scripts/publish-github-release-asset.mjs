@@ -14,10 +14,8 @@ import process from "node:process";
 import { join, resolve } from "node:path";
 
 import {
-  buildUpdateInfoEntry,
-  buildUpdateInfoFile,
+  composeChannelUpdateInfo,
   findReleaseAssetMismatches,
-  mergeUpdateInfoFile,
   parseUpdateInfoFile,
   planReleaseAssets,
   resolveChannelFileName,
@@ -258,35 +256,35 @@ async function main() {
   console.log(`[publish-asset] target=${os}/${arch} repo=${owner}/${repo} tag=${tag} dryRun=${dryRun}`);
 
   const channelFileName = resolveChannelFileName(os, arch);
+  const channelYmlLocalPath = join(desktopDistRoot, channelFileName);
   const { artifacts, updaterArtifact, blockmaps } = discoverArtifacts({ os, arch });
   const updaterSha512 = computeSha512Base64(updaterArtifact.localPath);
+  // 构建期 yml 必须在下方覆盖写之前读出：mac 的系统下限只由 bundle.mjs 盖在这份文件上。
+  const builtInfo = existsSync(channelYmlLocalPath)
+    ? parseUpdateInfoFile(readFileSync(channelYmlLocalPath, "utf8"))
+    : null;
 
   const release = dryRun ? { assets: [] } : fetchRelease(context);
   const existingChannelAsset = release?.assets?.find((asset) => asset.name === channelFileName);
-  let infoFile;
+  let existingInfo = null;
   if (existingChannelAsset) {
     const localCopy = join(desktopDistRoot, `${channelFileName}.existing`);
     if (!downloadReleaseFile({ owner, repo, tag, assetName: channelFileName, outputPath: localCopy })) {
       fail(`下载现有 ${channelFileName} 失败`);
     }
-    const existingInfo = parseUpdateInfoFile(readFileSync(localCopy, "utf8"));
-    infoFile = mergeUpdateInfoFile(existingInfo, buildUpdateInfoEntry({
-      artifactName: updaterArtifact.assetName,
-      sha512: updaterSha512,
-      size: updaterArtifact.size,
-      arch,
-    }), { version: appVersionOf(tag), artifactName: updaterArtifact.assetName, sha512: updaterSha512 });
-  } else {
-    infoFile = buildUpdateInfoFile({
-      version: appVersionOf(tag),
-      arch,
-      artifactName: updaterArtifact.assetName,
-      sha512: updaterSha512,
-      size: updaterArtifact.size,
-    });
+    existingInfo = parseUpdateInfoFile(readFileSync(localCopy, "utf8"));
   }
+  const infoFile = composeChannelUpdateInfo({
+    os,
+    existingInfo,
+    builtInfo,
+    version: appVersionOf(tag),
+    arch,
+    artifactName: updaterArtifact.assetName,
+    sha512: updaterSha512,
+    size: updaterArtifact.size,
+  });
 
-  const channelYmlLocalPath = join(desktopDistRoot, channelFileName);
   const channelYmlContent = serializeUpdateInfoFile(infoFile);
   writeFileSync(channelYmlLocalPath, channelYmlContent);
 
@@ -340,6 +338,9 @@ async function main() {
   const verifiedEntry = verifiedInfo.files?.find((file) => file.url === updaterArtifact.assetName);
   if (!verifiedEntry || verifiedEntry.sha512 !== updaterSha512) {
     fail(`Release 上的 ${channelFileName} 未包含 ${updaterArtifact.assetName} 的正确校验和`);
+  }
+  if (infoFile.minimumSystemVersion && verifiedInfo.minimumSystemVersion !== infoFile.minimumSystemVersion) {
+    fail(`Release 上的 ${channelFileName} 未保留系统下限 minimumSystemVersion=${infoFile.minimumSystemVersion}`);
   }
   console.log(
     `[publish-asset] DONE. ${tag} 已包含 ${os}/${arch} 资产与合并后的 ${channelFileName}（files=${verifiedInfo.files.length} 条）`,

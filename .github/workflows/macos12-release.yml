@@ -90,16 +90,17 @@ jobs:
               "$DMG"
           fi
           # 校验：必须是 pre-release、不是 latest，且资产里只有 dmg 没有 yml。
-          # 用 jq 而不是内嵌 node，避免 shell 引号嵌套（runner 自带 jq）。
-          INFO=$(gh release view "$TAG" --repo "$ZCODE_UPDATE_GITHUB_REPO" --json isPrerelease,isLatest,assets)
+          # gh release view 没有 isLatest 字段（gh 2.92 实测），latest 用 REST API 对比 tag 判定。
+          INFO=$(gh release view "$TAG" --repo "$ZCODE_UPDATE_GITHUB_REPO" --json tagName,isPrerelease,isDraft,assets)
           PRERELEASE=$(printf '%s' "$INFO" | jq -r '.isPrerelease')
-          ISLATEST=$(printf '%s' "$INFO" | jq -r '.isLatest')
+          LATEST_TAG=$(gh api "repos/$ZCODE_UPDATE_GITHUB_REPO/releases/latest" --jq .tag_name)
           NAMES=$(printf '%s' "$INFO" | jq -r '.assets[].name')
           YML_COUNT=$(printf '%s\n' "$NAMES" | grep -cE '\.ya?ml$' || true)
           DMG_COUNT=$(printf '%s\n' "$NAMES" | grep -cE '\.dmg$' || true)
           echo "[macos12-release] assets: $(printf '%s' "$NAMES" | tr '\n' ' ')"
+          echo "[macos12-release] repo latest tag: $LATEST_TAG"
           [ "$PRERELEASE" = "true" ] || { echo "::error::Release $TAG 不是 pre-release"; exit 1; }
-          [ "$ISLATEST" = "false" ] || { echo "::error::Release $TAG 被标成了 latest"; exit 1; }
+          [ "$LATEST_TAG" != "$TAG" ] || { echo "::error::Release $TAG 成为了仓库 latest"; exit 1; }
           [ "$YML_COUNT" = "0" ] || { echo "::error::Release $TAG 资产中出现 channel yml"; exit 1; }
           [ "$DMG_COUNT" = "1" ] || { echo "::error::Release $TAG 的 dmg 数量不为 1"; exit 1; }
           echo "[macos12-release] 校验通过"

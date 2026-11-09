@@ -34,6 +34,9 @@ concurrency:
 
 jobs:
   build-macos12:
+    # GitHub 只注册默认分支上的 workflow，所以本文件必须在 main 上存在；但只有切到
+    # macos12 分支运行时才有意义（Electron 43）。其它 ref 直接跳过，杜绝 main 误发 43 版包。
+    if: github.ref == 'refs/heads/macos12'
     runs-on: macos-15
     timeout-minutes: 90
     steps:

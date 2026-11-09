@@ -21,12 +21,15 @@ main 不承担 macOS 12 兼容，所有代价都留在本分支；不再需要�
 | `packages/desktop/test/e2e/preview-pane-image-copy.test.ts` 读剪贴板图片 | 异步 `clipboard.read()` | 同步 `clipboard.readImage()` |
 | `packages/desktop/test/electronBuilderSecurity.test.ts`、`macosUpdateManifest.test.ts` | 锁 44.7.0、13.0.0 / 22.0.0 | 锁 43.8.7、12.0.0 / 21.0.0 |
 | `.github/workflows/release.yml` | tag 触发全平台发布 | 只能手动触发，固定不发布 |
+| `.github/workflows/macos12-release.yml` | 不存在 | 独立 mac x64 通道：dispatch 手动触发，产出单一 dmg 到 `macos12-v*` pre-release |
 
 ## 规则
 
 1. **单向同步**：只把 main 合入本分支（`git merge main`），永不把本分支合回 main。
-2. **不发布**：本分支不打 `v*` tag；workflow 已去掉 tag 触发并固定不发布，产物只在本地手动安装。
-   GitHub Release 与自动更新通道和 main 共用，分支产物一旦发布，会被推给 macOS 13+ 与 Windows 用户。
+2. **不发布通用版**：本分支不打 `v*` tag，也从不写 main 的通用版 Release。
+   本分支的安装包只走 `.github/workflows/macos12-release.yml` 的独立 pre-release
+   （`macos12-v<version>`，不带任何 channel yml），详见 [macOS 12 独立发布 spec](../../specs/electron/macos12-release.md)。
+   原因：GitHub Release 与自动更新通道和 main 共用，分支产物一旦进入通用通道，会被推给 macOS 13+ 与 Windows 用户。
 3. **同步后检查**：上游若开始使用 Electron 44 及以后才有的接口（典型：异步 clipboard 与
    `ClipboardItem`、`windowStatePersistence`、`protocol.registerSource`、`WebContents` 的 zoomMode），
    在 Electron 43 类型下会报类型错误；按 43 写法改回，并登记到上表。根 `pnpm typecheck` 用

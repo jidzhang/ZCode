@@ -1,0 +1,102 @@
+# macOS 12 专用版构建与发布（仅有 macos12 分支）
+#
+# 设计依据见 specs/electron/macos12-release.md 与 docs/electron/macos12-branch.md。
+# 本 workflow 与 main 的 release.yml 完全隔离：只构建 mac x64，只上传单个 dmg 到独立的
+# pre-release，不上传任何 channel yml，避免 Electron 43 产物进入自动更新通道。
+name: macOS 12 Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "构建后创建独立 pre-release 并上传 dmg"
+        type: boolean
+        default: false
+
+env:
+  ZCODE_ENV: production
+  ZCODE_PREVIEW_IDENTITY: "0"
+  ZCODE_UPDATE_CHANNEL: github
+  ZCODE_UPDATE_GITHUB_REPO: jidzhang/ZCode
+  # 本 workflow 自己上传 dmg，不走 bundle.mjs 的发布脚本（它会连 yml 一起传）。
+  ZCODE_PUBLISH: never
+  PUBLISH: "false"
+  ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+  ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos12-release
+  cancel-in-progress: false
+
+jobs:
+  build-macos12:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        shell: bash
+      # 只打 x64：本通道服务于 macOS 12 的 Intel 设备，arm64 不在范围内。
+      - run: node packages/desktop/scripts/bundle.mjs --os mac --arch x64
+        shell: bash
+      - name: Upload dmg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos12-mac-x64
+          path: packages/desktop/dist/*-mac-x64.dmg
+          retention-days: 7
+          if-no-files-found: error
+      - name: Publish pre-release
+        if: inputs.publish == true
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="macos12-v${VERSION}"
+          DMG=$(ls packages/desktop/dist/*-mac-x64.dmg | head -1)
+          # 用 printf 逐行写，避免 heredoc 缩进把 markdown 变成代码块。
+          {
+            printf '## macOS 12 专用版 %s\n\n' "$VERSION"
+            printf '仅适用于 macOS 12（Monterey）。macOS 13 及以上请使用通用版 Release。\n\n'
+            printf -- '- 本版把 Electron 钉在 43.x（Chromium 150），最后一个支持 macOS 12 的版本线。\n'
+            printf -- '- **无自动更新**：本 Release 不提供更新清单，升级请回到这里手动下载新版本。\n'
+            printf -- '- **未签名**：首次打开如被 Gatekeeper 拦截，请右键「打开」，或在终端执行 `xattr -d com.apple.quarantine /Applications/ZCode.app`。\n'
+            printf -- '- 已在用通用版（Electron 44）的设备**不要**安装本版：降级未经验证，可能影响本地数据。\n'
+            printf -- '- 功能与通用版 %s 一致，差异仅限 Electron 与 macOS 12 兼容性。\n' "$VERSION"
+          } > release-notes.md
+          if gh release view "$TAG" --repo "$ZCODE_UPDATE_GITHUB_REPO" >/dev/null 2>&1; then
+            echo "[macos12-release] $TAG 已存在，仅覆盖上传 dmg"
+            gh release upload "$TAG" --repo "$ZCODE_UPDATE_GITHUB_REPO" --clobber "$DMG"
+          else
+            gh release create "$TAG" \
+              --repo "$ZCODE_UPDATE_GITHUB_REPO" \
+              --prerelease \
+              --title "macOS 12 专用版 ${VERSION}" \
+              --notes-file release-notes.md \
+              "$DMG"
+          fi
+          # 校验：必须是 pre-release、不是 latest，且资产里只有 dmg 没有 yml。
+          # 用 jq 而不是内嵌 node，避免 shell 引号嵌套（runner 自带 jq）。
+          INFO=$(gh release view "$TAG" --repo "$ZCODE_UPDATE_GITHUB_REPO" --json isPrerelease,isLatest,assets)
+          PRERELEASE=$(printf '%s' "$INFO" | jq -r '.isPrerelease')
+          ISLATEST=$(printf '%s' "$INFO" | jq -r '.isLatest')
+          NAMES=$(printf '%s' "$INFO" | jq -r '.assets[].name')
+          YML_COUNT=$(printf '%s\n' "$NAMES" | grep -cE '\.ya?ml$' || true)
+          DMG_COUNT=$(printf '%s\n' "$NAMES" | grep -cE '\.dmg$' || true)
+          echo "[macos12-release] assets: $(printf '%s' "$NAMES" | tr '\n' ' ')"
+          [ "$PRERELEASE" = "true" ] || { echo "::error::Release $TAG 不是 pre-release"; exit 1; }
+          [ "$ISLATEST" = "false" ] || { echo "::error::Release $TAG 被标成了 latest"; exit 1; }
+          [ "$YML_COUNT" = "0" ] || { echo "::error::Release $TAG 资产中出现 channel yml"; exit 1; }
+          [ "$DMG_COUNT" = "1" ] || { echo "::error::Release $TAG 的 dmg 数量不为 1"; exit 1; }
+          echo "[macos12-release] 校验通过"

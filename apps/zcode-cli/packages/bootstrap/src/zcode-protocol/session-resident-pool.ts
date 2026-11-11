@@ -4,9 +4,12 @@
 // 安全事实和去激活执行面；pool 只维护 idle TTL、LRU touch、operation lease 与
 // deactivation gate。
 
-export const DEFAULT_SESSION_RESIDENT_TARGET_COUNT = 8;
-export const DEFAULT_SESSION_RESIDENT_HIGH_WATER_COUNT = 16;
-export const DEFAULT_SESSION_RESIDENT_IDLE_TIMEOUT_MS = 10 * 60 * 1_000;
+// safe-zcode：驻留池常量收紧（8/16/10min → 4/8/5min）。实测 Agent CLI ~415MB 的主因之一
+// 是无订阅者的旧会话双份全量驻留过久；deactivation 闸门（订阅者/排队命令/交互/后台工作）
+// 一律不动，只让"持续空闲且无人看"的会话更早去激活。见 specs/cli-idle-memory-reclaim.md。
+export const DEFAULT_SESSION_RESIDENT_TARGET_COUNT = 4;
+export const DEFAULT_SESSION_RESIDENT_HIGH_WATER_COUNT = 8;
+export const DEFAULT_SESSION_RESIDENT_IDLE_TIMEOUT_MS = 5 * 60 * 1_000;
 
 export type SessionDeactivationReason = "high_water_lru" | "idle_timeout";
 

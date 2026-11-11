@@ -27,6 +27,12 @@ export class ToolExecutorImpl implements ToolExecutor {
   private readonly backgroundTasks: BackgroundTaskTracker;
   /** 一个 runtime 一个执行器，序号在同一 assistant 内可比；删除、清空读取状态不影响它。 */
   private readFileStateSnapshotCount = 0;
+  /**
+   * 正在前台运行的 Bash 调用的 steer 控制器注册表（key = toolCallId）：
+   * call-runner 登记/摘除，requestSteerBackground 统一触发转后台
+   * （LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）。挂在 deps 上让 call-runner 与本方法共用同一份。
+   */
+  private readonly steerBackgroundControllers = new Map<string, AbortController>();
 
   constructor(options: ToolExecutorOptions) {
     this.deps = {
@@ -36,6 +42,7 @@ export class ToolExecutorImpl implements ToolExecutor {
       permissionService: options.permissionService,
       permissionBroker: options.permissionBroker ?? createDenyPermissionBroker(),
       emitEvent: options.emitEvent,
+      steerBackgroundControllers: this.steerBackgroundControllers,
       enqueueBackgroundTaskNotification: options.enqueueBackgroundTaskNotification,
       shouldEnqueueBackgroundTaskNotification: options.shouldEnqueueBackgroundTaskNotification,
       registerResidencyBlockingWork: options.registerResidencyBlockingWork,
@@ -155,6 +162,21 @@ export class ToolExecutorImpl implements ToolExecutor {
     options?: ToolExecuteOptions,
   ): Promise<ToolExecutionResult> {
     return executeToolCall(this.deps, this.backgroundTasks, toolCall, options);
+  }
+
+  requestSteerBackground(): number {
+    // guide 准入成功（steerTurn push pendingInputs）后立即触发：逐个 abort 注册表里
+    // Bash 调用的 steer 控制器，适配器收到后走 commitBackground 原地转后台（进程不杀），
+    // 当前 tool batch 随即 settle、guide 在下一个边界被模型看到（LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）。
+    // 注册表只含 Bash：其余工具不受影响，等自然结束。返回实际触发数供诊断，最后清空防重复触发。
+    let triggered = 0;
+    for (const controller of this.steerBackgroundControllers.values()) {
+      if (controller.signal.aborted) continue;
+      controller.abort(new Error("steer background"));
+      triggered += 1;
+    }
+    this.steerBackgroundControllers.clear();
+    return triggered;
   }
 
   trackExternalBackgroundTask(

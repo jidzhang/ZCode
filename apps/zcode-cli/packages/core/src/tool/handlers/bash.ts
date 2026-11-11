@@ -73,7 +73,10 @@ import {
   type BashPermissionMatcher,
 } from "./bash-semantics.js";
 import { isBashAutoBackgroundEligible } from "./bash-background-policy.js";
-import { supportsBashBackgroundLifecycle } from "./bash-background-lifecycle.js";
+import {
+  supportsBashBackgroundLifecycle,
+  type BashBackgroundLifecycleMode,
+} from "./bash-background-lifecycle.js";
 import { resolveBashPermissionRulePolicy } from "./bash-command-permission-policy.js";
 import {
   DEFAULT_BASH_TIMEOUT_POLICY,
@@ -203,6 +206,14 @@ async function executeBashHandler(
     );
   }
 
+  // 有 backgroundLifecyclePort 时前台 Bash 一律走 lifecycle：合格命令保持 auto_on_timeout
+  // （超时自动转后台）不变；sleep 等不合格命令改走 on_steer——自动转后台的排除仅适用于
+  // 「超时」这一隐式触发，guide（插话）是用户显式跟进，允许转后台，且其前台超时保持
+  // 「到点杀进程」的原语义（LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3：guide 到达时在跑的
+  // 前台 bash 立即让位、进程不杀，结果回流不丢）。
+  const foregroundLifecycleMode: BashBackgroundLifecycleMode = eligibleForAutoBackground
+    ? "auto_on_timeout"
+    : "on_steer";
   const runCommand = async () =>
     parsed.run_in_background && backgroundLifecyclePort
       ? backgroundLifecyclePort.runBashWithBackgroundLifecycle(
@@ -210,10 +221,10 @@ async function executeBashHandler(
           { mode: "explicit" },
           runOptions,
         )
-      : eligibleForAutoBackground && backgroundLifecyclePort
+      : backgroundLifecyclePort
         ? backgroundLifecyclePort.runBashWithBackgroundLifecycle(
             request,
-            { mode: "auto_on_timeout" },
+            { mode: foregroundLifecycleMode },
             runOptions,
           )
         : {
@@ -233,9 +244,12 @@ async function executeBashHandler(
     : await runCommand();
 
   if (runResult.kind === "backgrounded") {
-    // auto_on_timeout 只在超时计时器到点时转后台，所以这里记录的就是触发转后台的超时。
+    // auto_on_timeout 只在超时计时器到点时转后台，所以这里记录的就是触发转后台的超时；
+    // guide（steer）触发的转后台不是超时，on_steer 的不合格命令也从不记录——两者都不得误报。
     const timedOutAfterMs =
-      !parsed.run_in_background && eligibleForAutoBackground ? request.timeoutMs : undefined;
+      !parsed.run_in_background && eligibleForAutoBackground && runResult.trigger !== "steer"
+        ? request.timeoutMs
+        : undefined;
     return toBackgroundedBashOutput(runResult.task, parsed, timedOutAfterMs);
   }
 
@@ -310,6 +324,11 @@ function createExecutionRunOptions(
 ): ExecutionRunOptions {
   return {
     signal: context.abortSignal,
+    // guide（插话）准入触发的转后台信号（LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）：
+    // 透传给执行端口；abort 语义 = 原地转后台（进程不杀），与 signal 的取消语义互不影响。
+    ...(context.steerBackgroundSignal
+      ? { steerToBackgroundSignal: context.steerBackgroundSignal }
+      : {}),
     onEvent: async (event) => {
       if (event.type !== "progress") return;
       if (

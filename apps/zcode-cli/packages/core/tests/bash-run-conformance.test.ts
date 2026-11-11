@@ -185,7 +185,7 @@ test("zcode-cli Bash handler auto-backgrounds eligible foreground commands on ti
 test("zcode-cli Bash handler does not auto-background sleep commands on timeout", async () => {
   testRoot = "/repo";
   let runCalled = false;
-  let runBashWithBackgroundLifecycleCalled = false;
+  let lifecycleMode: string | undefined;
   const executionPort = {
     async run() {
       runCalled = true;
@@ -209,14 +209,31 @@ test("zcode-cli Bash handler does not auto-background sleep commands on timeout"
         timedOut: false,
       };
     },
-    async runBashWithBackgroundLifecycle() {
-      runBashWithBackgroundLifecycleCalled = true;
-      throw new Error("sleep should not use auto-background");
+    async runBashWithBackgroundLifecycle(
+      _request: ExecutionRequest,
+      lifecycle: { mode: string },
+    ) {
+      // sleep 999 不合格「超时自动转后台」：改走 on_steer 生命周期——超时仍是杀进程，
+      // 只有 guide（插话）显式触发才转后台（LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）。
+      lifecycleMode = lifecycle.mode;
+      return {
+        kind: "foreground" as const,
+        result: {
+          cancelled: false,
+          durationMs: 1,
+          exitCode: 0,
+          startedAt: new Date(),
+          status: "completed" as const,
+          stderr: { bytes: 0, text: "", truncated: false },
+          stdout: { bytes: 0, text: "", truncated: false },
+          timedOut: false,
+        },
+      };
     },
   } as ExecutionPort & {
     runBashWithBackgroundLifecycle?: (
       request: ExecutionRequest,
-      lifecycle: { mode: "explicit" | "auto_on_timeout" },
+      lifecycle: { mode: string },
       options?: unknown,
     ) => Promise<unknown>;
   };
@@ -226,8 +243,8 @@ test("zcode-cli Bash handler does not auto-background sleep commands on timeout"
     createContext({}, executionPort),
   )) as BashOutput;
 
-  expect(runCalled).toBe(true);
-  expect(runBashWithBackgroundLifecycleCalled).toBe(false);
+  expect(runCalled).toBe(false);
+  expect(lifecycleMode).toBe("on_steer");
   expect(output.status).toBe("completed");
 });
 

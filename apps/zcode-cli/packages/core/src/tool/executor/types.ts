@@ -162,6 +162,12 @@ export interface ToolExecutor {
   ): Promise<boolean[]>;
 
   execute(toolCall: ExecutableToolCall, options?: ToolExecuteOptions): Promise<ToolExecutionResult>;
+  /**
+   * guide（插话）准入成功后由 steerTurn 调用：把注册表里所有正在前台运行的 Bash 调用
+   * 原地转后台（进程不杀，见 LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）。返回本次实际触发
+   * 的调用数（仅诊断用）；无在跑 Bash 时是 0，绝不抛错、不阻塞 guide 入队。
+   */
+  requestSteerBackground?(): number;
   executeBatch(
     toolCalls: ExecutableToolCall[],
     options?: ToolBatchExecuteOptions,
@@ -208,6 +214,12 @@ export interface ToolExecutorDeps {
   permissionService: PermissionService;
   permissionBroker: PermissionBrokerPort;
   emitEvent: (event: SessionEvent) => Promise<void>;
+  /**
+   * 正在前台运行的 Bash 调用的 steer 控制器注册表（key = toolCallId）：
+   * call-runner 在 Bash 调用生命周期内登记/摘除，requestSteerBackground 逐个 abort，
+   * 让适配器把进程原地转后台（LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）。
+   */
+  steerBackgroundControllers?: Map<string, AbortController>;
   /** 后台跟踪的真实完成链（含终态写入）属于 runtime，不能随工具返回丢失。 */
   registerResidencyBlockingWork?: (work: Promise<void>) => void;
   enqueueBackgroundTaskNotification?: EnqueueBackgroundTaskNotification;

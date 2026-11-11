@@ -156,6 +156,12 @@ export interface ToolExecutionContext {
   spanId?: string;
   parentSpanId?: string;
   abortSignal: AbortSignal;
+  /**
+   * guide（插话）准入触发的转后台信号（LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）：
+   * 仅 Bash 前台调用期间由 call-runner 挂上；abort 语义 = 原地转后台（进程不杀）而非取消。
+   * handler 把它透传给执行端口的 steerToBackgroundSignal；非 Bash 工具不感知。
+   */
+  steerBackgroundSignal?: AbortSignal;
   backgroundTaskControlPort?: BackgroundTaskControlPort;
   emitEvent?: (event: SessionEvent) => Promise<void>;
   executionPort?: ExecutionPort;

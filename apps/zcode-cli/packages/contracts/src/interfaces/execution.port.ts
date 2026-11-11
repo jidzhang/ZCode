@@ -252,6 +252,12 @@ export interface ExecutionRunOptions {
   signal?: AbortSignal;
   onEvent?: (event: ExecutionEvent) => void | Promise<void>;
   context?: ExecutionContext;
+  /**
+   * guide（插话）准入触发的转后台信号（设计见 LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）：
+   * abort 语义 = 把正在前台运行的命令原地转后台继续执行（进程不杀），而非取消。
+   * 与 `signal` 的取消语义互不影响；未实现该能力的执行端口可以忽略它。
+   */
+  steerToBackgroundSignal?: AbortSignal;
 }
 
 export type BackgroundExecutionStatus = "running" | ExecutionStatus;

@@ -401,7 +401,13 @@ export class NodeExecutionAdapterRun extends NodeExecutionAdapterProcess {
       // artifact 等既有异步步骤，timeoutMs 恢复为只约束子进程运行，避免 shell 初始化较慢或
       // timeout 较短时命令尚未启动就被判 timed_out；准备期间的取消与关闭仍由 stoppedBeforeSpawn 兜底。
       if (timeoutMs > 0) {
-        timeoutTimer = setTimeout(() => requestStop("timeout"), timeoutMs);
+        timeoutTimer = setTimeout(() => {
+          // on_steer 生命周期保留原 timeoutMs（前台「超时=杀进程」的保底语义）；steer 转后台后
+          // 该 timer 到点必须跳过，否则会杀掉本应继续跑的后台进程（LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）。
+          // auto_on_timeout/explicit 的 timeoutMs 恒为 0、timer 从不 arm，无生命周期时也无此守卫，行为不变。
+          if (internalOptions.bashLifecycle?.isBackgrounded()) return;
+          requestStop("timeout");
+        }, timeoutMs);
       }
 
       if (stdout && stderr) {

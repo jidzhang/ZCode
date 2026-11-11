@@ -197,6 +197,14 @@ export async function steerTurn(
   );
   await this.appendEvent(event, activeTurn.traceContext);
   await selectionAccepted;
+  // guide（插话）准入成功：立即通知 executor 把正在前台运行的 Bash 原地转后台（进程不杀），
+  // 当前 tool batch 随即 settle、本条 guide 在下一个边界被模型看到（LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）。
+  // 仅 guide 触发——queue 投递的消息要等 turn 结束才消费，提前打断在跑的工具没有收益；
+  // 转后台失败（无在跑 Bash / 已收尾）由注册表为空兜底，静默忽略，绝不阻塞入队。
+  if (pendingInputDelivery(pendingInput) === "guide") {
+    // 测试与部分宿主会以不含 executor 的部分 runtime 接入 steerTurn，这里必须整链可选。
+    this.executor?.requestSteerBackground?.();
+  }
   this.logger?.debug("Turn steer queued", {
     ...traceContextToLogContext(activeTurn.traceContext),
     activeTurnKind: activeTurn.kind,

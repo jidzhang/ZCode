@@ -474,6 +474,14 @@ async function executeToolCallImpl(
     });
     const executionAbortController = new AbortController();
     const unlinkParentAbort = linkAbortSignal(options?.signal, executionAbortController);
+    // guide（插话）准入触发的转后台信号（LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）：仅 Bash
+    // 登记——其余工具不参与，等自然结束（与 pi/Codex 的护栏一致）。executor.requestSteerBackground
+    // 统一 abort 这些控制器，适配器 commitBackground 原地转后台（进程不杀），工具结果随即收尾。
+    const steerBackgroundController =
+      entry.metadata.name === "Bash" ? new AbortController() : undefined;
+    if (steerBackgroundController) {
+      deps.steerBackgroundControllers?.set(canonicalToolCall.id, steerBackgroundController);
+    }
     // 可暂停的 deadline：本次调用内部的模型请求在准入闸门前排队时暂停计时。排队的两端
     // 以本 toolCallId 的 ModelNetworkStatus 会话事件到达，所以在事件出口拦一层即可，handler 无感。
     const deadline = new ToolDeadline(timeoutMs);
@@ -505,6 +513,9 @@ async function executeToolCallImpl(
         spanId: traceContext.spanId,
         parentSpanId: traceContext.parentSpanId,
         abortSignal: executionAbortController.signal,
+        ...(steerBackgroundController
+          ? { steerBackgroundSignal: steerBackgroundController.signal }
+          : {}),
         backgroundTaskControlPort: deps.backgroundTaskControlPort,
         emitEvent,
         executionPort: deps.executionPort,
@@ -792,6 +803,10 @@ async function executeToolCallImpl(
       }
       return result;
     } finally {
+      // 工具调用（含转后台后收尾）结束即摘除 steer 注册：后台进程不再受后续 guide 触发影响。
+      if (steerBackgroundController) {
+        deps.steerBackgroundControllers?.delete(canonicalToolCall.id);
+      }
       unlinkParentAbort();
     }
   } finally {

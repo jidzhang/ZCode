@@ -61,6 +61,7 @@ export {
   appSettingsPatchSchema,
   appSettingsSchema,
   localeSchema,
+  parseAppSettingsLenient,
   postUpdateReleaseNotesPayloadSchema,
 } from "./validationAppSettings.js";
 export { isValidWslUser, WSL_USER_MAX_LENGTH, wslUserSchema } from "./wslUserValidation.js";

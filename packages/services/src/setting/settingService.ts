@@ -10,7 +10,7 @@ import {
   appSettingsPatchSchema,
   appSettingsSchema,
   formatLogPrefix,
-  formatZodError,
+  parseAppSettingsLenient,
   USER_INSTRUCTIONS_MAX_BYTES,
   USER_INSTRUCTIONS_TOO_LARGE_ERROR_CODE,
 } from "@zcode/shared";
@@ -113,6 +113,11 @@ function shouldPersistSettingsMigrations(rawValue: unknown): boolean {
 interface ReadSettingsResult {
   settings: AppSettings;
   needsMigrationPersist: boolean;
+  /**
+   * 文件里存在被丢弃的非法键（宽松解析结果）。此时内存用清洗后的值，但本轮禁止
+   * 自动迁移写盘，避免覆盖用户手改内容。见 specs/settings-schema-resilience.md。
+   */
+  schemaInvalid?: boolean;
 }
 
 async function readSettingsWithMetaAt(settingsFile: string): Promise<ReadSettingsResult> {
@@ -145,19 +150,22 @@ async function readSettingsWithMetaAt(settingsFile: string): Promise<ReadSetting
         };
       }
     }
-    const result = appSettingsSchema.safeParse(migrateLegacyAccountConnectionSettings(rawValue));
-    if (!result.success) {
-      log(
-        "read failed schema validation, returning defaults. error:",
-        formatZodError(result.error),
-      );
+    // 修复原因：旧实现对整份文件 safeParse，任一键非法就回退全部默认值，随后的迁移/
+    // 投影写盘再用默认值覆盖文件——用户实测两次装新版后 httpProxy 静默丢失。改用宽松
+    // 解析：只丢弃非法键（回落该键默认值），其余偏好全部保留；本轮也不自动写盘，
+    // 避免把用户手改但一时非法的内容覆盖掉。见 specs/settings-schema-resilience.md。
+    const lenient = parseAppSettingsLenient(migrateLegacyAccountConnectionSettings(rawValue));
+    if (lenient.invalidKeys.length > 0) {
+      // 只记键名，不记值：代理地址等可能含内网信息。
+      log("settings has invalid keys, dropped only those:", lenient.invalidKeys.join(","));
       return {
-        settings: defaultSettings(),
+        settings: lenient.settings,
         needsMigrationPersist: false,
+        schemaInvalid: true,
       };
     }
     return {
-      settings: result.data,
+      settings: lenient.settings,
       needsMigrationPersist: shouldPersistSettingsMigrations(rawValue),
     };
   } catch (err) {
@@ -302,6 +310,11 @@ export function createSettingServiceWithMigrations(): {
       await updateQueue;
       const result = await readSettingsWithMeta();
       const projected = await projectSettings(result.settings);
+      // 文件里有非法键：只把清洗后的值给内存用，本轮不做任何自动写盘——
+      // 保留文件原样，等用户下次显式保存时再收敛（specs/settings-schema-resilience.md）。
+      if (result.schemaInvalid === true) {
+        return projected;
+      }
       if (
         !result.needsMigrationPersist &&
         JSON.stringify(projected) === JSON.stringify(result.settings)

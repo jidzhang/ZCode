@@ -274,7 +274,7 @@ export const ProjectNodeContent = memo(function ProjectNodeContent({
                     </span>
                     {/* 不同字号按框居中会让设备名基线上浮；文字单独对齐基线，外层图标仍居中。 */}
                     <span className="flex min-w-0 items-baseline gap-2">
-                      <span className="truncate text-ui-base text-foreground-subtle">
+                      <span className="truncate text-ui-base text-foreground">
                         {project.name}
                       </span>
                       {remoteHost && !hideDeviceName ? (

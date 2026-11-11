@@ -122,7 +122,7 @@ export function ProjectTaskRows({
   if (!tasks.length)
     return kind === "pinned" || !showEmptyState ? null : (
       <div
-        className="px-8.5 py-2 text-ui-base text-foreground-subtlest"
+        className="px-8.5 py-2 text-ui-base text-foreground-subtle"
         data-testid="project-no-tasks"
       >
         {intl.formatMessage({
@@ -143,7 +143,7 @@ export function ProjectTaskRows({
     >
       {kind === "pinned" ? (
         // 原因：重构遗漏了原置顶区的外层留白，并把分区标题降成了辅助字号。
-        <h3 className="px-2.5 py-1 text-ui-base font-medium text-foreground-subtlest">
+        <h3 className="px-2.5 py-1 text-ui-base font-medium text-foreground-subtle">
           {intl.formatMessage({ id: "taskList.pinnedSection" })}
         </h3>
       ) : null}
@@ -179,7 +179,7 @@ export function ProjectTaskRows({
           variant="ghost"
           size="sm"
           // 原因：分页入口误用辅助字号和次级颜色，与任务标题及空态不一致；仅交互时提亮。
-          className="ml-8.5 h-auto p-0 text-ui-base text-foreground-subtlest hover:bg-transparent focus-visible:text-foreground"
+          className="ml-8.5 h-auto p-0 text-ui-base text-foreground-subtle hover:bg-transparent focus-visible:text-foreground"
           onClick={() =>
             kind === "pinned" ? setShowAll((value) => !value) : setLimit((n) => n + pageSize)
           }

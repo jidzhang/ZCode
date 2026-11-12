@@ -299,6 +299,9 @@ describe("Bash steer-to-background（guide 准入触发转后台）", () => {
       workspaceRoot: testRoot,
       sessionId: createSessionId("bash-steer-registry"),
       emitEvent: async () => undefined,
+      // 本用例验证注册表按工具名过滤（登记即可触发），门槛置 0 排除时长因素；
+      // 门槛行为由下方专项用例覆盖。
+      steerBackgroundMinElapsedMs: 0,
     });
 
     const bashExecution = executor.execute({
@@ -329,5 +332,94 @@ describe("Bash steer-to-background（guide 准入触发转后台）", () => {
     await expect(idleExecution).resolves.toMatchObject({ success: true });
     // 注册表已清空 + Bash 调用结束后摘除登记：再次触发为 0。
     expect(executor.requestSteerBackground?.()).toBe(0);
+  }, 15_000);
+
+  // 用例3：运行时长门槛——登记后立即触发不压（短命令自然跑完），过门槛后再触发才压。
+  // 用户实测反馈（2026-11-12）：无条件压后台过于积极，秒级命令被误压成"已移入后台"。
+  it("requestSteerBackground skips Bash calls younger than the elapsed threshold", async () => {
+    const registry = createToolRegistry();
+    registry.register(bashToolEntry);
+    let releaseBash: (() => void) | undefined;
+    const bashDone = new Promise<void>((resolve) => {
+      releaseBash = resolve;
+    });
+    const executionPort: BashBackgroundLifecycleExecutionPort = {
+      async run() {
+        throw new Error("run should not be called");
+      },
+      async runBashWithBackgroundLifecycle(
+        _request: ExecutionRequest,
+        _lifecycle: { mode: string },
+        options?: ExecutionRunOptions,
+      ) {
+        await new Promise<void>((resolve) => {
+          if (options?.steerToBackgroundSignal?.aborted) {
+            resolve();
+            return;
+          }
+          options?.steerToBackgroundSignal?.addEventListener("abort", () => resolve(), {
+            once: true,
+          });
+          void bashDone.then(resolve);
+        });
+        // 未被 steer 触发（信号未 abort）= 前台自然完成路径。
+        if (options?.steerToBackgroundSignal?.aborted) {
+          return {
+            kind: "backgrounded" as const,
+            trigger: "steer" as const,
+            task: {
+              taskId: "exec_steer_threshold",
+              status: "running" as const,
+              startedAt: new Date(),
+            },
+          };
+        }
+        releaseBash?.();
+        return {
+          kind: "foreground" as const,
+          result: {
+            stdout: "",
+            stderr: "",
+            interrupted: false,
+            isImage: false,
+            noOutputExpected: false,
+            status: "completed" as const,
+            exitCode: 0,
+          },
+        };
+      },
+    };
+    const executor = createToolExecutor({
+      registry,
+      permissionService: new PermissionService(),
+      permissionBroker: {
+        requestPermission: async () => ({ decision: "allow" as const, resolvedAt: new Date() }),
+      },
+      executionPort,
+      mode: "yolo",
+      workingDirectory: testRoot,
+      workspaceRoot: testRoot,
+      sessionId: createSessionId("bash-steer-threshold"),
+      emitEvent: async () => undefined,
+      // 200ms 门槛：真机是 10s，这里压缩时长只验证门槛机理。
+      steerBackgroundMinElapsedMs: 200,
+    });
+
+    const execution = executor.execute({
+      id: createToolCallId("bash-steer-young"),
+      name: "Bash",
+      input: { command: "sleep 999" },
+    });
+    // 登记即刻触发：不足门槛 → 不压（0），注册项保留。
+    expect(executor.requestSteerBackground?.()).toBe(0);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    // 过门槛后再触发 → 压后台（1）。
+    expect(executor.requestSteerBackground?.()).toBe(1);
+    const result = await execution;
+    expect(result.success).toBe(true);
+    expect(result.output).toMatchObject({
+      status: "backgrounded",
+      backgroundTaskId: "exec_steer_threshold",
+    });
   }, 15_000);
 });

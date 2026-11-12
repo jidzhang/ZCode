@@ -22,6 +22,11 @@ Bash（bash-timeout-policy 上限 600s，`timeout:{kind:"none"}` 无上限）阻
 2. 转后台语义 = 进程树**不杀**：登记 `BackgroundTaskTracker` 获得 taskId，工具调用立即以
    `status:"backgrounded"` + `backgroundTaskId` 结构化结果收尾；tool batch 随即 settle，
    guide 经既有边界 drain 进入下一次模型请求；后台命令结束后经既有后台通知回流模型。
+2a. **运行时长门槛（2026-11-12 用户实测反馈加入）**：只压已运行 ≥10s（默认，
+   `steerBackgroundMinElapsedMs` 可注入）的前台 Bash；秒级短命令（git status / rg 等）
+   不压、自然跑完——模型拿到真实结果，避免"已移入后台"噪音与迟到的后台通知。
+   不足门槛的注册项保留在表里（下次 guide 到达时可能已过门槛），调用结束由
+   call-runner finally 摘除。
 3. 参与面仅 Bash 族；其余工具等自然结束（与 pi/Codex 护栏一致）。
 4. 前台超时语义不变：`auto_on_timeout` 命令维持"到点自动转后台"；`on_steer`（sleep 等
    原排除自动转后台的命令）保留"原 timeoutMs 到点杀进程"的保底——run 层内部 timer 在

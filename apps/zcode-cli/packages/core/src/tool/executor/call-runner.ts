@@ -475,12 +475,16 @@ async function executeToolCallImpl(
     const executionAbortController = new AbortController();
     const unlinkParentAbort = linkAbortSignal(options?.signal, executionAbortController);
     // guide（插话）准入触发的转后台信号（LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）：仅 Bash
-    // 登记——其余工具不参与，等自然结束（与 pi/Codex 的护栏一致）。executor.requestSteerBackground
-    // 统一 abort 这些控制器，适配器 commitBackground 原地转后台（进程不杀），工具结果随即收尾。
+    // 登记（带调用开始时间）——其余工具不参与，等自然结束（与 pi/Codex 的护栏一致）。
+    // executor.requestSteerBackground 只 abort 已运行 ≥ 门槛的注册项（默认 10s，短命令
+    // 自然跑完不被误压），适配器 commitBackground 原地转后台（进程不杀），工具结果随即收尾。
     const steerBackgroundController =
       entry.metadata.name === "Bash" ? new AbortController() : undefined;
     if (steerBackgroundController) {
-      deps.steerBackgroundControllers?.set(canonicalToolCall.id, steerBackgroundController);
+      deps.steerBackgroundControllers?.set(canonicalToolCall.id, {
+        controller: steerBackgroundController,
+        startedAt: startTime,
+      });
     }
     // 可暂停的 deadline：本次调用内部的模型请求在准入闸门前排队时暂停计时。排队的两端
     // 以本 toolCallId 的 ModelNetworkStatus 会话事件到达，所以在事件出口拦一层即可，handler 无感。

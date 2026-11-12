@@ -85,6 +85,8 @@ export interface ToolExecutorOptions {
   registerResidencyBlockingWork?: (work: Promise<void>) => void;
   enqueueBackgroundTaskNotification?: EnqueueBackgroundTaskNotification;
   shouldEnqueueBackgroundTaskNotification?: ShouldEnqueueBackgroundTaskNotification;
+  /** steer 转后台运行时长门槛（ms，默认 10s）；测试注入小值用。见 ToolExecutorDeps 同名字段。 */
+  steerBackgroundMinElapsedMs?: number;
   sessionId: SessionId;
   turnId?: TurnId;
   defaultTimeoutMs?: number;
@@ -163,9 +165,10 @@ export interface ToolExecutor {
 
   execute(toolCall: ExecutableToolCall, options?: ToolExecuteOptions): Promise<ToolExecutionResult>;
   /**
-   * guide（插话）准入成功后由 steerTurn 调用：把注册表里所有正在前台运行的 Bash 调用
-   * 原地转后台（进程不杀，见 LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）。返回本次实际触发
-   * 的调用数（仅诊断用）；无在跑 Bash 时是 0，绝不抛错、不阻塞 guide 入队。
+   * guide（插话）准入成功后由 steerTurn 调用：把注册表里**已运行超过时长门槛**（默认 10s）
+   * 的前台 Bash 调用原地转后台（进程不杀，见 LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）；
+   * 秒级短命令不压、自然跑完。返回本次实际触发的调用数（仅诊断用）；无符合条件的
+   * Bash 时是 0，绝不抛错、不阻塞 guide 入队。
    */
   requestSteerBackground?(): number;
   executeBatch(
@@ -207,6 +210,12 @@ export interface ToolBatchExecuteOptions extends ToolExecuteOptions {
   maxConcurrency?: number;
 }
 
+/** steer 转后台注册项：控制器 + 调用开始时间（判门槛用）。 */
+export interface SteerBackgroundRegistration {
+  controller: AbortController;
+  startedAt: number;
+}
+
 export interface ToolExecutorDeps {
   agentTelemetry?: AgentExecutionTelemetryPort;
   agentTelemetryActorKind?: AgentTelemetryActorKind;
@@ -215,11 +224,18 @@ export interface ToolExecutorDeps {
   permissionBroker: PermissionBrokerPort;
   emitEvent: (event: SessionEvent) => Promise<void>;
   /**
-   * 正在前台运行的 Bash 调用的 steer 控制器注册表（key = toolCallId）：
-   * call-runner 在 Bash 调用生命周期内登记/摘除，requestSteerBackground 逐个 abort，
-   * 让适配器把进程原地转后台（LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）。
+   * 正在前台运行的 Bash 调用的 steer 注册表（key = toolCallId）：
+   * call-runner 在 Bash 调用生命周期内登记/摘除（带调用开始时间），requestSteerBackground
+   * 只 abort 已运行超过门槛的注册项，让适配器把进程原地转后台
+   * （LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）。
    */
-  steerBackgroundControllers?: Map<string, AbortController>;
+  steerBackgroundControllers?: Map<string, SteerBackgroundRegistration>;
+  /**
+   * steer 转后台的运行时长门槛（ms，默认 10s）：guide 到达时只压已运行 ≥ 门槛的 Bash，
+   * 秒级短命令自然跑完——模型拿到真实结果而非"已移入后台"，避免过度积极
+   * （用户实测 2026-11-12 反馈后加入）。测试可注入小值。
+   */
+  steerBackgroundMinElapsedMs?: number;
   /** 后台跟踪的真实完成链（含终态写入）属于 runtime，不能随工具返回丢失。 */
   registerResidencyBlockingWork?: (work: Promise<void>) => void;
   enqueueBackgroundTaskNotification?: EnqueueBackgroundTaskNotification;

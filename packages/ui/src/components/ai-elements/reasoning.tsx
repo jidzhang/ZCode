@@ -544,7 +544,9 @@ export const ReasoningContent = memo(
             <div
               ref={scrollRef}
               className={cn(
-                "max-h-60 space-y-2 overflow-auto text-ui-base text-foreground-subtlest",
+                // safe-zcode：240px 内部滚动在流式默认展开后成为新的挤压感来源；放宽到视口 60%
+              // （正文仍弱化色 text-foreground-subtlest，不斜体——用户裁决）。
+              "max-h-[60vh] space-y-2 overflow-auto text-ui-base text-foreground-subtlest",
                 // CUA Group 已提供清晰的父级边界；子思考继续显示左导线与缩进会形成重复层级。
                 variant === "default" && "ml-2 border-border border-l pl-3.5",
               )}

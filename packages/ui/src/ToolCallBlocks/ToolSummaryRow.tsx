@@ -71,7 +71,7 @@ function SummaryLeadingContent({
   return (
     <>
       {showIcon ? (
-        <span className="shrink-0 text-foreground-subtlest [&_svg]:text-foreground-subtlest">
+        <span className="shrink-0 text-foreground-subtle [&_svg]:text-foreground-subtle">
           {icon}
         </span>
       ) : null}
@@ -140,7 +140,7 @@ function SummaryContent({
   return (
     <div
       className={cn(
-        "tool-summary-content min-w-0 flex max-w-full items-center gap-2 text-foreground-subtlest",
+        "tool-summary-content min-w-0 flex max-w-full items-center gap-2 text-foreground-subtle",
         prioritizePrimaryText && "flex-1 overflow-hidden",
       )}
     >

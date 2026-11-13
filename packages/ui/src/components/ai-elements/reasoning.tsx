@@ -336,21 +336,21 @@ export const ReasoningTrigger = memo(
         <span className="inline-flex items-center gap-2">
           {/* 完成态“思考”单独使用 semibold，比同列工具类型标签更粗。
               统一为 medium，保持对话时间线的视觉层级一致。 */}
-          <span className="font-medium text-foreground-subtlest">
+          <span className="font-medium text-foreground-subtle">
             {intl.formatMessage({ id: "chat.reasoning.thought" })}
           </span>
-          <span className="font-normal text-foreground-subtlest">·</span>
-          <span className="font-normal text-foreground-subtlest">
+          <span className="font-normal text-foreground-subtle">·</span>
+          <span className="font-normal text-foreground-subtle">
             {intl.formatMessage({ id: "chat.reasoning.durationFewSeconds" })}
           </span>
         </span>
       ) : (
         <span className="inline-flex items-center gap-2">
-          <span className="font-medium text-foreground-subtlest">
+          <span className="font-medium text-foreground-subtle">
             {intl.formatMessage({ id: "chat.reasoning.thought" })}
           </span>
-          <span className="font-normal text-foreground-subtlest">·</span>
-          <span className="font-normal text-foreground-subtlest">
+          <span className="font-normal text-foreground-subtle">·</span>
+          <span className="font-normal text-foreground-subtle">
             {intl.formatMessage(
               { id: "chat.reasoning.durationSeconds" },
               { seconds: String(duration) },
@@ -372,13 +372,13 @@ export const ReasoningTrigger = memo(
           <>
             {/* thinking 会在长流式回复里持续存在，旋转 loader 会长期占用渲染资源；
             运行态保留文案扫光，图标固定为静态思考语义。 */}
-            <BrainIcon className="size-4 shrink-0 text-foreground-subtlest" />
+            <BrainIcon className="size-4 shrink-0 text-foreground-subtle" />
             {/* 右侧流式摘要是可伸缩内容；如果左侧标签也参与 flex shrink，
                 长摘要会把思考状态标签挤成多行。固定语义标签宽度，只让摘要占剩余空间。 */}
             <span className="shrink-0 whitespace-nowrap" data-reasoning-label="true">
               {thinkingMessage}
             </span>
-            {streamingSummary ? <span className="shrink-0 text-foreground-subtlest">·</span> : null}
+            {streamingSummary ? <span className="shrink-0 text-foreground-subtle">·</span> : null}
             {streamingSummary ? (
               <span
                 ref={streamingSummaryRef}
@@ -406,7 +406,7 @@ export const ReasoningTrigger = memo(
             ) : null}
             <ChevronRightIcon
               className={cn(
-                "size-4 shrink-0 text-foreground-subtlest transition-opacity transition-transform",
+                "size-4 shrink-0 text-foreground-subtle transition-opacity transition-transform",
                 isOpen
                   ? "rotate-90 opacity-100"
                   : "rotate-0 opacity-0 group-hover/reasoning:opacity-100",
@@ -545,8 +545,8 @@ export const ReasoningContent = memo(
               ref={scrollRef}
               className={cn(
                 // safe-zcode：240px 内部滚动在流式默认展开后成为新的挤压感来源；放宽到视口 60%
-              // （正文仍弱化色 text-foreground-subtlest，不斜体——用户裁决）。
-              "max-h-[60vh] space-y-2 overflow-auto text-ui-base text-foreground-subtlest",
+              // （正文仍弱化色 text-foreground-subtle，不斜体——用户裁决）。
+              "max-h-[60vh] space-y-2 overflow-auto text-ui-base text-foreground-subtle",
                 // CUA Group 已提供清晰的父级边界；子思考继续显示左导线与缩进会形成重复层级。
                 variant === "default" && "ml-2 border-border border-l pl-3.5",
               )}
@@ -562,7 +562,7 @@ export const ReasoningContent = memo(
                   每次 chunk 都会重跑 Markdown 解析和插件渲染，字数越多越卡；这里按纯文本展示并保留换行。 */}
               <div
                 ref={contentRef}
-                className="min-w-0 whitespace-pre-wrap break-words text-foreground-subtlest"
+                className="min-w-0 whitespace-pre-wrap break-words text-foreground-subtle"
               >
                 {children}
               </div>

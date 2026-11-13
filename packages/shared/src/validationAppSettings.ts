@@ -1,7 +1,6 @@
 /* oxlint-disable eslint(max-lines) -- AppSettings schema 聚合历史迁移、默认值和 patch 校验，拆分会削弱设置迁移的单一入口。 */
 import { z } from "zod";
 import { appLogLevelSchema, appToolSearchModeSchema } from "./app-runtime-preferences.js";
-import type { AppSettings } from "./protocol.js";
 import { REMOTE_ASSET_INSTALL_MODES } from "./remoteAssetInstallMode.js";
 import { isKnownRemoteResourcePackageId } from "./remoteResourcePackages.js";
 import { wslUserSchema } from "./wslUserValidation.js";
@@ -590,18 +589,20 @@ const appSettingsObjectSchema = z.object({
   logRetentionDays: z.number().int().min(0).max(365).default(14),
 });
 
-export const appSettingsSchema = z.preprocess(
-  (value) =>
-    sanitizeEmbeddedBrowserViewportPreference(
-      sanitizeDesktopWindowSize(
-        migrateMessageStreamShowReasoningDefault(
-          migrateCloseToTrayOnWindowsDefault(
-            migrateLegacyLocalePreference(
-              sanitizeZCodeEndpointOrigin(
-                migrateLegacyWorkspaceSession(
-                  migrateLegacyBuiltinAgentCliProviders(
-                    migrateRemoteBoundaryIntroAcknowledgement(migrateTaskAutoArchiveReset(value)),
-                  ),
+/**
+ * 设置输入的迁移/清洗段。抽成具名函数供严格 schema 与宽松解析共用，
+ * 避免两条读取路径对同一份文件跑出不同的迁移结果。
+ */
+function migrateAppSettingsInput(value: unknown): unknown {
+  return sanitizeEmbeddedBrowserViewportPreference(
+    sanitizeDesktopWindowSize(
+      migrateMessageStreamShowReasoningDefault(
+        migrateCloseToTrayOnWindowsDefault(
+          migrateLegacyLocalePreference(
+            sanitizeZCodeEndpointOrigin(
+              migrateLegacyWorkspaceSession(
+                migrateLegacyBuiltinAgentCliProviders(
+                  migrateRemoteBoundaryIntroAcknowledgement(migrateTaskAutoArchiveReset(value)),
                 ),
               ),
             ),
@@ -609,8 +610,56 @@ export const appSettingsSchema = z.preprocess(
         ),
       ),
     ),
-  appSettingsObjectSchema,
-);
+  );
+}
+
+export const appSettingsSchema = z.preprocess(migrateAppSettingsInput, appSettingsObjectSchema);
+
+export interface LenientAppSettingsParseResult {
+  /** 清洗后的设置：非法键已回落该键默认值，其余键原样保留。 */
+  settings: z.output<typeof appSettingsSchema>;
+  /** 被丢弃的顶层键名（只记键名，绝不记录值——代理址等可能含内网信息）。 */
+  invalidKeys: string[];
+}
+
+/**
+ * 设置读取的宽松入口（唯一）。
+ *
+ * 修复原因：设置读取过去对整份文件做 safeParse，任一键非法就让整份设置回退默认值，
+ * 随后的迁移/投影写盘再用默认值覆盖文件——用户实测两次装新版后代理设置静默丢失
+ * （旧版本留下的未知枚举值即触发）。JSON 是开放格式，允许手改，单个坏键不该抹掉
+ * 代理、工作区历史等全部偏好。这里按顶层键逐个解析：坏的丢弃并回落该键默认值，
+ * 好的全部保留。见 specs/settings-schema-resilience.md。
+ */
+export function parseAppSettingsLenient(value: unknown): LenientAppSettingsParseResult {
+  const migrated = migrateAppSettingsInput(value);
+  const full = appSettingsObjectSchema.safeParse(migrated);
+  if (full.success) {
+    return { settings: full.data, invalidKeys: [] };
+  }
+
+  const raw =
+    migrated && typeof migrated === "object" && !Array.isArray(migrated)
+      ? (migrated as Record<string, unknown>)
+      : {};
+  const shape = appSettingsObjectSchema.shape as Record<string, z.ZodType>;
+  const invalidKeys: string[] = [];
+  const salvaged: Record<string, unknown> = {};
+  for (const key of Object.keys(raw)) {
+    // 未知键维持旧行为（z.object 默认剥离），不算非法。
+    if (!Object.hasOwn(shape, key)) continue;
+    // 直接用该键自己的字段 schema 解析：迁移/清洗已在上面对整份对象跑过，
+    // 这里只需要判断这一个值是否合法，不必重新组装 pick 对象。
+    const single = shape[key]!.safeParse(raw[key]);
+    if (single.success) {
+      salvaged[key] = single.data;
+    } else {
+      invalidKeys.push(key);
+    }
+  }
+  // migrated 已跑过迁移，这里直接用对象 schema 补齐缺失键的默认值。
+  return { settings: appSettingsObjectSchema.parse(salvaged), invalidKeys };
+}
 
 export const appSettingsPatchSchema = z.object({
   recentProjects: z.array(z.string()).optional(),

@@ -468,7 +468,7 @@ export const TaskList = memo(function TaskList({
             showEmptyState ? (
               <div
                 data-testid={TID_TASK_EMPTY}
-                className="px-8.5 py-2 text-ui-base text-foreground-subtlest"
+                className="px-8.5 py-2 text-ui-base text-foreground-subtle"
               >
                 {intl.formatMessage({ id: "taskList.noTasks" })}
               </div>

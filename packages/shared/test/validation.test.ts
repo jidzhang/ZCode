@@ -6,6 +6,7 @@ import {
   hostIncomingMessageSchema,
   webRemoteControlAppPayloadSchema,
   hostResponseMessageSchema,
+  parseAppSettingsLenient,
   wslConnectOptionsSchema,
   zcodePersistedMessageSchema,
 } from "../src/validation.js";
@@ -689,6 +690,41 @@ describe("hostResponseMessageSchema", () => {
     expect(patch).toMatchObject({
       zcodeInteractionBehavior: "queue",
     });
+  });
+
+  // safe-zcode：单个非法键不得重置整份设置（用户实测两次装新版后 httpProxy 丢失）。
+  // JSON 允许手改，旧版本遗留的未知枚举值只应被丢弃该键，其余偏好必须全部保留。
+  // 见 specs/settings-schema-resilience.md。
+  it("drops only the invalid key instead of resetting every setting", () => {
+    const fileValue = {
+      httpProxy: "http://example.invalid:8080",
+      recentProjects: ["/w/project-a"],
+      locale: "en-US",
+      // 旧/未知枚举值：严格 schema 会因它整份失败。
+      zcodeInteractionBehavior: "interrupt",
+    };
+
+    // 严格解析仍然要求完整合法（写盘与命令校验的面不变）。
+    expect(appSettingsSchema.safeParse(fileValue).success).toBe(false);
+
+    const lenient = parseAppSettingsLenient(fileValue);
+    expect(lenient.invalidKeys).toEqual(["zcodeInteractionBehavior"]);
+    // 关键：其余键（尤其代理）必须原样保留。
+    expect(lenient.settings.httpProxy).toBe("http://example.invalid:8080");
+    expect(lenient.settings.recentProjects).toEqual(["/w/project-a"]);
+    expect(lenient.settings.locale).toBe("en-US");
+    // 被丢弃的键回落该键默认值，不影响其它键。
+    expect(lenient.settings.zcodeInteractionBehavior).toBe("guide");
+  });
+
+  it("keeps lenient parsing identical for a fully valid file", () => {
+    const valid = appSettingsSchema.parse({
+      httpProxy: "http://example.invalid:8080",
+      recentProjects: ["/w/project-a"],
+    });
+    const lenient = parseAppSettingsLenient(JSON.parse(JSON.stringify(valid)));
+    expect(lenient.invalidKeys).toEqual([]);
+    expect(lenient.settings).toEqual(valid);
   });
 
   it("accepts provider family domain settings and defaults migration marker to false", () => {

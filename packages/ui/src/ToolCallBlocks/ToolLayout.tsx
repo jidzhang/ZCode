@@ -143,7 +143,7 @@ function ToolLayoutComponent({
   // 非运行态仍保持最浅文本色，避免摘要信息喧宾夺主。
   const kindLabelClassName = cn(
     "font-medium whitespace-nowrap shrink-0",
-    isRunning ? "animated-gradient-text" : "text-foreground-subtlest",
+    isRunning ? "animated-gradient-text" : "text-foreground-subtle",
   );
 
   useEffect(() => {

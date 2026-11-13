@@ -134,7 +134,10 @@ export class NodeExecutionAdapterLifecycle extends NodeExecutionAdapterRun {
       : (request.outputLimit?.maxArtifactBytes ?? this.persistedOutputLimit(request));
     const runRequest: ExecutionRequest = {
       ...request,
-      timeoutMs: 0,
+      // auto_on_timeout/explicit 置 0：转后台后的进程不能被 run 层内部 timer 杀掉。
+      // on_steer 保留原 timeoutMs：前台「超时=杀进程」语义由 run 层自己的 timer 兑现，
+      // 结果里的超时值与错误文案也保持真实；转后台后该 timer 被 isBackgrounded 守卫跳过（见 run 层）。
+      timeoutMs: lifecycle.mode === "on_steer" ? timeoutMs : 0,
       outputLimit: {
         ...request.outputLimit,
         killProcessOnPersistedLimit: false,
@@ -172,10 +175,18 @@ export class NodeExecutionAdapterLifecycle extends NodeExecutionAdapterRun {
               state = "settling";
               clearForegroundDeadline();
               removeExternalAbort();
+              removeSteerListener();
             }
           },
         }
-      : undefined;
+      : lifecycle.mode === "on_steer"
+        ? {
+            // 非 Bash 合并输出的 on_steer 请求（通用生命周期调用方）：run 层为保住「超时=杀进程」
+            // 保留了原 timeoutMs，转后台后只能靠 isBackgrounded 守卫跳过内部超时——必须提供该回调，
+            // 否则后台进程会在原超时点被误杀（LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）。
+            isBackgrounded: () => state === "backgrounded",
+          }
+        : undefined;
     let persistedLimitReached = false;
     let timeoutTimer: NodeJS.Timeout | undefined;
     let resolveOutcome: (result: BashBackgroundLifecycleResult) => void = () => undefined;
@@ -206,7 +217,27 @@ export class NodeExecutionAdapterLifecycle extends NodeExecutionAdapterRun {
       timeoutTimer = undefined;
     };
 
-    const commitBackground = () => {
+    // guide（插话）准入触发的转后台信号（LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）：
+    // 前台运行期间挂监听，abort 即原地转后台（进程不杀）。auto_on_timeout 与 on_steer 都适用：
+    // 合格命令本来就能在超时自动转后台，steer 只是让这一刻更早发生，不改变无 steer 时的行为。
+    const steerSignal = options.steerToBackgroundSignal;
+    const onSteerAbort = () => {
+      // commit 失败（已 settling/terminal/aborted）说明进程已收尾，直接忽略，不阻塞 guide 消费。
+      commitBackground("steer");
+    };
+    const armSteerListener = () => {
+      if (!steerSignal || state !== "foreground") return;
+      if (steerSignal.aborted) {
+        commitBackground("steer");
+        return;
+      }
+      steerSignal.addEventListener("abort", onSteerAbort, { once: true });
+    };
+    const removeSteerListener = () => {
+      steerSignal?.removeEventListener("abort", onSteerAbort);
+    };
+
+    const commitBackground = (trigger: "timeout" | "steer" = "timeout") => {
       if (state !== "foreground" || controller.signal.aborted) return false;
 
       // 旧 explicit background 复用了通用 start()，foreground timeout 与
@@ -216,12 +247,14 @@ export class NodeExecutionAdapterLifecycle extends NodeExecutionAdapterRun {
       bashLifecycle?.onBackgrounded?.();
       clearForegroundDeadline();
       removeExternalAbort();
+      removeSteerListener();
       this.backgroundTasks.set(taskId, record);
       if (persistedLimitReached) {
         controller.abort("output_limit");
       }
       resolveOutcome({
         kind: "backgrounded",
+        trigger,
         task: {
           taskId,
           status: "running",
@@ -265,7 +298,11 @@ export class NodeExecutionAdapterLifecycle extends NodeExecutionAdapterRun {
           if (lifecycle.mode === "explicit") {
             commitBackground();
           } else {
+            // auto_on_timeout 维持原「到点自动转后台」；on_steer 不 arm 自动定时器（超时由 run 层
+            // 原 timeoutMs 保底杀进程）。两者都额外挂 steer 监听，保证 guide 准入时正在前台跑的
+            // Bash 能立即让位（设计见 LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）。
             armForegroundDeadline();
+            armSteerListener();
           }
         }
         if (state === "backgrounded") return;
@@ -279,6 +316,8 @@ export class NodeExecutionAdapterLifecycle extends NodeExecutionAdapterRun {
 
     const settleExecution = async (unprocessedResult: ExecutionResult) => {
       clearForegroundDeadline();
+      // 前台已收尾（含超时被杀），steer 信号即使随后 abort 也不再有任何可转后台的对象。
+      removeSteerListener();
       if (state === "backgrounded") {
         this.finalizeBackgroundTaskRecord(
           record,

@@ -2017,6 +2017,11 @@ const ReasoningRowView = memo(function ReasoningRowView({
   // 折叠组件。交互调整原因：流式 reasoning 默认展开会持续挤压工具和正文空间；
   // 现在 streaming/complete 都默认收起，只保留运行态文案，用户可手动展开。
   // autoCollapseKey 仍保证状态边界不会覆盖已经发生过的用户交互。
+  // safe-zcode（2026-11-13，用户裁决）：流式期间默认展开——对照 pi 的观感
+  // （"让内容静止地长出来，而不是让一行字动起来"，LOCAL-RESEARCH/pi/
+  // FINDINGS-vs-ZCODE.md）：单行滚动摘要+扫光是视觉差的主因，多行正文原地
+  // 增长更清晰。complete 仍默认收起（用户裁决保留自动收起，全部展开影响视线），
+  // 用户手动收起后 userInteracted 守卫不会强制再展开。
   const durationSeconds =
     row.durationMs !== undefined ? Math.max(1, Math.ceil(row.durationMs / 1000)) : undefined;
   if (streaming && row.text.length === 0) {
@@ -2027,6 +2032,8 @@ const ReasoningRowView = memo(function ReasoningRowView({
       <Reasoning
         className="w-full"
         isStreaming={streaming}
+        // 流式默认展开（见上方注释）；结束后由 autoCollapseKey 切换回默认收起。
+        defaultOpen={streaming}
         autoCollapseKey={streaming ? null : row.state}
         {...(durationSeconds !== undefined ? { duration: durationSeconds } : {})}
       >

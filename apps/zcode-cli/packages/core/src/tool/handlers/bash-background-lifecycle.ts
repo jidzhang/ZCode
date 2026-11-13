@@ -7,7 +7,11 @@ import type {
   ExecutionRunOptions,
 } from "@zcode/contracts";
 
-export type BashBackgroundLifecycleMode = "explicit" | "auto_on_timeout";
+/**
+ * `on_steer`：guide（插话）准入显式触发的转后台（LOCAL-PLAN-BUSY-INPUT-DELIVERY.md §3）。
+ * 不 arm 自动转后台定时器；steerToBackgroundSignal abort 时转后台；前台超时保持“到点杀进程”。
+ */
+export type BashBackgroundLifecycleMode = "explicit" | "auto_on_timeout" | "on_steer";
 
 export type BashBackgroundLifecycleResult =
   | {
@@ -16,6 +20,8 @@ export type BashBackgroundLifecycleResult =
     }
   | {
       kind: "backgrounded";
+      /** 触发转后台的原因：超时自动（缺省）或 guide 准入（steer）；调用方据此区分输出语义。 */
+      trigger?: "timeout" | "steer";
       task: BackgroundExecutionStartResult;
     };
 

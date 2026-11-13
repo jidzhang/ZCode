@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import { access, mkdir, readFile, stat } from "node:fs/promises";
 import {
   appSettingsSchema,
-  formatZodError,
+  parseAppSettingsLenient,
   resolveStartupLocalWorkspaceSessionIndex,
   type WorkspacePurpose,
 } from "@zcode/shared";
@@ -16,17 +16,18 @@ async function readStartupSettings(settingsFile: string, logger?: StartupWorkspa
   try {
     const raw = await readFile(settingsFile, "utf-8");
     const parsed = JSON.parse(raw);
-    const result = appSettingsSchema.safeParse(parsed);
-
-    if (!result.success) {
+    // 修复原因：旧实现整份 safeParse，任一键非法就丢掉全部设置（含 lastActiveWorkspace），
+    // 启动直接回退默认工作区，并让后续写盘抹掉代理等偏好（用户实测两次）。
+    // 改用宽松解析：坏的键丢弃并回落默认值，其余设置（尤其工作区历史）全部保留。
+    // 见 specs/settings-schema-resilience.md。
+    const lenient = parseAppSettingsLenient(parsed);
+    if (lenient.invalidKeys.length > 0) {
       logger?.warn?.(
-        "[startup-workspace] invalid settings file, falling back to default workspace:",
-        formatZodError(result.error),
+        "[startup-workspace] settings has invalid keys, dropped only those:",
+        lenient.invalidKeys.join(","),
       );
-      return appSettingsSchema.parse({});
     }
-
-    return result.data;
+    return lenient.settings;
   } catch {
     return appSettingsSchema.parse({});
   }

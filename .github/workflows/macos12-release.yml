@@ -67,6 +67,9 @@ jobs:
           set -euo pipefail
           VERSION=$(node -p "require('./package.json').version")
           TAG="macos12-v${VERSION}"
+          # 发布说明优先取分支上的手写文件（每次发布随代码提交，双语按 release-notes 风格）；
+          # 缺席才回退到内嵌最小模板。
+          NOTES_FILE="docs/releases/macos12-latest.md"
           DMG=$(ls packages/desktop/dist/*-mac-x64.dmg | head -1)
           # 用 printf 逐行写，避免 heredoc 缩进把 markdown 变成代码块。
           {
@@ -78,6 +81,10 @@ jobs:
             printf -- '- 已在用通用版（Electron 44）的设备**不要**安装本版：降级未经验证，可能影响本地数据。\n'
             printf -- '- 功能与通用版 %s 一致，差异仅限 Electron 与 macOS 12 兼容性。\n' "$VERSION"
           } > release-notes.md
+          if [ -f "$NOTES_FILE" ]; then
+            cp "$NOTES_FILE" release-notes.md
+            echo "[macos12-release] 使用手写发布说明: $NOTES_FILE"
+          fi
           if gh release view "$TAG" --repo "$ZCODE_UPDATE_GITHUB_REPO" >/dev/null 2>&1; then
             echo "[macos12-release] $TAG 已存在，仅覆盖上传 dmg"
             gh release upload "$TAG" --repo "$ZCODE_UPDATE_GITHUB_REPO" --clobber "$DMG"
@@ -85,7 +92,7 @@ jobs:
             gh release create "$TAG" \
               --repo "$ZCODE_UPDATE_GITHUB_REPO" \
               --prerelease \
-              --title "macOS 12 专用版 ${VERSION}" \
+              --title "${TAG}" \
               --notes-file release-notes.md \
               "$DMG"
           fi

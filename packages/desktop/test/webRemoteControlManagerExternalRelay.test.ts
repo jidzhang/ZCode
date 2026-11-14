@@ -632,13 +632,30 @@ describe("createWebRemoteControlManager external relay", () => {
       },
     });
 
+    // 上游 3.18.2 语义：上次启用目标不在窗口里时不再静默跳过（设备一直离线的根因），
+    // 回退到本窗口首个可用工作区恢复，但 initialTaskId 只属于原目标、不随之迁移。
     await expect(
       manager.restorePreviouslyEnabled(1, [{ workspacePath: "/workspace/other" }]),
-    ).resolves.toBe(false);
-    expect(manager.getStatus(1)).toEqual({ status: "idle" });
+    ).resolves.toBe(true);
+    expect(manager.getStatus(1)).toEqual(
+      expect.objectContaining({
+        status: "running",
+        workspacePath: "/workspace/other",
+        initialTaskId: undefined,
+      }),
+    );
+    // startupRestoreClaimed 是一次性闸门（整个应用生命周期只恢复一次）；
+    // 第二阶段换新 harness 验证"目标在场"路径。
+    const second = createManagerHarness({
+      startupRestoreContext: {
+        workspacePath: "/workspace/demo",
+        workspaceIdentity: "remote:ssh:host:/workspace/demo",
+        initialTaskId: "task-1",
+      },
+    });
 
     await expect(
-      manager.restorePreviouslyEnabled(1, [
+      second.manager.restorePreviouslyEnabled(1, [
         {
           workspacePath: "/workspace/demo",
           workspaceIdentity: "remote:ssh:host:/workspace/demo",
@@ -647,7 +664,7 @@ describe("createWebRemoteControlManager external relay", () => {
       ]),
     ).resolves.toBe(true);
 
-    expect(manager.getStatus(1)).toEqual(
+    expect(second.manager.getStatus(1)).toEqual(
       expect.objectContaining({
         status: "running",
         workspaceIdentity: "remote:ssh:host:/workspace/demo",
@@ -655,8 +672,8 @@ describe("createWebRemoteControlManager external relay", () => {
         initialTaskId: "task-1",
       }),
     );
-    expect(getLatestTransportOptions()).toBeDefined();
-    expect(getStartupRestoreContext()).toEqual({
+    expect(second.getLatestTransportOptions()).toBeDefined();
+    expect(second.getStartupRestoreContext()).toEqual({
       workspacePath: "/workspace/demo",
       workspaceIdentity: "remote:ssh:host:/workspace/demo",
       initialTaskId: "task-1",

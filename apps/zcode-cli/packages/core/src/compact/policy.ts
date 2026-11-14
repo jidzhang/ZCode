@@ -119,6 +119,8 @@ export function shouldAutoCompact(input: {
   config?: AutoCompactPolicyConfig;
   consecutiveFailures?: number;
   tokenOverride?: AutoCompactTokenOverride;
+  /** 调用方按存储的条目判断历史是否够压缩；不传时按 messages 判断。 */
+  hasEnoughHistory?: boolean;
 }): AutoCompactDecision {
   const config = input.config ?? {};
   const contextWindow = positiveInt(config.contextWindow) ?? DEFAULT_COMPACT_CONTEXT_WINDOW;
@@ -154,7 +156,7 @@ export function shouldAutoCompact(input: {
     return { ...common, shouldCompact: false, reason: "disabled" };
   }
 
-  if (!hasEnoughMessagesToCompact(input.messages)) {
+  if (!(input.hasEnoughHistory ?? hasEnoughMessagesToCompact(input.messages))) {
     return {
       ...common,
       shouldCompact: false,

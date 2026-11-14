@@ -5,6 +5,18 @@ import type { V4ChatPaneProps } from "@/v4/V4ChatPane.js";
 import { V4_PRIMARY_PANE_ID } from "@/v4/paneLayoutStore.js";
 import { useWorkbenchGroupStore } from "@/v4/workbenchGroupStore.js";
 
+vi.mock("@/managed-worktrees/index.js", () => ({
+  // 上游 3.18 新增的 worktree 支持链路依赖 ServiceProvider；本测试走 renderToStaticMarkup
+  // 无 Provider，统一 mock 为"不支持 worktree"，布局回退既有非 worktree 分支。
+  useWorktreeSupport: () => ({ supported: false, enabled: false }),
+  useTaskWorktreePlacement: () => undefined,
+  useManagedWorktreeCreations: () => ({ creations: [], requestCreation: () => {}, dismiss: () => {} }),
+  useManagedWorktreeSettlements: () => ({ settlements: [], settle: () => {} }),
+  ManagedWorktreeCreationView: () => null,
+  WorktreeBranchPicker: () => null,
+  WorktreeToggle: () => null,
+  formatManagedWorktreeError: (error: unknown) => String(error),
+}));
 vi.mock("@/app-shell/AnimatedSidePanePanel.js", () => ({
   AnimatedSidePanePanel: ({
     isVisible,
@@ -177,6 +189,7 @@ vi.mock("@/hooks/usePlatform.js", async (importOriginal) => ({
 
 vi.mock("@/hooks/useWorkspaceServices.js", () => ({
   useBaseWorkspaceServices: () => ({}),
+  useOptionalBaseWorkspaceServices: () => null,
   // 布局断言不启动远端挂回；保留 services resolver 的本地 ready 合同。
   useWorkspaceServicesResolution: () => ({ services: {}, connectionKind: "local-ready" }),
 }));
@@ -421,6 +434,8 @@ describe("WorkspaceShellLayout Web remote control mobile layout", () => {
     async (scenario) => {
       capturedChatPaneProps.length = 0;
       vi.stubGlobal("window", {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
         innerHeight: 800,
         matchMedia: vi.fn(() => ({
           addEventListener: vi.fn(),
@@ -659,6 +674,8 @@ describe("WorkspaceShellLayout Web remote control mobile layout", () => {
 
   it("renders the dedicated mobile task shell on Web remote control mobile viewports", async () => {
     vi.stubGlobal("window", {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
       innerHeight: 800,
       matchMedia: vi.fn(() => ({
         addEventListener: vi.fn(),
@@ -693,6 +710,8 @@ describe("WorkspaceShellLayout Web remote control mobile layout", () => {
   it("passes workspace identity to mobile V4ChatPane for remote workspaces", async () => {
     capturedChatPaneProps.length = 0;
     vi.stubGlobal("window", {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
       innerHeight: 800,
       matchMedia: vi.fn(() => ({
         addEventListener: vi.fn(),
@@ -727,6 +746,8 @@ describe("WorkspaceShellLayout Web remote control mobile layout", () => {
     capturedChatPaneProps.length = 0;
     const handleOpenPlanDetail = vi.fn();
     vi.stubGlobal("window", {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
       innerHeight: 800,
       matchMedia: vi.fn(() => ({
         addEventListener: vi.fn(),
@@ -759,6 +780,8 @@ describe("WorkspaceShellLayout Web remote control mobile layout", () => {
 
   it("passes side pane content as a right-side overlay into the dedicated mobile chat shell", async () => {
     vi.stubGlobal("window", {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
       innerHeight: 800,
       matchMedia: vi.fn(() => ({
         addEventListener: vi.fn(),
@@ -810,6 +833,8 @@ describe("WorkspaceShellLayout Web remote control mobile layout", () => {
 
   it("routes mobile task find through the shell overlay instead of chat content", async () => {
     vi.stubGlobal("window", {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
       innerHeight: 800,
       matchMedia: vi.fn(() => ({
         addEventListener: vi.fn(),
@@ -949,6 +974,8 @@ describe("WorkspaceShellLayout Web remote control mobile layout", () => {
 
   it("does not inject the workspace header into mobile remote chat while a new task draft is active", async () => {
     vi.stubGlobal("window", {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
       innerHeight: 800,
       matchMedia: vi.fn(() => ({
         addEventListener: vi.fn(),
@@ -1020,6 +1047,8 @@ it("项目侧栏保留当前远端 identity 与 attachment，不按相同 cwd �
 
 it("mounts the same project sidebar in the real narrow mobile branch", async () => {
   vi.stubGlobal("window", {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
     innerHeight: 844,
     innerWidth: 390,
     matchMedia: vi.fn(() => ({

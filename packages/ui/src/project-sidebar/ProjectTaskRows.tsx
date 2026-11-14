@@ -17,12 +17,14 @@ export const ProjectTaskRow = memo(function Row({
   refresh,
   variant,
   showFiles,
+  renameOnDoubleClick = true,
 }: {
   task: ProjectTask;
   onSelect: ProjectSidebarProps["onSelectTask"];
   refresh(): Promise<void>;
   variant: "default" | "timeline";
   showFiles: boolean;
+  renameOnDoubleClick?: boolean;
 }) {
   const presentation = useContext(ProjectTaskListContext);
   const { remoteSessionId, rename, regenerateTitle, pin, archive, unread } = useProjectTaskActions(
@@ -30,8 +32,9 @@ export const ProjectTaskRow = memo(function Row({
     refresh,
   );
   const workspaceKey = task.workspaceIdentity?.trim() || task.workspacePath;
-  const activeId = useZCodeSessionStore(
-    (state) => state.workspaces[workspaceKey]?.activeTaskId ?? null,
+  // 原因：每行订阅完整 activeTaskId 会让同工作区所有行随选择更新；只订阅自身选中态。
+  const isActive = useZCodeSessionStore(
+    (state) => state.workspaces[workspaceKey]?.activeTaskId === task.taskId,
   );
   const rows = useMemo(() => [task], [task]);
   const select = useCallback(
@@ -45,7 +48,7 @@ export const ProjectTaskRow = memo(function Row({
   );
   // 原因：内联 JSX 每次都会创建新引用，导致 TaskList 的 memo 比较失效。
   const organizationActions = useMemo(() => <TaskGroupTaskMenu task={task} />, [task]);
-  // 原因：会话行复用项目详情会在浏览任务时重复弹层；远程身份详情只由项目入口承载。
+  // 项目身份详情只由项目入口承载；会话行使用任务卡，不复用项目详情。
   return (
     // 每行独立渲染 TaskList，外层留白避免选中和悬停背景粘连。
     <div className="py-px">
@@ -57,7 +60,7 @@ export const ProjectTaskRow = memo(function Row({
         // pinnedTasks 只负责标识样式；TaskList 的真实渲染集合始终是 tasks。
         tasks={rows}
         pinnedTasks={task.pinned ? rows : EMPTY}
-        activeTaskId={activeId}
+        activeTaskId={isActive ? task.taskId : null}
         isWorkspaceActive={presentation.activeWorkspaceKey === workspaceKey}
         mobileActiveTaskKey={presentation.mobileActiveTaskKey}
         onOpenFileTree={
@@ -81,6 +84,7 @@ export const ProjectTaskRow = memo(function Row({
         onArchiveTask={archive}
         isArchived={task.archived}
         onSetTaskUnread={unread}
+        renameOnDoubleClick={renameOnDoubleClick}
       />
     </div>
   );
@@ -170,6 +174,8 @@ export function ProjectTaskRows({
             refresh={refresh}
             variant={chronological ? "timeline" : "default"}
             showFiles={kind === "pinned"}
+            // 按未读第一击会清未读并移除该行，第二击没有目标；该视图保留右键重命名。
+            renameOnDoubleClick={kind !== "unread"}
           />
         </Fragment>
       ))}

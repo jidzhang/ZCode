@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { WebRemoteControlStatus } from "@zcode/shared";
 import { useOptionalPlatform } from "@/hooks/usePlatform.js";
 import { logger } from "@/logger.js";
@@ -12,10 +12,13 @@ function isSameWebRemoteControlStatus(
     left.sessionId === right.sessionId &&
     left.windowControlSessionId === right.windowControlSessionId &&
     left.mobileConnected === right.mobileConnected &&
-    left.mobileViewState?.activeWorkspaceKey ===
-      right.mobileViewState?.activeWorkspaceKey &&
+    left.mobileViewState?.activeWorkspaceKey === right.mobileViewState?.activeWorkspaceKey &&
     left.mobileViewState?.activeTaskId === right.mobileViewState?.activeTaskId &&
     left.mobileViewState?.updatedAt === right.mobileViewState?.updatedAt &&
+    left.mobileTaskView?.taskId === right.mobileTaskView?.taskId &&
+    left.mobileTaskView?.workspacePath === right.mobileTaskView?.workspacePath &&
+    left.mobileTaskView?.workspaceIdentity === right.mobileTaskView?.workspaceIdentity &&
+    left.mobileTaskView?.remoteSessionId === right.mobileTaskView?.remoteSessionId &&
     left.mobileDeviceInfo?.updatedAt === right.mobileDeviceInfo?.updatedAt &&
     left.mobileDeviceInfo?.userAgent === right.mobileDeviceInfo?.userAgent &&
     left.mobileDeviceInfo?.viewport?.width === right.mobileDeviceInfo?.viewport?.width &&
@@ -37,25 +40,25 @@ export function useWebRemoteControlStatus({
   const [status, setStatus] = useState<WebRemoteControlStatus>({
     status: "idle",
   });
+  const publishedStatusRef = useRef(status);
 
   useEffect(() => {
-    if (!enabled || !platform) {
-      setStatus({ status: "idle" });
-      return;
-    }
-
     let disposed = false;
 
     const applyStatus = (nextStatus: WebRemoteControlStatus) => {
-      if (disposed) {
+      if (disposed || isSameWebRemoteControlStatus(publishedStatusRef.current, nextStatus)) {
         return;
       }
-      setStatus((currentStatus) =>
-        isSameWebRemoteControlStatus(currentStatus, nextStatus)
-          ? currentStatus
-          : nextStatus,
-      );
+      // 相同值的 updater 虽不触发 render，仍会留在 React pending 队列；空闲轮询会持续累积。
+      // 入队前比较最后发布值，并立即推进它，保证同一批事件 A→B→A 不被旧 render 值误过滤。
+      publishedStatusRef.current = nextStatus;
+      setStatus(nextStatus);
     };
+
+    if (!enabled || !platform) {
+      applyStatus({ status: "idle" });
+      return;
+    }
 
     const syncStatus = async () => {
       try {
@@ -72,13 +75,11 @@ export function useWebRemoteControlStatus({
     };
 
     void syncStatus();
-    const disposeStatusChanged = platform.onWebRemoteControlStatusChanged?.(
-      (nextStatus) => {
-        // Bugfix: start/refresh 后如果只等 1s 轮询，手机立刻扫码时 main 还没拿到 renderer 同步的 task 快照。
-        // main 已经是远控 session/transport 状态事实源，这里优先消费事件推送，轮询只保留为旧平台兜底。
-        applyStatus(nextStatus);
-      },
-    );
+    const disposeStatusChanged = platform.onWebRemoteControlStatusChanged?.((nextStatus) => {
+      // Bugfix: start/refresh 后如果只等 1s 轮询，手机立刻扫码时 main 还没拿到 renderer 同步的 task 快照。
+      // main 已经是远控 session/transport 状态事实源，这里优先消费事件推送，轮询只保留为旧平台兜底。
+      applyStatus(nextStatus);
+    });
     const intervalId = window.setInterval(() => {
       void syncStatus();
     }, intervalMs);

@@ -17,10 +17,8 @@ import {
 } from "@zcode/shared";
 // 抖动函数与重连 jitter 常量与 V2 relay 共用同一实现（web-remote-relay），基准值由调用方传入。
 import {
-  WEB_REMOTE_CONTROL_RECONNECT_JITTER_MS,
   getWebRemoteControlHeartbeatDelayMs,
   getWebRemoteControlHeartbeatJitterMs,
-  getWebRemoteControlReconnectJitterMs,
 } from "@zcode/shared/web-remote-relay";
 import type { WebRemoteControlRelayAuthProvider } from "./webRemoteControlRelayAuthProvider.js";
 import {
@@ -609,10 +607,15 @@ export class WebRemoteControlDeviceTransport {
       baseIntervalMs,
       this.options.heartbeatJitterMs,
     );
-    return getWebRemoteControlReconnectJitterMs(
-      this.options.reconnectJitterMs ??
-        Math.min(heartbeatJitterMs, WEB_REMOTE_CONTROL_RECONNECT_JITTER_MS),
-    );
+    // 上游 3.18.2 删除了 shared 的 getWebRemoteControlReconnectJitterMs /
+    // WEB_REMOTE_CONTROL_RECONNECT_JITTER_MS（改用 WebRemoteControlV2RetryPolicy 整体接管）。
+    // 本文件是 fork 维护的 V1 直连 transport，语义保持 [0, max] 均匀打散，把这两段小逻辑内联。
+    const configuredReconnectJitterMs =
+      this.options.reconnectJitterMs ?? Math.min(heartbeatJitterMs, 2_000);
+    if (!Number.isFinite(configuredReconnectJitterMs) || configuredReconnectJitterMs <= 0) {
+      return 0;
+    }
+    return Math.floor(Math.random() * (Math.floor(configuredReconnectJitterMs) + 1));
   }
 
   private stopHeartbeat(): void {

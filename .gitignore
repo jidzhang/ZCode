@@ -105,3 +105,5 @@ one-click-build-local.env.bat
 
 # CLI session-store 迁移测试在包目录生成的备份目录（migration-runner 的 dataRoot 默认值）
 apps/zcode-cli/packages/adapters/backup/
+# CR-01：afterPack 生成的 NSIS helper define，按架构命名，不得入库
+packages/desktop/build/generated/

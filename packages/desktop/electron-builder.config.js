@@ -31,6 +31,11 @@ import {
 } from "./scripts/sharp-package-assets.mjs";
 import { isRealComputerUseProducerInstalled } from "./scripts/computer-use-producer.mjs";
 import { isLocalCuaHelperRuntimeAvailable } from "./scripts/local-cua-helper-runtime.mjs";
+import {
+  MAC_ELECTRON_LANGUAGES,
+  findMissingMacElectronLocales,
+  resolveMacElectronFrameworkResourcesDir,
+} from "./scripts/mac-electron-locales.mjs";
 import { verifyStagedKoffi } from "./scripts/koffi-package-assets.mjs";
 import {
   finalizePackagedWindowsCuaHelper,
@@ -44,6 +49,7 @@ import {
 import { replaceAppAsarFromStaging } from "./scripts/app-asar-repack.mjs";
 import {
   patchNsisInstallSectionFile,
+  patchNsisInstallUtilFile,
   restoreNsisInstallSectionFileSync,
 } from "./scripts/patch-nsis-install-section.mjs";
 
@@ -131,6 +137,8 @@ const REQUIRED_ASAR_RUNTIME_MODULES = [
   // 这与 yauzl 漏 pend 是同一类隐患——校验要求的模块必须有人负责补齐。node-forge 无子依赖，
   // 已在产物里时 afterPack 扫描会跳过它，不改变现有打包结果。
   "node-forge",
+  // Main 静态依赖 PKIjs；收集其完整闭包并校验产物，避免 pnpm 去重后漏包。
+  "pkijs",
   // 2.7.0 起 services 新增反馈日志压缩链路并引入 yazl；2.6.0 没有这条启动期依赖，
   // pnpm hoisted 布局下 yazl 可能进了 app.asar，但子依赖 buffer-crc32 没有稳定随包进入产物；
   // 这里显式以 yazl 作为闭包根注入，让递归依赖收集把 ZIP 打包链路所需依赖一起补齐。
@@ -209,6 +217,21 @@ function resolveElectronDownloadMirror(env = process.env) {
   }
 
   return DEFAULT_ELECTRON_MIRROR;
+}
+
+function assertPackagedMacElectronLocales(context) {
+  if (context.electronPlatformName !== "darwin") return;
+  // .app 名以 electron-builder 的 productFilename 为准，和同文件 asar 路径同源。
+  const resourcesDir = resolveMacElectronFrameworkResourcesDir(
+    join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`),
+  );
+  const missing = findMissingMacElectronLocales(resourcesDir);
+  if (missing.length > 0) {
+    // 语言包名对不上时 electron-builder 会静默删光所有 lproj，3.16.2 就因此丢了视频菜单文案。
+    throw new Error(
+      `Packaged ZCode is missing Electron locales: ${missing.map((l) => `${l}.lproj`).join(", ")} in ${resourcesDir}`,
+    );
+  }
 }
 
 function assertPackagedCuaHelper(context) {
@@ -629,14 +652,9 @@ function assertPackagedCuaKoffi(context) {
   }
 }
 
-function assertSignedWindowsBrowserImportHelper(context) {
-  if (
-    !shouldPackageWindowsBrowserImportHelper ||
-    context.electronPlatformName !== "win32" ||
-    !shouldEnableWindowsVsign
-  )
-    return;
-  const helperPath = resolve(context.appOutDir, "resources", "browser-import", HELPER_FILENAME);
+function assertSignedWindowsHelper(context, relativeHelperPath) {
+  if (context.electronPlatformName !== "win32" || !shouldEnableWindowsVsign) return;
+  const helperPath = resolve(context.appOutDir, "resources", relativeHelperPath);
   const appExecutablePath = resolve(
     context.appOutDir,
     `${context.packager.appInfo.productFilename}.exe`,
@@ -663,14 +681,9 @@ function assertSignedWindowsBrowserImportHelper(context) {
   );
 }
 
-function signWindowsBrowserImportHelper(context) {
-  if (
-    !shouldPackageWindowsBrowserImportHelper ||
-    context.electronPlatformName !== "win32" ||
-    !shouldEnableWindowsVsign
-  )
-    return;
-  const helperPath = resolve(context.appOutDir, "resources", "browser-import", HELPER_FILENAME);
+function signWindowsHelper(context, relativeHelperPath) {
+  if (context.electronPlatformName !== "win32" || !shouldEnableWindowsVsign) return;
+  const helperPath = resolve(context.appOutDir, "resources", relativeHelperPath);
   runCommand("powershell.exe", [
     "-NoLogo",
     "-NoProfile",
@@ -682,6 +695,41 @@ function signWindowsBrowserImportHelper(context) {
     "-FilePath",
     helperPath,
   ]);
+}
+
+// CR-01 修复原因：普通 NSIS 构建只提供 APP_64/APP_ARM64（压缩包路径），没有 APP_DIR_*；
+// installer.nsh 无法自行推导 helper 来源。afterPack 先于 makensis 执行，在这里把实际
+// appOutDir 下的 helper 写成按架构命名的生成 define 文件，NSIS 编译时按架构 include。
+export function installerProcessHelperDefineLine(appOutDir) {
+  const helperPath = join(
+    appOutDir,
+    "resources",
+    "tools",
+    "runtime-host",
+    "zcode-installer-process-helper.exe",
+  );
+  // NSIS 的 File 指令只认反斜杠绝对路径；引号字符串中 $ 与 " 需转义，属防御性处理。
+  const escaped = helperPath.replaceAll("$", "$$").replaceAll('"', '$\\"');
+  return `!define ZCODE_INSTALLER_PROCESS_HELPER "${escaped}"\n`;
+}
+
+async function writeInstallerProcessHelperDefine(context, archName) {
+  const helperPath = resolve(
+    context.appOutDir,
+    "resources",
+    "tools",
+    "runtime-host",
+    "zcode-installer-process-helper.exe",
+  );
+  if (!existsSync(helperPath)) {
+    throw new Error(`Installer process helper missing after pack: ${helperPath}`);
+  }
+  mkdirSync(join(desktopPackageRoot, "build", "generated"), { recursive: true });
+  await writeFile(
+    join(desktopPackageRoot, "build", "generated", `zcode-process-helper-${archName}.nsh`),
+    installerProcessHelperDefineLine(context.appOutDir),
+    "utf8",
+  );
 }
 
 /** @type {import("electron-builder").Configuration} */
@@ -740,6 +788,7 @@ export default {
     "!node_modules/react-dom/**",
   ],
   asarUnpack: [
+    "node_modules/@napi-rs/keyring-*/**/*.node",
     // node-pty 的 target prebuild 还包含 spawn-helper / winpty-agent.exe 等辅助可执行文件，
     // 整个目标目录必须 unpack；其他平台目录已由 files 规则裁剪。
     `node_modules/node-pty/prebuilds/${targetPlatform.key}/**`,
@@ -761,7 +810,6 @@ export default {
     const patchResult = await runTimedAsync("beforePack:patchNsisInstallSection", () =>
       patchNsisInstallSectionFile(nsisInstallSectionPath),
     );
-    nsisInstallSectionPatched = true;
     nsisInstallSectionOriginalSource = patchResult.originalSource;
     if (patchResult.changed) {
       // electron-builder 在当前进程内随后才会编译 NSIS；等整个构建进程退出后恢复 node_modules
@@ -773,6 +821,17 @@ export default {
         });
       });
     }
+    const installUtilPath = resolve(dirname(nsisInstallSectionPath), "include", "installUtil.nsh");
+    const utilPatch = await patchNsisInstallUtilFile(installUtilPath);
+    if (utilPatch.changed) {
+      process.once("exit", () => {
+        restoreNsisInstallSectionFileSync({
+          filePath: installUtilPath,
+          originalSource: utilPatch.originalSource,
+        });
+      });
+    }
+    nsisInstallSectionPatched = true;
   },
   afterExtract: async (context) => {
     // 修复：macOS 重命名阶段会删除归档顶层许可证，必须在 afterExtract 保留目标平台原文。
@@ -812,6 +871,9 @@ export default {
     runTimedSync("afterPack:assertPackagedCuaSharp", () => assertPackagedCuaSharp(context));
     runTimedSync("afterPack:assertPackagedCuaKoffi", () => assertPackagedCuaKoffi(context));
     runTimedSync("afterPack:assertPackagedCuaHelper", () => assertPackagedCuaHelper(context));
+    runTimedSync("afterPack:assertPackagedMacElectronLocales", () =>
+      assertPackagedMacElectronLocales(context),
+    );
     if (actualWindowsTarget && shouldPackageComputerUseHelper) {
       await runTimedAsync("afterPack:finalizePackagedWindowsCuaHelper", () =>
         finalizePackagedWindowsCuaHelper({
@@ -824,16 +886,29 @@ export default {
         writeWindowsInstallManifest(context),
       );
     }
+    if (context.electronPlatformName === "win32") {
+      // 普通打包没有 APP_DIR_* 宏；makensis 前落盘按架构的 helper define（见函数注释）。
+      await writeInstallerProcessHelperDefine(
+        context,
+        actualWindowsTarget?.arch ?? targetPlatform.arch,
+      );
+      signWindowsHelper(context, "tools/runtime-host/zcode-runtime-host.exe");
+      signWindowsHelper(context, "tools/runtime-host/zcode-installer-process-helper.exe");
+    }
     if (shouldPackageWindowsBrowserImportHelper) {
       runTimedSync("afterPack:signWindowsBrowserImportHelper", () =>
-        signWindowsBrowserImportHelper(context),
+        signWindowsHelper(context, `browser-import/${HELPER_FILENAME}`),
       );
     }
   },
   afterSign: async (context) => {
+    if (context.electronPlatformName === "win32") {
+      assertSignedWindowsHelper(context, "tools/runtime-host/zcode-runtime-host.exe");
+      assertSignedWindowsHelper(context, "tools/runtime-host/zcode-installer-process-helper.exe");
+    }
     if (shouldPackageWindowsBrowserImportHelper) {
       runTimedSync("afterSign:assertSignedWindowsBrowserImportHelper", () =>
-        assertSignedWindowsBrowserImportHelper(context),
+        assertSignedWindowsHelper(context, `browser-import/${HELPER_FILENAME}`),
       );
     }
     if (context.electronPlatformName === "win32" && shouldEnableWindowsVsign) {
@@ -846,6 +921,18 @@ export default {
     }
   },
   extraResources: [
+    ...(targetPlatform.os === "win32"
+      ? [
+          {
+            from: `bundled-tools/${targetPlatform.key}/runtime-host/zcode-runtime-host.exe`,
+            to: "tools/runtime-host/zcode-runtime-host.exe",
+          },
+          {
+            from: `bundled-tools/${targetPlatform.key}/runtime-host/zcode-installer-process-helper.exe`,
+            to: "tools/runtime-host/zcode-installer-process-helper.exe",
+          },
+        ]
+      : []),
     { from: resolve(workspaceRoot, noticesFileName), to: noticesFileName },
     ...(targetPlatform.os === "darwin"
       ? [
@@ -968,12 +1055,14 @@ export default {
     artifactName: buildDesktopArtifactName("mac"),
     // macOS 语言包是 en.lproj / zh_CN.lproj，沿用顶层 "en-US" 会一个都匹配不上被全部删掉，
     // Chromium 自带文案随之丢失（视频控件菜单只剩图标、播放速度子菜单空白）。
-    electronLanguages: ["en", "zh_CN"],
+    electronLanguages: MAC_ELECTRON_LANGUAGES,
     extendInfo: {
       NSAppleEventsUsageDescription: `${desktopProductIdentity.productName} needs Apple Events access to coordinate local automation workflows with user-approved desktop apps.`,
       // 缺失该 key 时 macOS 会静默拒绝 CoreBluetooth 枚举，内置浏览器 Web Bluetooth
       // 的设备选择器列表恒为空（实测 Chrome 有蓝牙隐私权限则正常）。
       NSBluetoothAlwaysUsageDescription: `${desktopProductIdentity.productName} needs Bluetooth access to list nearby devices when a website you open in the embedded browser requests one.`,
+      // 语音输入（docs/chat/composer-voice-input.md）：缺失该 key 时 askForMediaAccess 直接失败。
+      NSMicrophoneUsageDescription: `${desktopProductIdentity.productName} needs microphone access to turn your speech into text when you use voice input.`,
     },
     // 预签名脚本走的是原生 codesign，要求完整的 "Developer ID Application: ..." 身份串；
     // 但 electron-builder 的 mac.identity 在 26.x 下会拒绝带此前缀的名字。

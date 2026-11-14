@@ -180,7 +180,9 @@ vi.mock("electron-updater", () => {
   };
 });
 
-vi.mock("node:fs/promises", () => ({
+vi.mock("node:fs/promises", async (importOriginal) => ({
+  // 上游 3.18 的安装/签名暂存路径会临时建目录；mock 只拦 readFile，其余透传真实现。
+  ...(await importOriginal<typeof import("node:fs/promises")>()),
   readFile: readFileMock,
 }));
 
@@ -271,7 +273,14 @@ describe("autoUpdater ready state sync", () => {
     delete process.env["ZCODE_AUTO_UPDATE_DEV"];
     delete process.env["ZCODE_AUTO_UPDATE_DEV_VERSION"];
     readFileMock.mockReset();
-    readFileMock.mockRejectedValue(new Error("missing update config"));
+    // 上游 3.18.2 的签名复查改为写临时 signature.json 再 readFile 读回（stdout 不再承载）；
+    // 签名应答路径放行有效 JSON，其余读取维持缺省拒绝。
+    readFileMock.mockImplementation(async (path: unknown) => {
+      if (typeof path === "string" && path.includes("zcode-signature-")) {
+        return AUTHENTICODE_OK_JSON;
+      }
+      throw new Error("missing update config");
+    });
   });
 
   it("Preview 禁用更新器时不注册 IPC、事件或启动检查", async () => {

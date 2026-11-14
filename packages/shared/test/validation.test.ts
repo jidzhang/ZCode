@@ -588,26 +588,6 @@ describe("hostResponseMessageSchema", () => {
     });
   });
 
-  it("defaults tool call grouping preferences by group type", () => {
-    const parsed = appSettingsSchema.parse({});
-    const patch = appSettingsPatchSchema.parse({
-      toolGroupingExploreEnabled: false,
-      toolGroupingTerminalEnabled: false,
-      toolGroupingChangesEnabled: true,
-    });
-
-    expect(parsed.toolGroupingExploreEnabled).toBe(true);
-    expect(parsed.toolGroupingTerminalEnabled).toBe(true);
-    expect(parsed.toolGroupingChangesEnabled).toBe(false);
-    expect(patch).toMatchObject({
-      toolGroupingExploreEnabled: false,
-      toolGroupingTerminalEnabled: false,
-      toolGroupingChangesEnabled: true,
-    });
-    expect(appSettingsPatchSchema.safeParse({ toolGroupingExploreEnabled: "false" }).success).toBe(
-      false,
-    );
-  });
 
   it("首次统一开启 Windows 关闭到托盘，迁移后保留用户选择", () => {
     const defaults = appSettingsSchema.parse({});

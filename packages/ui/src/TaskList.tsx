@@ -54,6 +54,7 @@ export const TaskList = memo(function TaskList({
   readOnlyReason,
   onOpenFileTree,
   organizationActions,
+  renameOnDoubleClick = true,
 }: {
   organizationActions?: React.ReactNode;
   workspacePath: string;
@@ -83,6 +84,7 @@ export const TaskList = memo(function TaskList({
   mobileActiveTaskKey?: string | null;
   readOnlyReason?: string;
   onOpenFileTree?: () => void | Promise<void>;
+  renameOnDoubleClick?: boolean;
 }) {
   const { intl } = useZCodeIntl();
   const pinnedTaskIdSet = useMemo(
@@ -409,6 +411,7 @@ export const TaskList = memo(function TaskList({
         onOpenFileTree={onOpenFileTree}
         actionsDisabled={Boolean(readOnlyReason)}
         actionsDisabledReason={readOnlyReason}
+        renameOnDoubleClick={renameOnDoubleClick}
         intl={intl}
       />
     );

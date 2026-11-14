@@ -78,6 +78,7 @@ import {
 } from "@/lib/conversationShareError.js";
 import { localizeConversationShareUrl } from "@zcode/shared";
 import { resolveConversationSharePublishTtlMs } from "@/conversation-share-interaction/ConversationShareExpiryPicker.js";
+import { TEXT_PROOFREAD_MIN_CHARS } from "@zcode/services";
 import type {
   ConversationShareAllowedArtifact,
   ConversationShareTurnPreflightResult,
@@ -1368,6 +1369,14 @@ export function SessionPane({
   const composerTextRef = useRef("");
   const composerEditWorkspaceModeRef = useRef<"preserve" | "rewind">("preserve");
   const [composerEditSubmitRequest, setComposerEditSubmitRequest] = useState(0);
+  // 编辑态「纠错」（specs/text-proofread-in-edit.md）：busy 驱动状态条 spinner；
+  // 结果经 {requestId, text} 交给 composer 做带独立撤销步的回填，编辑器 API 不出 composer。
+  const [composerEditProofreading, setComposerEditProofreading] = useState(false);
+  const [composerEditProofreadApply, setComposerEditProofreadApply] = useState<{
+    requestId: number;
+    text: string;
+  } | null>(null);
+  const composerEditProofreadApplyIdRef = useRef(0);
   const timelineScrollToBottomRef = useRef<(() => void) | null>(null);
   const timelineScrollToQueryRef = useRef<
     ((target: { unitIndex: number; rowId: number }) => void) | null
@@ -3329,7 +3338,6 @@ export function SessionPane({
           : undefined,
       workflowSaveCandidatesByRunId,
       ...(workflowSessionModel === undefined ? {} : { workflowSessionModel }),
-      onProofreadText: handleProofreadText,
       workflowRunByToolCallId,
       workflowRunByRunId,
       workflowRunPendingQuestionsByRunId,
@@ -4705,6 +4713,50 @@ export function SessionPane({
   );
   // 上面那个 ref 的唯一赋值点（见 handleSendWorkflowSaveRequest 的说明）。
   sendTextRef.current = handleSendText;
+
+  /**
+   * 编辑态状态条「纠错」（specs/text-proofread-in-edit.md）：手动触发一次独立辅助调用，
+   * 只回填编辑框、绝不自动发送；原文不足 5 字时静默无效果。
+   * 替换经 editProofreadApply 请求由 composer 执行 setTextWithUndoStep（带
+   * HISTORY_PUSH_TAG 的独立历史步），Ctrl+Z 一步回到原文。旧版行内编辑窗的等价实现
+   * 随上游 3.18.2 composer 编辑模式移除，语义在此原样重放。
+   */
+  const handleComposerEditProofread = useCallback(async () => {
+    if (composerEditProofreading) return;
+    if (composerEdit.editSession?.target.kind !== "userQuery") return;
+    if (composerEdit.invalidReason !== null) return;
+    const text = composerTextRef.current;
+    if (text.trim().length < TEXT_PROOFREAD_MIN_CHARS) return;
+    setComposerEditProofreading(true);
+    try {
+      const outcome = await handleProofreadText(text);
+      if (outcome.kind === "skipped") return;
+      if (outcome.kind === "unchanged") {
+        toast(intl.formatMessage({ id: "chat.edit.proofreadNoChange" }));
+        return;
+      }
+      if (outcome.kind === "discarded") {
+        toast(intl.formatMessage({ id: "chat.edit.proofreadDiscarded" }));
+        return;
+      }
+      composerEditProofreadApplyIdRef.current += 1;
+      setComposerEditProofreadApply({ requestId: composerEditProofreadApplyIdRef.current, text: outcome.text });
+      if (outcome.fallbackUsed) {
+        toast(intl.formatMessage({ id: "chat.edit.proofreadFallback" }));
+      }
+    } catch (error) {
+      logger.warn("[proofread] 纠错请求失败", { error });
+      toast(intl.formatMessage({ id: "chat.edit.proofreadFailed" }));
+    } finally {
+      setComposerEditProofreading(false);
+    }
+  }, [
+    composerEdit.editSession,
+    composerEdit.invalidReason,
+    composerEditProofreading,
+    handleProofreadText,
+    intl,
+  ]);
 
   const handleComposerEditRewindWorkspace = useCallback(() => {
     composerEditWorkspaceModeRef.current = "rewind";
@@ -6410,12 +6462,23 @@ export function SessionPane({
       draftScopeId={composerEditScopeId}
       editFocusRequest={composerEdit.editSession?.focusRequest ?? 0}
       editSubmitRequest={composerEditSubmitRequest}
+      editProofreadApply={composerEditProofreadApply}
       editBar={
         composerEdit.editSession ? (
           <ComposerEditBar
             target={composerEdit.editSession.target}
             invalidReason={composerEdit.invalidReason}
             workspaceRewind={composerEdit.editSession.workspaceRewind}
+            {...(composerEdit.editSession.target.kind === "userQuery"
+              ? {
+                  proofread: {
+                    busy: composerEditProofreading,
+                    onProofread: () => {
+                      void handleComposerEditProofread();
+                    },
+                  },
+                }
+              : {})}
             submitting={state.optimisticCommands.some(
               (command) => command.type === "editUserQuery" || command.type === "editQueueItem",
             )}

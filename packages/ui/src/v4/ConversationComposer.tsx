@@ -537,6 +537,12 @@ export interface ConversationComposerProps {
   /** 状态条的「对话 + 文件重置」等编辑态动作递增：按当前内容走同一提交流程。 */
   editSubmitRequest?: number;
   /**
+   * 编辑态「纠错」结果回填（specs/text-proofread-in-edit.md）：宿主跑完独立辅助
+   * 调用后递增 requestId 并携带改后正文；composer 在编辑器上执行带独立撤销步的
+   * 文本替换。编辑器与撤销栈的所有权在 composer 内部，宿主不直接触碰编辑器 API。
+   */
+  editProofreadApply?: { requestId: number; text: string } | null;
+  /**
    * 一次提交已被接纳且附件已移交、草稿已结算后回调（scopeId = 提交时的草稿 scope）。
    * composer 编辑态据此退出：必须晚于附件 adopt，否则切回原 scope 会把新附件当未发送清理。
    */
@@ -632,6 +638,7 @@ function ConversationComposerImpl({
   editBar,
   editFocusRequest = 0,
   editSubmitRequest = 0,
+  editProofreadApply = null,
   onSubmissionSettled,
   suppressGoalCommands = false,
   appSlashCommands,
@@ -1971,6 +1978,20 @@ function ConversationComposerImpl({
     // 与发送按钮共用提交事务：草稿冻结、附件门禁、失败恢复与成功结算保持一致。
     void submit();
   }, [editSubmitRequest, submit]);
+
+  // 编辑态「纠错」结果回填：requestId 单调递增，只应用最新一次成功结果
+  // （specs/text-proofread-in-edit.md）。setTextWithUndoStep 带 HISTORY_PUSH_TAG，
+  // Ctrl+Z 一步回到纠错前原文；结果同样走 onChange → 草稿同步，后续发送语义不变。
+  const lastEditProofreadApplyIdRef = useRef(editProofreadApply?.requestId ?? 0);
+  useEffect(() => {
+    if (!editProofreadApply) return;
+    if (lastEditProofreadApplyIdRef.current === editProofreadApply.requestId) return;
+    lastEditProofreadApplyIdRef.current = editProofreadApply.requestId;
+    // 编辑已取消/切换 scope 时丢弃迟到结果：不能把改后正文注入正常草稿
+    // （与旧版行内编辑「取消即丢弃」语义一致）。
+    if (!isComposerEditScopeId(draftScopeId)) return;
+    inputApiRef.current?.setTextWithUndoStep(editProofreadApply.text);
+  }, [editProofreadApply, draftScopeId]);
 
   const handleUserInputClear = useCallback(() => {
     conversationTelemetry?.resetComposerInputStart();

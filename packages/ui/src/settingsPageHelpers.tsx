@@ -762,6 +762,41 @@ export function GeneralSectionContent({
             />
           }
         />
+        {/* 日志级别是低频运维项，与数据目录同组放在页面尾部，不占高频设置注意力。
+            （2026-11-15 v3.18.2 合并时该行随 toolGrouping 块取上游空侧一起丢失，
+            实机报告后按 9d744c8c 原样重放；searchId 为上游 3.18 设置搜索新增。） */}
+        <SettingsRow
+          searchId="settings.logLevel"
+          label={intl.formatMessage({ id: "settings.logLevel" })}
+          description={intl.formatMessage({ id: "settings.logLevelDescription" })}
+          control={
+            <Select
+              value={logLevel}
+              onValueChange={(value) => {
+                void onLogLevelChange(appLogLevelSchema.parse(value));
+              }}
+            >
+              <SelectTrigger
+                size="lg"
+                className="w-[260px] min-w-0 justify-between"
+                data-testid={TID_SETTINGS_LOG_LEVEL_SELECT}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {appLogLevelSchema.options.map((level) => (
+                  <SelectItem
+                    key={level}
+                    value={level}
+                    data-testid={testId(TID_SETTINGS_LOG_LEVEL_OPTION, level)}
+                  >
+                    {intl.formatMessage({ id: `settings.logLevel.${level}` })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
+        />
       </SettingsGroupCard>
 
       <SettingsGroupCard>

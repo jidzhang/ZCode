@@ -127,6 +127,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     visibility: "all",
   },
   {
+    // safe-zcode 本地项：CLI/服务日志级别（settings.json logLevel，默认 warn）。
+    id: "settings.logLevel",
+    section: "general",
+    description: "settings.logLevelDescription",
+    visibility: "all",
+  },
+  {
     id: "settings.onboarding",
     section: "general",
     description: "settings.onboardingDescription",

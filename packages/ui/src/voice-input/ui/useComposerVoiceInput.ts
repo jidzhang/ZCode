@@ -323,5 +323,11 @@ export function useComposerVoiceInput(options: {
     return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [stopAttempt, state]);
 
-  return { available, state, toggle, settle, subscribeLevel, permissionGuide };
+  // 按住说话（docs/chat/composer-voice-input.md §按住说话）的取消路径：复用 Escape 语义。
+  const cancel = useCallback(() => {
+    if (!attemptRef.current) return;
+    stopAttempt("escape");
+  }, [stopAttempt]);
+
+  return { available, state, toggle, settle, cancel, subscribeLevel, permissionGuide };
 }

@@ -97,6 +97,7 @@ export function ChatPromptEditor({
   appSlashCommands,
   extraPlugins,
   enableMentionPanel,
+  editAreaProps,
 }: {
   workspacePath: string;
   workspaceIdentity?: string;
@@ -173,6 +174,11 @@ export function ChatPromptEditor({
   enableMentionPanel?: boolean;
   /** 额外挂进编辑器的 Lexical 插件（透传 LexicalChatInput）。 */
   extraPlugins?: ReactNode;
+  /**
+   * 附加到编辑区包装层的事件处理器（按住说话等编辑区级交互，见
+   * docs/chat/composer-voice-input.md §按住说话）；不透传进编辑器本身。
+   */
+  editAreaProps?: React.HTMLAttributes<HTMLDivElement>;
 }) {
   const { intl } = useZCodeIntl();
   const isInline = layout === "inline";
@@ -359,7 +365,10 @@ export function ChatPromptEditor({
 
   const editorNode = (
     // 单行时输入区至少占一半宽度，上下留白与 h-7 控件对齐；两行布局下 contents 不改变原有排版。
-    <div className={isInline ? "min-w-1/2 flex-1 py-1 [&_[contenteditable]]:min-h-5" : "contents"}>
+    <div
+      className={isInline ? "min-w-1/2 flex-1 py-1 [&_[contenteditable]]:min-h-5" : "contents"}
+      {...editAreaProps}
+    >
       <LexicalChatInput
         extraPlugins={extraPlugins}
         placeholder={placeholder}

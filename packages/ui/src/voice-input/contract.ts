@@ -37,6 +37,11 @@ export interface ComposerVoiceInput {
    * 等待可能跨越会话切换：恢复后调用方必须自行校验目标是否仍有效。
    */
   settle: (reason: VoiceInputStopReason) => Promise<void> | undefined;
+  /**
+   * 立即取消当前识别并删除语音文字（与录音中按 Escape 同语义）。
+   * 按住说话"移出编辑区松开"复用该路径；空闲时调用无效果。
+   */
+  cancel: () => void;
   /** 系统权限被拒时的引导浮层，由 VoiceInputButton 渲染 */
   permissionGuide: MicrophonePermissionGuide;
   /** 订阅录音中每个 100ms 音频块的峰值电平（满量程 1）；返回取消订阅函数。引用稳定 */

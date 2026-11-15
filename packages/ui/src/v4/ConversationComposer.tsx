@@ -110,6 +110,7 @@ import {
 } from "@/ChatMediaAttachmentPreviewDialog.js";
 import type { LexicalChatInputHandle } from "@/LexicalChatInput.js";
 import { ChatPromptEditor } from "@/prompt-editor/ChatPromptEditor.js";
+import { useHoldToTalk } from "@/voice-input/ui/useHoldToTalk.js";
 import { usePromptEditorDragState } from "@/prompt-editor/usePromptEditorDragState.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { advanceComposerDraftRevision } from "@/v4/composer/composerDraftRevision.js";
@@ -770,6 +771,21 @@ function ConversationComposerImpl({
     enabled: !isWebRemoteControl,
   });
   const settleVoiceInput = voiceInput.settle;
+  // 按住说话（docs/chat/composer-voice-input.md §按住说话）：编辑区按住左键 ≥300ms 开始录音，
+  // 松开在编辑区内 = 结束（toggle 二次调用走 finish）、移出 = 取消（删语音文字）。
+  // 仅空闲时允许按住开启；按钮发起的录音不受影响，禁用态（编辑锁/阻塞）不触发。
+  const holdToTalk = useHoldToTalk({
+    enabled: voiceInput.available && voiceInput.state === "idle" && !disabled,
+    onTalkStart: () => voiceInput.toggle(),
+    onTalkEnd: (outcome) => {
+      if (outcome === "finish") {
+        // 按住期间识别可能已失败回 idle（如权限被拒）：此时松开不得再开新录音。
+        if (voiceInput.state !== "idle") voiceInput.toggle();
+      } else {
+        voiceInput.cancel();
+      }
+    },
+  });
   const composerMountedRef = useRef(true);
   useEffect(() => {
     composerMountedRef.current = true;
@@ -3024,6 +3040,7 @@ function ConversationComposerImpl({
         ) : null}
         <ChatPromptEditor
           extraPlugins={elementMentionPlugin}
+          editAreaProps={holdToTalk}
           workspacePath={workspacePath}
           workspaceIdentity={workspaceIdentity}
           taskId={sessionId}

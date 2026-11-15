@@ -89,6 +89,11 @@ export function MarketingTouchProvider({
   const identity = user?.id ?? "anonymous";
   const createRuntime = useCallback(() => {
     const service = services.marketingTouchService;
+    // safe-zcode（2026-11-15）：非桌面 surface（手机 Web 远控 / Web 客户端）不建营销轮询。
+    // 手机 attachment 的 Host 白名单按设计 fail-closed 不含 marketing-touch，轮询只会每周期
+    // 产生一次 "Unknown channel" 超时报错（实机日志 11-14 确认；10-29 官方 3.16.2 已同款）。
+    // fork 立场本就不向官方拉营销内容，桌面端行为保持不变。
+    if (!desktop) return null;
     // 冷启动竞态修复：IntlProvider 读完 setting.json 之前 locale 只是占位初值（中文系统即 zh-CN），
     // 以前这时就创建 runtime 发 marketing/touch，X-Client-Language 会带错语言。等语言确定后再启动；
     // locale 变化本来就会重建 runtime，所以这里只多等一次设置读取。

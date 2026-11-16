@@ -33,7 +33,12 @@ export interface SingleFeatureRollout<T extends SingleFeatureRolloutConfig> {
 export interface SingleFeatureRolloutLogger {
   info?: (...args: unknown[]) => void;
   warn: (...args: unknown[]) => void;
+  /** 提供时承接"预期失败"（如 safe-zcode 出站门控主动拦截）的降级日志。 */
+  debug?: (...args: unknown[]) => void;
 }
+
+/** safe-zcode 出站总开关拦截时抛出的稳定标记（desktop main index.ts 门控 throw 携带）。 */
+const STARTUP_OUTBOUND_DISABLED_CODE = "STARTUP_OUTBOUND_DISABLED";
 
 export const SINGLE_FEATURE_REQUEST_TIMEOUT_MS = 3_000;
 export const SINGLE_FEATURE_CACHE_TTL_MS = 60 * 60 * 1_000;
@@ -111,7 +116,15 @@ export function createSingleFeatureRollout<T extends SingleFeatureRolloutConfig>
         // 灰度配置是旁路能力：服务端异常或超时不能阻塞客户端；有成功结果时沿用，首次失败回退默认。
         // 失败也进入退避窗口，否则 60s 周期调用方在阻断网络下会每分钟重发（spec：startup-egress-policy）。
         snapshotExpiresAt = Date.now() + failureCacheTtlMs;
-        options.logger.warn(`[${options.logTag}] config unavailable, using cached decision`, {
+        // safe-zcode（2026-11-16）：出站门控（enableStartupOutbound=false）拦截属预期失败，
+        // 周期刷新（renderer-action-trace 每 10 分钟一次）会持续命中——降为 debug 消除 warn 刷屏；
+        // 真实网络/服务端故障仍保持 warn。
+        const gatedByStartupOutboundPolicy =
+          (error as { code?: string } | null | undefined)?.code ===
+          STARTUP_OUTBOUND_DISABLED_CODE;
+        const logGated = gatedByStartupOutboundPolicy ? options.logger.debug : undefined;
+        const log = logGated ?? options.logger.warn;
+        log(`[${options.logTag}] config unavailable, using cached decision`, {
           error,
           enabled: snapshot.enabled,
         });

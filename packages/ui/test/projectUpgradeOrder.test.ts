@@ -107,9 +107,10 @@ it("未带首次升级标记的既有入口不执行排序修复，同路径本�
   const before = hook.result.current.order;
   const online = props(true, false);
   hook.rerender(online);
+  // 上游 3.18.2 语义：未记录的新项目前插（手机端无 prepend 回调，追加到末尾会让新项目沉底）。
   expect(hook.result.current.order).toEqual([
-    ...before,
     projectKey(online.projects.find((p) => p.name === "remote")!),
+    ...before,
   ]);
   // 未建立手动序时 sort() 不再读 order，而是按最近任务活动排序；本夹具没有任务、
   // updatedAt 全为 1，退化为按 position 稳定排序（a 与 remote 同为 0，保持输入顺序）。

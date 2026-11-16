@@ -64,7 +64,7 @@ vi.mock("@/hooks/useWorkspaceServices.js", () => {
     zcodeTaskService: { onDynamicWorkspaceEvent: () => () => ({ dispose: vi.fn() }) },
     broadcastService: { onMessage: () => ({ dispose: vi.fn() }) },
   };
-  return { useBaseWorkspaceServices: () => base };
+  return { useBaseWorkspaceServices: () => base, useOptionalBaseWorkspaceServices: () => null };
 });
 vi.mock("@/store/TabStoreProvider.js", () => ({
   useTabStore: (selector: (state: typeof fixture.state) => unknown) => selector(fixture.state),
@@ -216,7 +216,8 @@ describe("virtual-project sidebar on desktop and mobile", () => {
     const onCreateTask = vi.fn();
     render(createElement(Sidebar, props({ onCreateTask })));
     fireEvent.click(screen.getByText("New task"));
-    expect(onCreateTask).toHaveBeenNthCalledWith(1);
+    // 上游 3.18 的按钮事件经 runUserAction 包装透传，第一参为点击事件。
+    expect(onCreateTask).toHaveBeenNthCalledWith(1, expect.anything());
     fireEvent.click(screen.getByTestId("virtual-project-new-task"));
     expect(onCreateTask).toHaveBeenNthCalledWith(2, { projectId: null, taskGroupId: null });
   });

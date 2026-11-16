@@ -19,7 +19,6 @@ export function ConversationShareMenu({
   taskId: string;
   useWindowsCaptionSpacing?: boolean;
 }) {
-  if (!CONVERSATION_SHARE_PUBLISH_ENABLED) return null;
   const { intl } = useZCodeIntl();
   const openShare = useConversationShareSelectionStore((state) => state.openShare);
   const closeShare = useConversationShareSelectionStore((state) => state.closeShare);
@@ -56,6 +55,9 @@ export function ConversationShareMenu({
     </Button>
   );
 
+  // 门控放在所有 Hook 之后（上游 3.18 起 rules-of-hooks 为 error 级）：关闭时 hooks 仍按
+  // 固定顺序执行，仅渲染 null，行为与旧 early-return 等价。
+  if (!CONVERSATION_SHARE_PUBLISH_ENABLED) return null;
   return active ? (
     trigger
   ) : (

@@ -365,6 +365,7 @@ describe("ZCode Protocol", () => {
     ).toEqual({
       askUserQuestionAutoResolutionEnabled: false,
       modelIoFullRetentionEnabled: false,
+      pluginAutoRecommendationEnabled: false,
     });
     expect(() =>
       appRuntimePreferencesChangedBroadcastPayloadSchema.parse({

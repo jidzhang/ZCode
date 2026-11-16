@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { appendFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -35,16 +35,41 @@ if (process.argv.includes("app-server") && process.argv.includes("--stdio")) {
   const root = process.env.ZCODE_E2E_ARTIFACT_DIR;
   const control = join(root, "subagent-config-control.json");
   const log = join(root, `subagent-config-rpc-${child.pid}.jsonl`);
+  // 修复原因：Windows 上 CLI 由每个 CLI 独占的原生 helper（zcode-runtime-host.exe）在 Job 中创建，
+  // process.ppid 是 helper 而不是 Host，"两个 CLI 属于同一 Host" 的断言会误报。父进程是该 helper 时
+  // 再上取一级（helper 由 Host 直接启动）；其他平台与非 helper 父进程保持 process.ppid。
+  const hostPid =
+    process.platform === "win32"
+      ? new Promise((resolveHostPid) =>
+          execFile(
+            "powershell.exe",
+            [
+              "-NoProfile",
+              "-Command",
+              `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${process.ppid}"; "$($p.Name)|$($p.ParentProcessId)"`,
+            ],
+            { windowsHide: true },
+            (error, stdout) => {
+              const [name, parentPid] = String(stdout).trim().split("|");
+              resolveHostPid(
+                !error && name?.toLowerCase() === "zcode-runtime-host.exe" && Number(parentPid) > 0
+                  ? Number(parentPid)
+                  : process.ppid,
+              );
+            },
+          ),
+        )
+      : Promise.resolve(process.ppid);
   const pending = new Map();
   let outbound = Promise.resolve(),
     inbound = Promise.resolve();
-  const writeLog = (event) =>
+  const writeLog = async (event) =>
     appendFile(
       log,
       JSON.stringify({
         time: Date.now(),
         pid: child.pid,
-        hostPid: process.ppid,
+        hostPid: await hostPid,
         cwd: process.cwd(),
         ...event,
       }) + "\n",

@@ -16,10 +16,11 @@
   - `workflow_dispatch`：默认只构建，产物以 workflow artifacts 上传（保留 7 天）供装机验证，
     不产生任何 GitHub 写操作；勾选 `publish` 且以发布 tag 作为 ref 运行时等同自动发布。
 - **拓扑**：`create-release` → 三个平台 job 并行：
-  - `build-windows`（windows-latest）：win x64 → win arm64，job 内串行；
-  - `build-linux`（ubuntu-24.04）：linux x64 → linux arm64（x64 runner 交叉构建），job 内串行；
-  - `build-mac`（macos-15）：mac x64（arm64 runner 交叉构建，与本地跨 arch 打包同一链路）→ mac arm64，job 内串行。
-  - 架构矩阵与官方 zcode.z.ai 发布对齐：win/mac x64+arm64、linux x64+arm64（deb/rpm/AppImage 等）。
+  - `build-windows`（windows-latest）：win x64；
+  - `build-mac`（macos-15）：mac arm64（本机原生构建）。
+  - 2026-11-16 收窄（用户定案，无下载量停发）：本通道只发 win-x64 + mac-arm64；
+    linux 全线停发，mac x64 改由 macos12 分支的独立 pre-release 通道承担
+    （Electron 43，`macos12-v*` tag，见 specs/electron/macos12-release.md）。
   - 新增架构 = 在对应 job 里加一行 bundle 调用（保持同一 OS 内串行）。
 - **竞态规避（硬约束）**：
   - win/mac 全架构共用 channel yml（`latest.yml` / `latest-mac.yml`），发布脚本对 yml 是
@@ -61,8 +62,8 @@
 
 ## 验收场景
 
-1. push tag `vX` → workflow 全绿：Release `vX` 含 win x64/arm64、linux x64/arm64、mac x64/arm64
-   全部资产与 4 份 channel yml（latest.yml / latest-mac.yml / latest-linux.yml / latest-linux-arm64.yml），
+1. push tag `vX` → workflow 全绿：Release `vX` 含 win x64、mac arm64
+   全部资产与 2 份 channel yml（latest.yml / latest-mac.yml），
    上传后"名称+字节数"校验通过。
 2. workflow_dispatch 默认参数在 main 运行 → 三平台构建通过、产物出现在 artifacts，Release 无任何变化。
 3. workflow_dispatch 勾选 publish 且 ref 选 tag `vX` → 与场景 1 等价。

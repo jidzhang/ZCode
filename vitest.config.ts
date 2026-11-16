@@ -120,6 +120,9 @@ export default defineConfig({
     projects: [
       {
         extends: true,
+        // 评测工具的回归测试以子进程运行这些脚本；声明为资源后测试可以 import 它们（只得到路径），
+        // 依赖图里有了它们，改脚本时受影响工程测试才会选中 docker/plugin-eval/legal-bench/test/。
+        assetsInclude: ["**/docker/plugin-eval/**/*.{pl,sh,py}"],
         test: {
           name: "unit",
           include: [
@@ -139,6 +142,9 @@ export default defineConfig({
             // vitest 收集不到 node:test 套件只会整文件报错；排除以消除全量跑的假红。
             "packages/feishu-channel/test/**",
             "packages/wechat-channel/test/**",
+            // 上游 3.18.2 新增：agent 崩溃退出诊断回归走 node:test（包脚本
+            // test:agent-crash-diagnostic / CI job），vitest 收集不到套件会整文件假红。
+            "packages/desktop/test/agent-crash-diagnostic.node.test.ts",
             ...forkIsolatedTests,
             // 上游 3.17.1 的 engineering 清单文件只在 engineering 项目（fork 池串行）跑：
             // 同批文件塞进 threads worker 会触发 Windows 原生段错误（0xC0000005，

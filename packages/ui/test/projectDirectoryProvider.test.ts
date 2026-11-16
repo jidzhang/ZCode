@@ -11,6 +11,7 @@ const { read, deviceNames } = vi.hoisted(() => ({ read: vi.fn(), deviceNames: ne
 vi.mock("@/project-sidebar/useProjectTree.js", () => ({ useProjectTree: read }));
 vi.mock("@/hooks/useWorkspaceServices.js", () => ({
   useBaseWorkspaceServices: () => ({ broadcastService: { onMessage: () => ({ dispose() {} }) } }),
+  useOptionalBaseWorkspaceServices: () => undefined,
 }));
 vi.mock("@/hooks/useSourceServerDisplayNames.js", () => ({
   useSourceServerDisplayNames: () => deviceNames,

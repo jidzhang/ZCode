@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { ArrowLeft, LoaderIcon } from "lucide-react";
 import {
   resolveWebRemoteControlWorkspaceKey,
@@ -21,30 +28,38 @@ import { useWebRemoteControlTerminalTransportState } from "@/webRemoteControlTer
 
 type WebRemoteControlMobilePage = "home" | "chat";
 
-interface WebRemoteControlMobileHistoryState {
-  zcodeMobilePage?: WebRemoteControlMobilePage;
-}
-
-export function isWebRemoteControlMobileChatHistoryState(
+function hasMobileHistoryPage(
   state: unknown,
-): state is WebRemoteControlMobileHistoryState {
+  page: WebRemoteControlMobilePage,
+): state is { zcodeMobilePage: WebRemoteControlMobilePage } {
   return (
     typeof state === "object" &&
     state !== null &&
-    (state as WebRemoteControlMobileHistoryState).zcodeMobilePage === "chat"
+    "zcodeMobilePage" in state &&
+    state.zcodeMobilePage === page
   );
 }
 
-function pushWebRemoteControlMobileChatHistory() {
+// fork 兼容导出：历史状态判定（上游 3.18 内部改用 hasMobileHistoryPage，语义同源）。
+export function isWebRemoteControlMobileChatHistoryState(state: unknown): boolean {
+  return hasMobileHistoryPage(state, "chat");
+}
+
+function recordMobileChatHistory() {
   if (typeof window === "undefined") {
     return;
   }
 
-  if (isWebRemoteControlMobileChatHistoryState(window.history.state)) {
+  const state: unknown = window.history.state;
+  if (hasMobileHistoryPage(state, "chat")) {
     return;
   }
 
-  window.history.pushState({ zcodeMobilePage: "chat" }, "");
+  if (hasMobileHistoryPage(state, "home")) {
+    window.history.replaceState({ ...state, zcodeMobilePage: "chat" }, "");
+  } else {
+    window.history.pushState({ zcodeMobilePage: "chat" }, "");
+  }
 }
 
 function resolveInitialWebRemoteControlMobilePage(
@@ -56,10 +71,7 @@ function resolveInitialWebRemoteControlMobilePage(
 
   // Bugfix: 手机端在聊天页刷新时，React 内存状态会丢失，但浏览器会保留当前 history.state。
   // 这里复用点击进入聊天页时写入的 history state，避免刷新后只恢复 task 选中态却回到任务首页。
-  if (
-    typeof window !== "undefined" &&
-    isWebRemoteControlMobileChatHistoryState(window.history.state)
-  ) {
+  if (typeof window !== "undefined" && hasMobileHistoryPage(window.history.state, "chat")) {
     return "chat";
   }
 
@@ -124,7 +136,9 @@ export function WebRemoteControlMobileShell({
 
   const navigateToChat = useCallback(() => {
     setCurrentPage("chat");
-    pushWebRemoteControlMobileChatHistory();
+    // fork 的手机壳始终是移动视口，不经上游的 isMobileViewport effect；进入聊天时直接记录历史，
+    // 复用上游 3.18.2 的 recorder（已有 home 历史项时 replace，否则 push），返回键与箭头才能回列表。
+    recordMobileChatHistory();
   }, []);
 
   const handleTaskHomePreferencesChange = useCallback(
@@ -141,15 +155,12 @@ export function WebRemoteControlMobileShell({
 
   const navigateHome = useCallback(() => {
     setHomeRefreshKey((key) => key + 1);
-    if (
-      typeof window !== "undefined" &&
-      isWebRemoteControlMobileChatHistoryState(window.history.state)
-    ) {
-      window.history.back();
-      return;
-    }
-
+    // 聊天可能是历史首项，浏览器无法后退。箭头直接回列表，并同步历史供刷新恢复。
     setCurrentPage("home");
+    const state: unknown = window.history.state;
+    if (hasMobileHistoryPage(state, "chat")) {
+      window.history.replaceState({ ...state, zcodeMobilePage: "home" }, "");
+    }
   }, []);
 
   useEffect(() => {
@@ -166,7 +177,7 @@ export function WebRemoteControlMobileShell({
     }
 
     const handlePopState = (event: PopStateEvent) => {
-      const nextPage = isWebRemoteControlMobileChatHistoryState(event.state) ? "chat" : "home";
+      const nextPage = hasMobileHistoryPage(event.state, "chat") ? "chat" : "home";
       setCurrentPage(nextPage);
       if (nextPage === "home") {
         setHomeRefreshKey((key) => key + 1);

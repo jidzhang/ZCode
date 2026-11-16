@@ -3,6 +3,7 @@ import { basename, dirname, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import sharedPackage from "../../../../../packages/shared/package.json" with { type: "json" };
+import { collectBuildMetadata } from "../../../../../packages/desktop/scripts/build-metadata.mjs";
 import { stageBuiltinProviderConfig } from "../../../../../scripts/builtin-provider-config.mjs";
 import { stageThirdPartyNotices } from "../../../../../scripts/third-party-notices.mjs";
 
@@ -12,7 +13,12 @@ const executableFileMode = 0o755;
 const packageJsonFile = "package.json";
 const rootPackageVersionError = "Root package.json must define a non-empty string version.";
 const desktopAgentBuildFlag = "--desktop-agent";
-export const resolveBuildExternal = () => ["@zcode/tui", "playwright-core", "koffi"];
+export const resolveBuildExternal = () => [
+  "@zcode/tui",
+  "playwright-core",
+  "koffi",
+  "@napi-rs/keyring",
+];
 
 export const readZodBuildVersion = async () => {
   const sharedPackage = JSON.parse(
@@ -162,6 +168,7 @@ export const buildCli = async ({
   }),
 } = {}) => {
   const cliVersion = await version;
+  const buildMetadata = collectBuildMetadata();
   const outfile = resolve(cliDirectory, "dist/zcode.cjs");
   const sourcemapFile = `${outfile}.map`;
 
@@ -178,6 +185,12 @@ export const buildCli = async ({
     bundle: true,
     define: {
       __CLI_VERSION__: JSON.stringify(cliVersion),
+      // shared/src/version.ts 靠各 bundler 的 define 注入；此前 CLI 链路漏注入，
+      // 随包 runtime（zcode.cjs）的 memory-diagnostics 等消费方全报 0.0.0-dev/unknown
+      // （2026-11-15 实机日志定案）。复用 desktop 同一份 build 元数据，保证各端一致。
+      __ZCODE_VERSION__: JSON.stringify(buildMetadata.appVersion),
+      __ZCODE_COMMIT__: JSON.stringify(buildMetadata.buildCommitId),
+      __ZCODE_BUILD_TIME__: JSON.stringify(buildMetadata.buildTime),
     },
     entryPoints: [resolve(cliDirectory, "src/main.ts")],
     // Ink 7 and yoga-layout use top-level await, so the CJS CLI bundle loads the TUI

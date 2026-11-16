@@ -2,18 +2,22 @@
 
 ## 背景与目标
 
-用户发出的消息可点「编辑」进入行内编辑窗。人手打字常出明显错别字（同音/形近/选词失误），
-多数时候不影响模型理解，但偶尔会误导任务。需要一个人工触发的纠错入口：拿当前模型、以最低
-思考成本，只纠正这段文字里的明显错别字/笔误，用户自己看一眼，可手改也可直接发送。
+用户发出的消息可点「编辑」进入 composer 编辑态（消息正文回填底部输入框）。人手打字常出
+明显错别字（同音/形近/选词失误），多数时候不影响模型理解，但偶尔会误导任务。需要一个人工
+触发的纠错入口：拿当前模型、以最低思考成本，只纠正这段文字里的明显错别字/笔误，用户自己
+看一眼，可手改也可直接发送。
 
 **本功能只建议、永不替用户改写或发送**：纠错是一次独立的辅助模型调用，结果只回填编辑框，
 发送仍由用户手动完成；不满意可用编辑器原生 `Ctrl+Z` / `Cmd+Z` 一步撤销。
 
 ## 入口与交互
 
-- 位置：行内编辑窗底部按钮区。顺序为 `[纠错] [取消] [工作区回卷] [发送]`——
-  纠错按钮排在取消按钮**之前**；工作区回卷按钮保持原位置不动。
-- 文案：按钮名「纠错」（英文 `Fix typos`），图标按钮 + 悬浮提示 + `aria-label`。
+- 位置：**composer 编辑态状态条（ComposerEditBar）**。上游 3.18.2 起消息编辑统一移入
+  底部 composer（行内编辑窗已移除），纠错按钮随之挂在状态条内，顺序为
+  `[工作区回卷] [纠错] [取消]`——纠错排在取消按钮之前；发送仍由 composer 原有发送
+  按钮承担。仅在编辑**用户消息**（userQuery 目标）且编辑态有效时显示；队列项编辑
+  不提供（与旧版行内编辑窗范围一致）。
+- 文案：按钮名「纠错」（英文 `Fix typos`），图标 + 文字按钮 + `aria-label`。
 - 触发：仅手动点击。**任何自动触发（发送前检查、输入实时检查）都不做。**
 - 字数门槛：编辑框文字 `trim()` 后不足 5 个字符时，点击**静默无效果**——
   不进入 loading、不弹任何提示、不发请求。
@@ -22,8 +26,8 @@
 ## 调用链路与所有权
 
 ```
-UI 编辑行按钮
-  → useZCodeAgentService(workspacePath, remoteSessionId, workspaceIdentity)
+ComposerEditBar 纠错按钮（SessionPane 注入 handler，busy 态驱动 spinner）
+  → SessionPane handleProofreadText（会话当前模型 selection 组装）
   → zcodeAgentService.proofreadText({ text, selection })
   → services/text-proofread（contract.ts 契约 + textProofread.ts 实现：
       system prompt + 输出清洗 + 安全闸 + 档位兜底）
@@ -34,6 +38,11 @@ UI 编辑行按钮
   → auxiliaryModelOptions 绑定最低公开档 + 输出预算上限
 ```
 
+结果回填走单向请求负载：SessionPane 持有服务调用与 busy 态，纠错成功后把
+`{ requestId, text }` 传给 ConversationComposer（与 editSubmitRequest 计数器同一模式），
+composer 在 inputApiRef 上执行 `setTextWithUndoStep`——编辑器与撤销栈的所有权
+始终在 composer 内部，SessionPane 不触碰编辑器 API。
+
 - **无会话、无上下文、不进对话历史、不建 turn**：只发送两段消息（system prompt + 原文一处）。
   与「生成提交信息」同一个 workspace 级通道，不新增协议方法。
 - 唯一 owner：编辑框草稿仍是 UI 局部状态；服务端不保存纠错结果、不写会话。切换/取消编辑
@@ -42,7 +51,7 @@ UI 编辑行按钮
 
 ## 模型与思考档位策略
 
-- 模型 = 会话当前模型（`rowContext.modelSelectionView.effectiveSelection`，
+- 模型 = 会话当前模型（SessionPane 的 `modelSelectionView.effectiveSelection`，
   缺失时 `preferredSelection`）；不另挑模型、不读全局默认。
 - 主尝试档位 = 模型公开档位列表的**最低项**（`auxiliaryModelOptions`，与标题生成、
   提交信息生成同一约定），输出预算上限 5000 token。

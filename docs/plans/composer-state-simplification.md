@@ -41,7 +41,7 @@ flowchart TD
 - CLI/投影拥有已生效的会话配置。历史授权 ID 是关联信息，不能在初始化时重新执行授权。
 - 当前 Composer 拥有下一次提交的本地选择，菜单变更不直接改写正在执行的请求。只允许本次 scope 的新授权/工具变化更新对应字段。2026-10-27 补充：已绑定 Session 的显式模型/思考选择会额外提交 `switchModelConfig`，只影响后续 Turn 与新辅助工作；当前 Turn 仍使用启动时冻结的模型。详见 [composer-text-draft-persistence](../ui/composer-text-draft-persistence.md)。
 - 文字草稿只保存恢复输入所需的数据，不保存授权事件的已消费标记、订阅状态或临时初始化标志。
-- Recent 仍只由 accepted Submission 更新，按 workspaceKey 隔离。
+- Recent 由已接纳的提交更新；审批框完全访问另按[权限审批规格](../permission-project-approval.md)更新当前项目的权限。
 - 项目/分组是导航与创建目标，不能借空 Composer 记录持久化；手机页面恢复走已有导航入口。
 
 ## UI Surface Matrix

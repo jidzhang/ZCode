@@ -89,8 +89,12 @@ jobs:
             echo "[macos12-release] $TAG 已存在，仅覆盖上传 dmg"
             gh release upload "$TAG" --repo "$ZCODE_UPDATE_GITHUB_REPO" --clobber "$DMG"
           else
+            # --target 钉在本分支检出 SHA：缺省时 gh 会把新建 tag 指向默认分支头
+            # （2026-11-16 事故：macos12-v3.18.2-safe.1 落到 main 提交，连带干扰
+            # 主通道 publish 的 git describe --exact-match 校验）。
             gh release create "$TAG" \
               --repo "$ZCODE_UPDATE_GITHUB_REPO" \
+              --target "$GITHUB_SHA" \
               --prerelease \
               --title "${TAG}" \
               --notes-file release-notes.md \

@@ -938,7 +938,11 @@ const baseReadHelpConfig = createDesktopHelpConfigReader({
 // isStartupOutboundAllowed 定义在下方（函数声明提升，调用时才求值，无时序问题）。
 const readHelpConfig = async (): Promise<unknown> => {
   if (!(await isStartupOutboundAllowed())) {
-    throw new Error("startup outbound disabled by setting");
+    // code 标记供下游（singleFeatureRollout 等）区分"门控预期失败"与真实网络故障：
+    // 前者降 debug，后者保持 warn。
+    throw Object.assign(new Error("startup outbound disabled by setting"), {
+      code: "STARTUP_OUTBOUND_DISABLED",
+    });
   }
   return baseReadHelpConfig();
 };
@@ -965,7 +969,11 @@ const baseElectronClientConfigsFetcher = createElectronDesktopContextPromptConfi
 // 本地加固：开关关闭时直接抛错，rollout 按“缓存快照/默认值”（均为禁用态）处理，零出站。
 const electronClientConfigsFetcher = async (signal: AbortSignal): Promise<unknown> => {
   if (!(await isStartupOutboundAllowed())) {
-    throw new Error("startup outbound disabled by setting");
+    // code 标记供下游（singleFeatureRollout 等）区分"门控预期失败"与真实网络故障：
+    // 前者降 debug，后者保持 warn。
+    throw Object.assign(new Error("startup outbound disabled by setting"), {
+      code: "STARTUP_OUTBOUND_DISABLED",
+    });
   }
   return baseElectronClientConfigsFetcher(signal);
 };

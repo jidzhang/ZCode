@@ -275,7 +275,10 @@ export const ProjectNodeContent = memo(function ProjectNodeContent({
                     </span>
                     {/* 不同字号按框居中会让设备名基线上浮；文字单独对齐基线，外层图标仍居中。 */}
                     <span className="flex min-w-0 items-baseline gap-2">
-                      <span className="truncate text-ui-base text-foreground">
+                      {/* 层级依据：项目内任务行标题是实色 text-foreground，项目名原为 subtle(70%)
+                          被反馈太虚，5b474294 提到实色后又与任务行同色难区分；取 /85 中间档，
+                          比任务行浅半档恢复层级，仍保持可读。 */}
+                      <span className="truncate text-ui-base text-foreground/85">
                         {project.name}
                       </span>
                       {remoteHost && !hideDeviceName ? (

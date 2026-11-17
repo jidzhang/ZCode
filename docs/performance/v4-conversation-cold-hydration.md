@@ -192,7 +192,10 @@ SQLite full active branch (>= 10621 messages)
    `loadPersistedConversationMaterialization()` 通过 `selectActiveConversationBranch()` 处理
    rewind/branch cut，但不把 provider compact tail 误用为 UI projection 的历史边界。
 3. 1805 个 checkpoint 分布到历史 user message，但不引入 subagent lifecycle；该维度保留工单
-   event-store 形状，不把 child query 混入核心计时。
+   event-store 形状，不把 child query 混入核心计时。`checkpoint_created` 已在冷合并词汇表归为
+   memory-only（与 `rewind_triggered` 同族）：事件仍全量保留、参与 merge/rehydrate 计时，但不再
+   产出 `cold_merge.unclassified_event_preserved` 诊断；因此本 fixture 同时承担等价性与性能观测，
+   不再作为分类缺口的复现。
 4. opt-in CLI spec 依次执行 `mergeColdConversationEvents`、
    `ConversationTopicPublisher.rehydrate` 与首次 `subscribe`，输出 full/active message 和 part 数、
    merge/rehydrate/subscribe/total、event/row 数、initial frame bytes/hash；不以绝对墙钟作为

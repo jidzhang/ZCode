@@ -684,6 +684,12 @@ export const MEMORY_ONLY_EVENT_TYPES = new Set<string>([
   SessionEventType.DynamicWorkflowRunProgress,
   SessionEventType.TargetChanged,
   SessionEventType.RewindTriggered,
+  // checkpoint 与 RewindTriggered 同族：durable 侧只有 workspace_checkpoint 的
+  // session_entry/artifact，transcript 从不合成它；冷投影对 checkpoint 只推进 seq、
+  // 不物化行，按 transcript 派生压制会丢事件。上游漏登记，每次打开带 checkpoint 的
+  // 旧会话都刷 cold_merge.unclassified_event_preserved（实测单会话 40 条，
+  // PERF03-E fixture 1805 条），把"真的漏了词汇表"的信号淹掉，故按 memory-only 保留。
+  SessionEventType.CheckpointCreated,
   SessionEventType.TurnExecutionModelFallback,
   // MCP 准入提示与 Permission* 同类：权威事实在 workspace-mcp-trust 的配置/准入存储里，
   // transcript 从不合成它；投影只用它刷新 workspaceMcpAdmission pending 态。上游漏登记，

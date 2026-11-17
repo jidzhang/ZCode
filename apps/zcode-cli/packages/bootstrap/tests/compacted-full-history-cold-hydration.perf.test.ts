@@ -61,13 +61,13 @@ describe.skipIf(process.env.ZCODE_PERF_REPRO !== "1")(
       });
       const mergeMs = performance.now() - mergeStartedAt;
 
-      const checkpointDiagnostic = merged.diagnostics.find(
-        (diagnostic) => diagnostic.code === "cold_merge.unclassified_event_preserved",
-      );
-      expect(checkpointDiagnostic).toMatchObject({
-        count: CHECKPOINT_COUNT,
-        eventTypes: { [SessionEventType.CheckpointCreated]: CHECKPOINT_COUNT },
-      });
+      // checkpoint_created 已在词汇表归为 memory-only：保留全部事件，但不再产出
+      // unclassified 诊断。fixture 的语义从"复现分类缺口"转为等价性与性能观测。
+      expect(
+        merged.diagnostics.some(
+          (diagnostic) => diagnostic.code === "cold_merge.unclassified_event_preserved",
+        ),
+      ).toBe(false);
       expect(
         merged.events.filter((event) => event.type === SessionEventType.CheckpointCreated),
       ).toHaveLength(CHECKPOINT_COUNT);

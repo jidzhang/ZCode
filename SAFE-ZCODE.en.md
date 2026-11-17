@@ -12,12 +12,29 @@ One goal: quiet by default, online only when it should be.
 - No leaking: conversation sharing is off by default; your chats are never uploaded to official servers.
 - No secret spill: credentials caught in tool summaries, error messages, or permission
   prompts sent to Feishu/WeChat are masked before delivery; paths and links stay readable.
-- Daily builds never self-update; Check for Updates simply reports you are on the latest version.
+- Updates come from this repo only: no auto-download and no startup check by default
+  ("update check" is one of the seven startup requests disabled out of the box);
+  "Check for Updates" queries this repo's Releases once when you click it, and automatic
+  updates start only after you enable "Automatically download and install updates" in settings.
 - Enter just sends: follow-up defaults to "guide" — Enter sends right away and the agent
   continues after the tool call, no need to learn what a queue is. Switch back to "queue"
   if you prefer batching messages.
-- Smaller installer: ~143MB vs ~170MB official for the same version — Alibaba telemetry
-  removed entirely, and sourcemaps and other non-runtime files stripped.
+- Smaller installer: ~194 MiB official vs ~153 MiB here (Windows x64, same-version
+  measurement) — Alibaba telemetry removed entirely, and sourcemaps and other
+  non-runtime files stripped.
+
+## Right-click "Open in ZCode" for folders
+
+Install once, launch once — no admin rights, no extra setup:
+
+- Windows: right-click a folder or drive icon, or blank space inside a folder or on
+  the desktop, and choose "Open in ZCode" to open that directory as a workspace.
+- macOS: select a folder in Finder and pick "Open in ZCode" from the services menu.
+- The menu language follows ZCode's interface language (中文 / English).
+
+Note: the Windows menu is written only to the current user's registry (HKCU) and does
+not affect other accounts. A leftover menu entry after uninstalling is a known state;
+reinstalling and launching once restores it. Linux has no right-click entry yet.
 
 ## Feishu / WeChat channels
 
@@ -38,7 +55,7 @@ servers — no intermediary domains, nothing in between.
 
 - Startup egress: add `"enableStartupOutbound": true` to `~/.zcode/v2/setting.json`
   to restore rollouts, help links, model list, and friends.
-- Logs: `logLevel` (info by default, can be narrowed to errors only) and
+- Logs: `logLevel` (warnings and above by default, can be raised back to info) and
   `logRetentionDays` (14 by default).
 - Release builds update only from this repo, never from official sources.
 

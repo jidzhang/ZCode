@@ -38,7 +38,7 @@ R3 主规格（身份 / 连接 / 迁移）
 | Windows 资产缓存                                         | [缓存 rename](windows-remote-asset-cache-rename-hardening.md)                                                                                                                                                   |
 | Desktop descriptor/archive 网络策略                      | [远端资产网络策略](zcode-agent-remote-deployment.md)                                                                                                                                                            |
 | dev-only Server 直连                                     | [Server workspace](server-remote-workspace-connection.md)；旧进程描述以主规格为准                                                                                                                               |
-| 发布产物与 CI                                            | [CI/CD](../desktop-ci-cd.md)、[产物布局](../desktop-ci-artifact-layout.md)                                                                                                                                      |
+| 发布产物与 CI                                            | 当前=GitHub Actions（[docs/release.md](../release.md)）；GitLab 时代记录见 [CI/CD](../archive/desktop-ci-cd.md)、[产物布局](../archive/desktop-ci-artifact-layout.md)                                                                                                                                      |
 
 ## 问题与验证
 

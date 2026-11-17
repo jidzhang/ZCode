@@ -21,7 +21,7 @@ Windows/Linux 桌面端曾在右上角自绘标题栏放一个箭头合并菜单
 
 ## 测试
 
-- 单测：`packages/ui/test/workspaceHelpMenuButton.test.ts`——`isDesktop` 为真时渲染资源管理器项并调用 `OpenResourceManager`，为假时不渲染。
+- ~~单测：`packages/ui/test/workspaceHelpMenuButton.test.ts`~~（已随上游 3.17.1 单测退役删除，`retired:` 证据）。
 - E2E：`packages/desktop/test/e2e/resource-manager/processes/resource-manager.test.ts`——从问号菜单打开资源管理器窗口。
 
 - 关于入口正式 E2E：`packages/desktop/test/e2e/feedback/help/help-menu-about.test.ts`——真实点击问号菜单，验证关于窗口可见且包含应用名称和版本；检查更新项按产品身份显示，production 下验证点击转发既有 IPC 命令，不下载或安装。无需模型请求；已由用户确认转正，加入默认 desktop E2E 收集。

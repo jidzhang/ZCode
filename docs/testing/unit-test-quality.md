@@ -1,5 +1,15 @@
 # App 单测退役规格
 
+> **fork 修订（2026-11-17）**：本文件原为上游 3.16 的退役规格。fork 自 3.17.1 合并起
+> **拒绝跟随退役业务单测**：恢复了根 Vitest `unit` 项目（`packages/*/test/**` 通配）、
+> `test` / `test:unit` / `test:unit:affected` 命令与 pre-push 的 App 单测增量门
+> （`test:unit:affected --scope push`），managed 模块重新要求 `contract.test.ts`
+> （architecture-policy.yaml + unit 项目 include）。fork 继续新增 App 业务单测
+> （如 `packages/ui/test/holdToTalk.test.ts`、`composerEditBarProofread.test.ts`）。
+> 下文"移除/不再"类陈述凡与上述冲突的，以本注为准；`retired:` 证据标记约定仍然有效
+> （被上游删除且未恢复的历史套件在覆盖矩阵里保持 `retired:` 标记，见
+> `scripts/test/retired-app-unit-evidence.test.mjs`）。`test:coverage` 确实已移除。
+
 ## 决定与范围
 
 2026-10-26：App 全链路不再维护独立业务单测。删除桌面、UI、services、共享协议、
@@ -14,26 +24,35 @@ Web、Provider、RPC、Client、Server 和 Source Server 中的业务 test/spec 
 
 ## 执行入口
 
-- 移除 App 的 test、test:unit、test:unit:affected、test:coverage 命令；工程 affected 选择器限定在工程项目。
+- ~~移除 App 的 test、test:unit、test:unit:affected、test:coverage 命令~~
+  **fork 现实**：`test`（= `test:unit`）、`test:unit`（vitest 全量，仅排除 desktop E2E 与
+  node:test 套件）、`test:unit:affected`（`scripts/run-affected-unit-tests.mjs`）均在
+  `package.json`；仅 `test:coverage` 已移除。
 - 保留独立 test:engineering（Vitest 工程检查）、test:architecture、db:schema:check、
-  CLI/CUA 自有测试命令与现有 E2E 入口。根 Vitest 配置只注册工程测试和 CUA。
+  CLI/CUA 自有测试命令与现有 E2E 入口。根 Vitest 配置注册 **unit + engineering 双项目**。
 - 根 `pnpm typecheck` 纳入 `packages/desktop/tsconfig.renderer-services.json`，检查 Renderer 的远程服务装配是否满足共享接口；工程回归验证该文件确实被根命令及其项目引用覆盖。该窄工程不宣称覆盖完整 Renderer，后者仍由 `tsconfig.renderer.json` 单独检查。
-- pre-push 保留工作区干净、非删除目标解析为 HEAD commit、Lint、schema、架构检查及受影响工程测试；不选择或执行 App 单测。
-- 例外：守隐私或安全边界的定向取样，可以作为按路径触发的 MR CI job 自动执行（不进 pre-push，也不进工程 Vitest 清单），
-  如 `test:auto-update-source-security`、`test:project-token-retry-after`。
-  `test:agent-crash-diagnostic`（`.gitlab/ci/23-agent-crash-diagnostic.yml`）运行
-  `packages/desktop/test/agent-crash-diagnostic.node.test.ts`：Agent 退出诊断与上报 ARMS 前的 stderr 凭据遮盖；
+- pre-push 保留工作区干净、非删除目标解析为 HEAD commit、Lint、schema、架构检查及受影响
+  工程/业务单测：fork 的 `verify:pre-push` 在架构检查之后依次跑
+  `test:unit:affected --scope push`（App 业务单测增量）与 `test:engineering:affected --scope push`。
+- 例外：守隐私或安全边界的定向取样，可以作为按路径触发的 CI job 自动执行（不进 pre-push，也不进工程 Vitest 清单），
+  如 `test:auto-update-source-security-smoke`、`test:project-token-retry-after-smoke`
+  （packages/desktop 包脚本）。
+  `test:agent-crash-diagnostic` 以 node:test 跑 `packages/desktop/test/agent-crash-diagnostic.node.test.ts`
+  （Agent 退出诊断与上报 ARMS 前的 stderr 凭据遮盖；该文件已从 vitest 发现清单排除，避免整文件假红）：
+  Agent 退出诊断与上报 ARMS 前的 stderr 凭据遮盖；
   0xE0000008 在 Linux 上无法由真实进程产生，只能对纯函数取样。
   架构与工程测试继续接收 push ref 信息并使用真实 Git 基线；附注标签先剥离到 commit。
-  工程选择沿用 Vitest 官方依赖图，仅选择 engineering 项目；无关联或全量选择时明确报告未执行，
+  工程选择沿用 Vitest 官方依赖图；unit 与 engineering 两个 affected 选择器独立运行。
+  无关联或全量选择时明确报告未执行，
   全量选择仍按既有规则跳过，不据此宣称测试通过；显式全量使用 test:engineering。
 - 移除只用于 App 单测的 lint-staged 接线、coverage 配置和禁用的 CI 单测 job。
   Vitest 及其修补若仍被工程、CLI 或 CUA 使用，继续保留。
 
 ## 架构和开发规则
 
-managed 模块必需文件改为 module.ts、contract.ts、contract.example.ts、CONTRACT.md。
-架构检查继续校验模块依赖、分层、公开入口、循环和源码规模；不再要求或自动生成 contract.test.ts。
+managed 模块必需文件为 module.ts、contract.ts、contract.example.ts、CONTRACT.md；
+`contract.test.ts` 不作强制要求，但已存在的（当前 6 个）由 unit 项目 include 收录执行，
+不得随意删除。架构检查继续校验模块依赖、分层、公开入口、循环和源码规模。
 生成器不得删除已有测试；CLI/CUA 的独立测试规则保持有效。
 
 App 行为改动先更新 spec，再用既有 E2E、浏览器验收或可重复运行时场景验证；交互改动仍必须维护 E2E。

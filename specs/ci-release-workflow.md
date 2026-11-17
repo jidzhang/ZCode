@@ -15,8 +15,9 @@
   - `push` tag `v*` → 自动全平台构建并发布（PUBLISH=true）。
   - `workflow_dispatch`：默认只构建，产物以 workflow artifacts 上传（保留 7 天）供装机验证，
     不产生任何 GitHub 写操作；勾选 `publish` 且以发布 tag 作为 ref 运行时等同自动发布。
-- **拓扑**：`create-release` → 三个平台 job 并行：
-  - `build-windows`（windows-latest）：win x64；
+- **拓扑**：`create-release` → 两个平台 job 并行：
+  - `build-windows`（windows-2022；2026-11-16 钉回——windows-latest 镜像已无 VS2022，
+    runtime-host CMake 失败，run 43799088154）：win x64；
   - `build-mac`（macos-15）：mac arm64（本机原生构建）。
   - 2026-11-16 收窄（用户定案，无下载量停发）：本通道只发 win-x64 + mac-arm64；
     linux 全线停发，mac x64 改由 macos12 分支的独立 pre-release 通道承担

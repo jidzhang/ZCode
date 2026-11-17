@@ -5,7 +5,7 @@ Husky 的 `.husky/pre-push` 使用当前 PATH 中的 Node / pnpm，执行 `pnpm 
 
 ```text
 Git push ref 输入 → 清理 Git local env → 工作区与目标检查
-                                      → 远程目标清单一致性 → lint → 过时文档措辞 → schema → 架构工具测试 → 变更架构检查 → 受影响工程测试
+                                      → 远程目标清单一致性 → lint → 过时文档措辞 → schema → 架构工具测试 → 变更架构检查 → 受影响业务单测 → 受影响工程测试
 ```
 
 - 已暂存、未暂存或未跟踪修改均阻止 push；忽略 Git 已忽略的文件。
@@ -21,12 +21,17 @@ Git push ref 输入 → 清理 Git local env → 工作区与目标检查
 
 ## 测试边界
 
-App 单测已按 [测试规格](unit-test-quality.md) 退役；不再提供根 test、test:unit、
-test:unit:affected、test:coverage 或 lint-staged 测试入口。
+> fork 修订（2026-11-17）：上游退役 App 业务单测后，fork 自 3.17.1 合并起恢复其基础设施；
+> `verify:pre-push` 在架构检查之后依次执行 `test:unit:affected --scope push`（业务单测增量）
+> 与 `test:engineering:affected --scope push`。仅 `test:coverage` 与 lint-staged 单测接线已移除。
+
+- 业务单测（Vitest `unit` 项目）：pnpm test（= test:unit，全量）；
+  增量 pnpm test:unit:affected --scope push（scripts/run-affected-unit-tests.mjs，
+  与工程 affected 同一套依赖图机制、独立基线）。
 
 - 工程 Vitest：pnpm test:engineering <文件>，精确清单见 scripts/engineering-test-files.json。
 - 工程增量：pnpm test:engineering:affected --base <任务起点>；--dry-run 可预览官方依赖图选中清单。
-  pre-push 使用 --scope push；仅选择 engineering 项目，CLI/CUA 仍走独立入口。
+  pre-push 使用 --scope push；CLI/CUA 仍走独立入口。
   全量选择按既有规则报告跳过，不把跳过当通过；显式全量使用 pnpm test:engineering。
 - 工程执行工具回归：pnpm test:engineering-tools。
 - 架构及推送工具：pnpm test:architecture；schema：pnpm db:schema:check。

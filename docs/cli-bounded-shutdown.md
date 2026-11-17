@@ -18,12 +18,13 @@
 
 ## Clarification log
 
-| 问题                                 | 用户输入 / 现场证据                                                                               | 固定边界                                                                                         |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 只修继承 pipe 是否足够               | 单独打包 `fix(cli): clean up inherited subprocess pipes` 后仍复现                                 | 关闭必须覆盖 execution、browser、MCP 与 CLI entry，不把 pipe 修复当全局 teardown                 |
-| 直接 `process.exit()` 是否作为主修复 | teardown 日志可完成，但 Node event loop 仍可能被未知 handle 保活                                  | 先做所有已知资源的有界清理；仅在 `run()` 已返回且 event loop 仍存活时由 watchdog 强退            |
-| `run()` 返回是否总表示进程应退出     | `__zcode-plugin-host` 的 MCP `server.connect()` 完成后 `main()` 会返回，但 stdio 服务仍应持续运行 | watchdog 只属于一次性 CLI；plugin-host 由 MCP stdio/父进程持有生命周期，不进入一次性退出策略     |
-| 是否必须杀任意 daemon                | POSIX 新 session / Windows reparent 后，父 PID 或原 PGID 不再足以寻址                             | 同组后代尽力清杀；失去 ownership 时销毁本端 pipe 并保证 CLI 退出，OS 级绝对 containment 另立能力 |
+| 问题                                 | 用户输入 / 现场证据                                                                                                                                                                | 固定边界                                                                                                                           |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 只修继承 pipe 是否足够               | 单独打包 `fix(cli): clean up inherited subprocess pipes` 后仍复现                                                                                                                  | 关闭必须覆盖 execution、browser、MCP 与 CLI entry，不把 pipe 修复当全局 teardown                                                   |
+| 直接 `process.exit()` 是否作为主修复 | teardown 日志可完成，但 Node event loop 仍可能被未知 handle 保活                                                                                                                   | 先做所有已知资源的有界清理；仅在 `run()` 已返回且 event loop 仍存活时由 watchdog 强退                                              |
+| `run()` 返回是否总表示进程应退出     | `__zcode-plugin-host` 的 MCP `server.connect()` 完成后 `main()` 会返回，但 stdio 服务仍应持续运行                                                                                  | watchdog 只属于一次性 CLI；plugin-host 由 MCP stdio/父进程持有生命周期，不进入一次性退出策略                                       |
+| 是否必须杀任意 daemon                | POSIX 新 session / Windows reparent 后，父 PID 或原 PGID 不再足以寻址                                                                                                              | 同组后代尽力清杀；失去 ownership 时销毁本端 pipe 并保证 CLI 退出，OS 级绝对 containment 另立能力                                   |
+| MCP stdio teardown 超过单步预算      | 2026-11-17 实机日志出现 `mcp_pool.shutdown.failed` + `Protocol cleanup timed out`（每步 400ms；stdio 终止阶梯 SIGINT 250 + SIGTERM 750 + SIGKILL 250 ≈ 1.25s，另有 pgrep/ps 查询） | accepted：单步预算耗尽后 bounded cleanup 放弃该步并继续退出；该 warn 属预期诊断，不代表进程泄漏或关闭失败，不为此放宽全局 deadline |
 
 ## Boundary decisions
 

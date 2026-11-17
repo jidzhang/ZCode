@@ -646,6 +646,10 @@ export function WorkspaceHeaderTitleSection({
                           previousState: { pinned: isPinned, archived: false },
                           nextState: { pinned: isPinned, archived: false },
                         });
+                        toast(intl.formatMessage({ id: "taskList.regenerateTitleSuccess" }), {
+                          variant: "success",
+                          dedupeKey: "task-title-regenerated",
+                        });
                       }
                     })
                     .catch(() => {

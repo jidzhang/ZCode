@@ -54,12 +54,16 @@ export function useProjectTaskActions(task: ProjectTask, refresh: () => Promise<
     try {
       const result = await mutate({ kind: "regenerate-title" });
       await refresh();
+      toast(intl.formatMessage({ id: "taskList.regenerateTitleSuccess" }), {
+        variant: "success",
+        dedupeKey: "task-title-regenerated",
+      });
       return result ?? null;
     } catch (error) {
       report("regenerateTitle", error);
       return null;
     }
-  }, [mutate, refresh, report]);
+  }, [intl, mutate, refresh, report]);
   const pin = useCallback(
     async (_id: string, pinned: boolean) => {
       try {

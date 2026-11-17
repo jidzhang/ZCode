@@ -271,7 +271,14 @@ export function TaskGroupedView({
       setRenameDraft(task.title ?? "");
     },
     onRegenerateTitle: (task: ProjectTask) =>
-      action(() => mutate(task, { kind: "regenerate-title" }), "taskList.regenerateTitleFailed"),
+      action(async () => {
+        const result = await mutate(task, { kind: "regenerate-title" });
+        toast(intl.formatMessage({ id: "taskList.regenerateTitleSuccess" }), {
+          variant: "success",
+          dedupeKey: "task-title-regenerated",
+        });
+        return result;
+      }, "taskList.regenerateTitleFailed"),
     onMarkTaskAsUnread: (task: ProjectTask) =>
       action(() => mutate(task, { kind: "mark-unread" }), "taskList.markAsUnreadFailed"),
   };

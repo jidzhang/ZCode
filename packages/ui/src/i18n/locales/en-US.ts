@@ -3560,6 +3560,7 @@ const enUS: Record<string, string> = {
   "taskList.renamePlaceholder": "Task name",
   "taskList.renameFailed": "Could not rename task",
   "taskList.regenerateTitle": "Auto-name task",
+  "taskList.regenerateTitleSuccess": "Task auto-named",
   "taskList.regenerateTitleFailed": "Could not auto-name task",
   "taskList.pinFailed": "Could not update pinned state",
   "taskList.restartUnsupported":

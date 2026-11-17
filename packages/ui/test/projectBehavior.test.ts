@@ -8,6 +8,7 @@ import { ProjectTaskRows } from "@/project-sidebar/ProjectTaskRows.js";
 import { ProjectNode } from "@/project-sidebar/ProjectNode.js";
 import { ProjectTaskListContext } from "@/project-sidebar/ProjectTaskListContext.js";
 import { useProjectSidebarPreferences } from "@/project-sidebar/useProjectSidebarPreferences.js";
+import { useProjectTaskActions } from "@/project-sidebar/useProjectTaskActions.js";
 import { selectProjectRows, projectHasUnread } from "@/project-sidebar/view.js";
 import { attachTaskListRowActivity } from "@/v4/taskListRowActivity.js";
 import { toast } from "@/components/ui/toast.js";
@@ -348,6 +349,35 @@ it("keeps the active task and reports an archive failure", async () => {
   expect(mocks.removeTaskState).not.toHaveBeenCalled();
   expect(refresh).not.toHaveBeenCalled();
   expect(toast).toHaveBeenCalledWith("taskList.archiveFailed");
+});
+
+it("shows a success toast after manual auto-naming", async () => {
+  mocks.mutateTask.mockResolvedValueOnce(null);
+  const { result } = renderHook(() => useProjectTaskActions(task("one"), refresh));
+  await act(async () => {
+    await result.current.regenerateTitle();
+  });
+  expect(mocks.mutateTask).toHaveBeenCalledWith(
+    expect.objectContaining({
+      mutation: { kind: "regenerate-title" },
+      address: expect.objectContaining({ taskId: "one", workspacePath: "/one" }),
+    }),
+  );
+  expect(refresh).toHaveBeenCalled();
+  expect(toast).toHaveBeenCalledWith("taskList.regenerateTitleSuccess", {
+    variant: "success",
+    dedupeKey: "task-title-regenerated",
+  });
+});
+
+it("keeps auto-naming failure feedback and never shows the success toast", async () => {
+  mocks.mutateTask.mockRejectedValueOnce(new Error("offline"));
+  const { result } = renderHook(() => useProjectTaskActions(task("one"), refresh));
+  await act(async () => {
+    await result.current.regenerateTitle();
+  });
+  expect(toast).toHaveBeenCalledWith("taskList.regenerateTitleFailed");
+  expect(toast).not.toHaveBeenCalledWith("taskList.regenerateTitleSuccess", expect.anything());
 });
 
 it("shows empty project rows but keeps an empty pinned section absent", () => {

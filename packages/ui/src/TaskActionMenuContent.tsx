@@ -99,6 +99,32 @@ export function TaskActionMenuContent({
       >
         {intl.formatMessage({ id: isPinned ? "taskList.unpin" : "taskList.pin" })}
       </Item>
+      {/* 合并上游 3.18 时本组件整块被上游版本覆盖，fork 的「重命名任务」「自动命名」随之丢失；
+          此处按 fork 语义补回，顺序与分组视图右键菜单（GroupedTaskContextMenuContent）保持一致。 */}
+      <Item
+        disabled={taskTargetActionsDisabled}
+        title={disabledReason}
+        onSelect={() => {
+          if (!taskTargetActionsDisabled) {
+            onStartRenameTask();
+          }
+        }}
+      >
+        {intl.formatMessage({ id: "taskList.rename" })}
+      </Item>
+      {onRegenerateTitle ? (
+        <Item
+          disabled={taskTargetActionsDisabled}
+          title={taskTargetActionsDisabled ? disabledReason : undefined}
+          onSelect={() => {
+            if (!taskTargetActionsDisabled) {
+              onRegenerateTitle();
+            }
+          }}
+        >
+          {intl.formatMessage({ id: "taskList.regenerateTitle" })}
+        </Item>
+      ) : null}
       {onArchiveTask ? (
         <Item
           disabled={taskTargetActionsDisabled || Boolean(archiveDisabledReason)}

@@ -3324,6 +3324,7 @@ const zhCN: Record<string, string> = {
   "taskList.renamePlaceholder": "任务名称",
   "taskList.renameFailed": "重命名任务失败",
   "taskList.regenerateTitle": "自动命名",
+  "taskList.regenerateTitleSuccess": "已自动命名",
   "taskList.regenerateTitleFailed": "自动命名失败",
   "taskList.pinFailed": "更新置顶状态失败",
   "taskList.restartUnsupported": "当前 Agent 版本不支持重启任务，请先更新。",

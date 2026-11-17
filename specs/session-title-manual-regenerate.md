@@ -26,8 +26,8 @@ UI 右键菜单「自动命名」
 
 - 标题唯一 owner 仍是 CLI session store（title/titleSource）；UI 与 task-index 只投影。
 - ACK 同步等待生成完成（单次小模型请求，timeoutMs 默认 60s；v4 命令通道无客户端超时）。
-  成功 status=accepted（不新增 result variant，标题经事件流更新列表）；失败 status=failed
-  → adapter 抛错 → UI toast。
+  成功 status=accepted（不新增 result variant，标题经事件流更新列表），UI toast
+  「已自动命名」确认完成；失败 status=failed → adapter 抛错 → UI toast「自动命名失败」。
 - 幂等性：命令带独立 commandId；重复点击=再次生成，last-write-wins，可接受。
 
 ## core 语义（runtime.regenerateSessionTitle）
@@ -58,8 +58,10 @@ UI 右键菜单「自动命名」
 
 ## 验收场景
 
-1. Stop 掉首轮的会话：右键「自动命名」→ 标题更新为多轮素材生成的新标题，titleSource=generated。
-2. 已手动重命名（custom）的会话：点「自动命名」→ 标题被生成结果覆盖，列表投影同步更新。
+1. Stop 掉首轮的会话：右键「自动命名」→ 标题更新为多轮素材生成的新标题，titleSource=generated，
+   并出现成功 toast。
+2. 已手动重命名（custom）的会话：点「自动命名」→ 标题被生成结果覆盖，列表投影同步更新，
+   并出现成功 toast。
 3. 无用户消息的空会话：命令 failed（fault session_title_no_input），UI toast，标题不变。
 4. 生成失败（模型错误/超时）：命令 failed，标题不变。
 5. 运行中的任务点「自动命名」：允许（标题 sidecar 独立请求，不打断 turn）。

@@ -38,8 +38,12 @@ export async function cleanupProtocolRuntime(options: {
         }),
       ]);
     } catch (error) {
+      // 只记 errorType 时（上游原样），实机日志只剩 "errorType":"Error"，
+      // 无法区分是关闭超时、连接池占用还是真实异常；补 message/stack 供日志定因。
       options.logger.warn(`ZCode Protocol ${resource} shutdown failed`, {
         errorType: error instanceof Error ? error.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        ...(error instanceof Error && error.stack ? { errorStack: error.stack } : {}),
         event: `zcode_protocol.${resource}.shutdown.failed`,
         module: "bootstrap.zcode_protocol",
       });

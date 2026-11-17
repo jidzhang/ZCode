@@ -96,7 +96,10 @@ function readWebRemoteControlDialogSource() {
 describe("WebRemoteControlDialog layout", () => {
   afterEach(() => {
     cleanup();
-    platformMock.getWebRemoteControlStatus.mockClear();
+    // 状态轮询每 1s 会再次读取平台状态；用例内的持久 mock 必须复位，
+    // 否则会串到后续用例，也会让只 mock 一次的用例在慢机器上被默认 idle 覆盖。
+    platformMock.getWebRemoteControlStatus.mockReset();
+    platformMock.getWebRemoteControlStatus.mockResolvedValue({ status: "idle" });
     platformMock.startWebRemoteControl.mockClear();
     platformMock.refreshWebRemoteControlPairing.mockClear();
     platformMock.stopWebRemoteControl.mockClear();
@@ -124,7 +127,8 @@ describe("WebRemoteControlDialog layout", () => {
   });
 
   it("keeps the running status and shows no feedback when native refresh is cancelled", async () => {
-    platformMock.getWebRemoteControlStatus.mockResolvedValueOnce({
+    // 弹窗每 1s 轮询状态；只 mock 一次会被下一拍默认 idle 覆盖，与真实“会话仍在运行”不符。
+    platformMock.getWebRemoteControlStatus.mockResolvedValue({
       status: "running",
       sessionId: "sid-1",
       mobileConnected: true,

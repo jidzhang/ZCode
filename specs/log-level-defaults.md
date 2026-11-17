@@ -46,8 +46,9 @@ fork 早已引入 `settings.json` 的 `logLevel` 阈值（`packages/desktop/src/
    `config.json` 的 `logging.level`。
 6. CLI 侧 `logging.level` 保持现状（死配置不新增接线），避免出现两套配置源。
    Agent 进程的级别只认 spawn env。
-7. E2E 依赖 info 级日志做断言，必须与默认值同步：三个用例在启动前
-   `seedSettings({ logLevel: "info" })`，否则读到空日志直接失败。
+7. E2E 依赖 info 级日志做断言，必须与默认值同步：info 基线由
+   `packages/desktop/wdio.conf.ts` 全局 seed 写入（`logLevel: "info"`，注释明示
+   产品默认 warn、E2E 需读 info 行），用例不再各自 seedSettings。
 
 ## 验收场景
 

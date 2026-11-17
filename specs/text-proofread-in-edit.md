@@ -54,7 +54,7 @@ composer 在 inputApiRef 上执行 `setTextWithUndoStep`——编辑器与撤销
 - 模型 = 会话当前模型（SessionPane 的 `modelSelectionView.effectiveSelection`，
   缺失时 `preferredSelection`）；不另挑模型、不读全局默认。
 - 主尝试档位 = 模型公开档位列表的**最低项**（`auxiliaryModelOptions`，与标题生成、
-  提交信息生成同一约定），输出预算上限 5000 token。
+  提交信息生成同一约定）；输出预算沿用调用方会话默认，不设独立上限。
 - **档位被拒的兜底（不静默藏着）**：core 已对"档位被上游拒绝"产出点名错误
   （`specs/reasoning-degrade-retry.md`）。命中该错误时，用**会话当前选择的档位**
   重试一次（该组合在本会话已跑通，通常可用），成功则：

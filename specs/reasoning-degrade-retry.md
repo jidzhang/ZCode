@@ -31,7 +31,7 @@ minimal/low/medium/high/xhigh），辅助调用与探针在运行时以 400
 ## D：测试按钮逐档验证（core 探针循环）
 
 1. `testModelConnectivity` 对 values 每一档各打一枪最小探针（预算沿用
-   `specs/model-connectivity-probe.md`：有效 max，下限 16）。
+   `specs/model-connectivity-probe.md`：有效 max，不设独立下限——早期 16 下限已废弃）。
 2. 某档失败只记不抛，继续下一档；收尾时失败档汇总进一条错误：
    `模型连通性测试 1/3 个档位失败：disabled（…）`。
    取消传播：abort 后不再发起剩余档位（档间检查），已中止的档不计入失败。

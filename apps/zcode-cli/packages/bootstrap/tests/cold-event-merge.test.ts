@@ -1494,6 +1494,38 @@ describe("cold conversation three-source merge", () => {
   });
 });
 
+describe("checkpoint cold merge classification", () => {
+  it("preserves checkpoint_created as memory-only without unclassified diagnostics", () => {
+    // 实机日志（2026-11-17）：打开带历史的旧会话时，cold_merge.unclassified_event_preserved
+    // 单次聚合 40 条 checkpoint_created（PERF03-E fixture 为 1805 条）。它与 RewindTriggered
+    // 同族：durable 侧只有 workspace_checkpoint 的 session_entry/artifact，transcript 从不
+    // 合成它；冷投影对 checkpoint 只推进 seq、不物化行，按 transcript 派生压制会丢事件，
+    // 因此归 MEMORY_ONLY——同样保留事件，只去掉淹没真实词汇表缺口的诊断。
+    const checkpoints = [1, 2].map((index) =>
+      event(index, SessionEventType.CheckpointCreated, {
+        checkpointId: `checkpoint-${index}`,
+        messageId: `message-${index}`,
+        scope: "workspace",
+        snapshotRef: "snapshot-ref",
+      }),
+    );
+    const merged = mergeColdConversationEvents({
+      memoryEvents: checkpoints,
+      messages: [],
+      sessionId: "s1",
+    });
+
+    expect(
+      merged.events.filter((item) => item.type === SessionEventType.CheckpointCreated),
+    ).toHaveLength(checkpoints.length);
+    expect(
+      merged.diagnostics.some(
+        (diagnostic) => diagnostic.code === "cold_merge.unclassified_event_preserved",
+      ),
+    ).toBe(false);
+  });
+});
+
 describe("workspace mcp admission cold merge classification", () => {
   it("preserves the admission event as memory-only without unclassified diagnostics", () => {
     // 实机日志（2026-11-15/16）：每次冷恢复刷 cold_merge.unclassified_event_preserved，

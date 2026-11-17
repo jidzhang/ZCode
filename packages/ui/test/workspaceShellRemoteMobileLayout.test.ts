@@ -1,6 +1,7 @@
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { WorkspaceShellLayout } from "@/app-shell/WorkspaceShellLayout.js";
 import type { V4ChatPaneProps } from "@/v4/V4ChatPane.js";
 import { V4_PRIMARY_PANE_ID } from "@/v4/paneLayoutStore.js";
 import { useWorkbenchGroupStore } from "@/v4/workbenchGroupStore.js";
@@ -411,8 +412,10 @@ function createWorkspaceShellProps() {
 async function renderWorkspaceShell(
   overrides: Partial<ReturnType<typeof createWorkspaceShellProps>> = {},
 ) {
-  const { WorkspaceShellLayout } = await import("@/app-shell/WorkspaceShellLayout.js");
-
+  // 这里曾在用例内动态 import WorkspaceShellLayout：该模块图很大，本机冷缓存下首次
+  // transform 接近 30s 的 testTimeout。超时后 import continuation 仍会渲染并把 props
+  // push 进模块级 capturedChatPaneProps，串到下一个场景造成"渲染了 2 次"的假失败。
+  // 改为文件级静态 import，把转换成本移出计时区间，也让断言只看到当前场景的渲染。
   return renderToStaticMarkup(
     createElement(WorkspaceShellLayout, {
       ...createWorkspaceShellProps(),

@@ -685,6 +685,11 @@ export const MEMORY_ONLY_EVENT_TYPES = new Set<string>([
   SessionEventType.TargetChanged,
   SessionEventType.RewindTriggered,
   SessionEventType.TurnExecutionModelFallback,
+  // MCP 准入提示与 Permission* 同类：权威事实在 workspace-mcp-trust 的配置/准入存储里，
+  // transcript 从不合成它；投影只用它刷新 workspaceMcpAdmission pending 态。上游漏登记，
+  // 每次带准入事件冷恢复都刷一条 unclassified_event_preserved（实测每会话 1 条），
+  // 把"真的漏了词汇表"的信号淹掉，与 DynamicWorkflowRunProgress 同因补入。
+  SessionEventType.WorkspaceMcpAdmissionUpdated,
 ]);
 
 export const TRANSCRIPT_DERIVED_EVENT_TYPES = new Set<string>([

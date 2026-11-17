@@ -1493,3 +1493,30 @@ describe("cold conversation three-source merge", () => {
     ).toBe(false);
   });
 });
+
+describe("workspace mcp admission cold merge classification", () => {
+  it("preserves the admission event as memory-only without unclassified diagnostics", () => {
+    // 实机日志（2026-11-15/16）：每次冷恢复刷 cold_merge.unclassified_event_preserved，
+    // eventTypes 里 workspace_mcp_admission_updated 每会话 1 条。它应走 MEMORY_ONLY
+    // 词表：同样保留事件，只是不再把"真漏了词汇表"的信号淹掉。
+    const admission = event(
+      1,
+      SessionEventType.WorkspaceMcpAdmissionUpdated,
+      { pendingCount: 1, pending: [{ serverId: "srv", serverName: "srv" }] },
+    );
+    const merged = mergeColdConversationEvents({
+      memoryEvents: [admission],
+      messages: [],
+      sessionId: "s1",
+    });
+
+    expect(
+      merged.events.some((item) => item.type === SessionEventType.WorkspaceMcpAdmissionUpdated),
+    ).toBe(true);
+    expect(
+      merged.diagnostics.some(
+        (diagnostic) => diagnostic.code === "cold_merge.unclassified_event_preserved",
+      ),
+    ).toBe(false);
+  });
+});

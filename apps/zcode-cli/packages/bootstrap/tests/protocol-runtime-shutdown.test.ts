@@ -185,6 +185,29 @@ describe("protocol runtime resource ownership", () => {
     expect(telemetry.shutdown).toHaveBeenCalledOnce();
     await cleanup;
   });
+
+  it("logs shutdown failures with message and stack, not only the error type", async () => {
+    // 实机日志（2026-11-14）只见 "errorType":"Error"，无法区分超时/占用/真实异常；
+    // 字段补齐后单条 warn 即可定因。
+    const warn = vi.fn();
+    const cleanup = cleanupProtocolRuntime({
+      logger: { warn } as unknown as Logger,
+      mcpConnectionPool: {
+        close: () => {
+          throw new Error("pool still draining");
+        },
+      },
+    });
+    await cleanup;
+
+    const call = warn.mock.calls.find(([message]) => String(message).includes("mcp_pool"));
+    expect(call).toBeDefined();
+    const fields = call?.[1] as Record<string, unknown>;
+    expect(fields.event).toBe("zcode_protocol.mcp_pool.shutdown.failed");
+    expect(fields.errorType).toBe("Error");
+    expect(fields.errorMessage).toBe("pool still draining");
+    expect(String(fields.errorStack)).toContain("pool still draining");
+  });
 });
 
 describe("session lifecycle shutdown reentry", () => {

@@ -56,7 +56,10 @@ jobs:
 
   build-windows:
     needs: create-release
-    runs-on: windows-latest
+    # 2026-11-16：windows-latest（Server 2025）已无 VS2022，prepare:windows-runtime-host 的
+    # CMake "Visual Studio 17 2022" 生成器找不到实例（run 43799088154）；钉回自带 VS2022 的
+    # windows-2022 镜像。ssh2 的 node-gyp 同源受益。
+    runs-on: windows-2022
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4

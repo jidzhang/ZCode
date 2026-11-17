@@ -15,12 +15,17 @@
    git push origin main
    git push origin v3.14.4
    ```
-   push `v*` tag 即触发：预建 Release → windows/linux/mac 三平台并行构建
-   （win job 内串行 x64/arm64）→ 自动上传资产并合并 channel yml → 上传后回读校验。
+   push `v*` tag 即触发：预建 Release → 两个平台 job 并行构建（win-x64 + mac-arm64，
+   2026-11-16 收窄：win-arm64/linux 停发，mac x64 由 macos12 分支独立通道承担）
+   → 自动上传资产并合并 channel yml → 上传后回读校验。
 3. **确认 Actions 全绿**，到 Release 页面核对资产；失败平台可只重跑该 job，
    或用方式二本地补发该平台（幂等）。
 - **不发布的构建演练**：Actions 页面手动运行（`workflow_dispatch`，默认不勾 publish），
-  三平台只构建并把安装包作为 workflow artifacts 上传（保留 7 天）供装机验证，不写 Release。
+  两平台只构建并把安装包作为 workflow artifacts 上传（保留 7 天）供装机验证，不写 Release。
+- **macos12 通道**（`macos12-release.yml`）：手动 dispatch，在 macos12 分支
+  （Electron 43.8.7 钉版，服务 macOS 12 老机型）上构建 mac x64 dmg，以
+  `macos12-v*` tag 发 pre-release（单 dmg、无 channel yml、非 latest）。
+  行为与坑见 [specs/electron/macos12-release.md](../specs/electron/macos12-release.md)。
 - 日常提交想跑 lint/typecheck 的话另行添加 CI workflow，本 workflow 只在 tag/手动触发时运行。
 
 ## 方式二：本机手动发布（CI 兜底/补发平台）
@@ -62,10 +67,9 @@
    set HTTPS_PROXY=http://<代理地址>:<端口>
    set HTTP_PROXY=http://<代理地址>:<端口>
    scripts\release-manual\one-click-release-asset.bat win x64
-   scripts\release-manual\one-click-release-asset.bat win arm64
    ```
-   - macOS 发布机：`./scripts/release-manual/one-click-release-asset.sh mac arm64`（或 `mac x64`）
-   - Linux 发布机：`./scripts/release-manual/one-click-release-asset.sh linux arm64`（或 `linux x64`）
+   - macOS 发布机：`./scripts/release-manual/one-click-release-asset.sh mac arm64`
+     （发布矩阵已收窄为这两个平台；脚本仍接受 `win arm64`/`linux *` 参数但本通道停发）
 5. **确认输出**：脚本输出 `DONE` 表示该平台资产已上传并通过"名称 + 字节数"逐项校验、
    channel yml 已正确合并。任何失败都会列出确切原因，修复后重跑同一条命令即可
    （重跑幂等：`--clobber` 覆盖同名资产，yml 按架构条目合并）。
@@ -78,9 +82,8 @@
 ## 脚本自动处理的部分（无需人工干预）
 
 - Release 不存在时自动创建**已发布**状态（不会产生需要人工点击发布的 draft）。
-- 多架构 channel yml 合并：Windows 所有架构共用 `latest.yml`、macOS 共用 `latest-mac.yml`，
-  每个架构一个 `files[]` 条目，后发架构不会覆盖先发架构；linux 按架构使用
-  `latest-linux.yml` / `latest-linux-arm64.yml`，天然隔离。
+- 多架构 channel yml 合并：Windows 共用 `latest.yml`、macOS 共用 `latest-mac.yml`，
+  每个架构一个 `files[]` 条目，后发架构不会覆盖先发架构（当前矩阵各只剩一个架构）。
 - 上传后回读 Release 资产逐项校验（electron-builder 原发布器"静默跳过仍报成功"的缺陷由这一步兜底）。
 - 环境预检：gh 认证、pnpm 可用、HEAD 精确位于发布 tag（`ZCODE_ALLOW_UNTAGGED=1` 可显式跳过）、
   通道配置（`ZCODE_UPDATE_CHANNEL=github` + `ZCODE_UPDATE_GITHUB_REPO`）。

@@ -16,14 +16,16 @@
 
 ## 删了什么
 
-`packages/desktop/electron-builder.config.js` 的 `PACKAGING_PRUNE_PATTERNS` 新增 71 个
-`!node_modules/<pkg>/**` 排除项（见该文件内 2026-10-31 注释块，含逐包清单）。这些包全部
+`packages/desktop/electron-builder.config.js` 的 `PACKAGING_PRUNE_PATTERNS` 新增 84 个
+`!node_modules/<pkg>/**` 排除项（初始 71 个，见该文件内 2026-10-31 注释块与后续追加，
+含逐包清单）。这些包全部
 满足以下三个条件，缺一不删：
 
 1. **main 侧零引用**：在 main/host/preload/services/rpc/client/provider/provider-node/
    shared/server 全部源码（约 1300 文件）中，`import`/`require`/动态字符串引用计数为 0。
 2. **不在运行时外部依赖闭包内**：tsup 的 `desktopNodeRuntimeExternals`
-   （electron、node-pty、ssh2、undici、@larksuiteoapi/node-sdk、yaml、node-forge、yauzl）
+   （electron、node-pty、@napi-rs/keyring、ssh2、undici、@larksuiteoapi/node-sdk、yaml、
+   node-forge、yauzl，共 9 个）
    及 playwright-core 的 package.json 依赖递归闭包（共 66 包）里的包一律保留——
    该闭包把 axios、protobufjs、ws、qs 等从候选清单中救回。
 3. **renderer/web 已自带**：这些包只被 `packages/ui`/`packages/web` 使用，两端经 Vite
@@ -75,9 +77,12 @@ store 仅比 maximum 大 1 MiB：安装包主体在 NSIS 之前已被 electron-b
 高熵的 app-64.7z，NSIS 的 solid LZMA 对它压不动，最终体积被收敛到同一水平线，
 档位只影响 7z/NSIS 两层怎么分工，不改地板。
 
-结论：**176.2 MiB 就是当前数据集的体积地板**；compression 配置已从
-electron-builder.config.js 移除（还原上游默认 normal，避免留一个无效选项误导
-后来者）。再想减体积只有两条路：继续减数据（收益递减），或换收发形态
+结论：**176.2 MiB 是 3.17.x 数据集的体积地板**（compression 配置已从
+electron-builder.config.js 移除，还原上游默认 normal，避免留一个无效选项误导
+后来者）。上游 3.18 合并后数据集反而变小：CI 发布的 v3.18.2-safe.1 win-x64
+实测 153.0 MiB（160,402,459 字节；本地 one-click 构建因多注入 CUA helper 等
+资产约 180 MiB，与 CI 产物口径不同）——"地板"随数据集移动，该数字不作为
+长期承诺。再想减体积只有两条路：继续减数据（收益递减），或换收发形态
 （如差分更新、按需下载组件），均不在本期范围。
 
 ## 附：审计脚本要点（可复现）

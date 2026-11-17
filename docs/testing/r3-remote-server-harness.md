@@ -304,7 +304,7 @@ Host / Agent 最大数量各为 1。RSS 首尾采样 1220 / 1211 MB；这只是�
 | 13 受限环境安装              | `d` / `e` / `f` / `g`                      | noexec-tmp / no-tar / no-forwarding / old-glibc（注入返回 `glibc 2.17` 的 getconf）；old-glibc-runtime 需真实 glibc 2.27 镜像，未入队，见 harness README 本机运行 |
 | 14 live                      | `a`，docker transport 用 `dt`              | live-zapi / live-bigmodel-team / docker-transport                                                                                                                 |
 
-队列覆盖：队列手工维护，没有自动门禁核对它与远程 spec 是否一致；新增远程 case 时须同步入队。现有档位造不出 fixture 的用例登记在 `packages/desktop/scripts/r3-remote-spec-inventory.mjs` 的 `DEDICATED_FIXTURE_SPECS`，必须显式报告阻塞，不得从计划分母消失。RDUX-16 已在 case 内真实首装，再通过本 run 的 staged archive 构造同版本异 SHA 更新；不再要求人工预装。更新与安装故障解除本 run 的硬链接后再写，公共构建包保持只读。
+队列覆盖：队列手工维护，没有自动门禁核对它与远程 spec 是否一致；新增远程 case 时须同步入队。原登记脚本 `packages/desktop/scripts/r3-remote-spec-inventory.mjs` 已删除（`DEDICATED_FIXTURE_SPECS` 清单随脚本退役）；现有档位造不出 fixture 的用例直接在本队列标注阻塞，不得从计划分母消失。RDUX-16 已在 case 内真实首装，再通过本 run 的 staged archive 构造同版本异 SHA 更新；不再要求人工预装。更新与安装故障解除本 run 的硬链接后再写，公共构建包保持只读。
 
 ### 项目导航迁移与用例价值
 

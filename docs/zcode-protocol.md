@@ -60,13 +60,17 @@ epoch、CAS 和 product guard 裁决。
 
 | 分组          | 命令                                                                                    |
 | ------------- | --------------------------------------------------------------------------------------- |
-| 会话/输入     | `createSession`、`createSelectionSideSession`、`sendText`、`sendGoalCommand`、`renameSession`、`deleteSession` |
-| 生成控制      | `stop`、`compact`、`retryTurn`、`editUserQuery`、`forkAssistant`                        |
+| 会话/输入     | `createSession`、`createSelectionSideSession`、`sendText`、`sendGoalCommand`、`renameSession`、`regenerateSessionTitle`、`discardSharedContext`、`deleteSession` |
+| 生成控制      | `stop`、`stopSubagent`、`compact`、`retryTurn`、`editUserQuery`、`forkAssistant`        |
 | 文件回退      | `applyFileRewind`                                                                       |
-| 队列          | `sendQueuedNow`、`lockQueueItemEdit`、`editQueueItem`、`releaseQueueItemEdit`、`reorderQueueItem`、`deleteQueueItem`、`setAutoDrain` |
+| 队列          | `sendQueuedNow`、`lockQueueItemEdit`、`editQueueItem`、`releaseQueueItemEdit`、`applyQueueItemsConfig`、`reorderQueueItem`、`deleteQueueItem`、`setAutoDrain` |
 | 配置          | `switchModelConfig`、`switchCollaborationMode`、`setFollowupMode`                       |
-| Goal/后台工作 | `pauseGoal`、`resumeGoal`、`cancelBackgroundWork`                                       |
-| 阻塞交互      | `resolveInteraction`、`snoozeInteractionAutoResolution`                                |
+| Goal/后台工作 | `pauseGoal`、`resumeGoal`、`cancelBackgroundWork`、`resumeWorkflowRun`、`startSavedWorkflow`、`amendWorkflowRunSettings` |
+| 阻塞交互      | `resolveInteraction`、`snoozeInteractionAutoResolution`、`requestWorkspaceHookReview`、`respondWorkspaceHookReview`、`toggleWorkspaceHookReviewItem`、`revokeWorkspaceHookTrust` |
+| 反馈/指标     | `setAssistantFeedback`、`setHighspeedMetrics`                                           |
+
+`regenerateSessionTitle` 是任务右键菜单「自动命名」的手动标题重生成命令，与 `renameSession`
+（titleSource=custom 粘性）平行，见 [会话标题手动重生成](../specs/session-title-manual-regenerate.md)。
 
 `lockQueueItemEdit`、`releaseQueueItemEdit`，`editQueueItem` 的附件/配置/`editorId` 字段，以及 `editUserQuery` 的 `mode`/`planEnabled` 字段属于队列冻结编辑，见 [Composer 编辑态](ui/composer-edit-mode.md)。`editQueueItem` 不要求 `baseRevision`，并发保护由编辑锁承担。
 

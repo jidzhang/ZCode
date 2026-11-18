@@ -85,6 +85,8 @@ packages/desktop/.e2e-cache/
 packages/desktop/.e2e-network-capture/
 # 上游 3.15.1 起同时产生同名文件（无斜杠形式目录+文件通吃）。
 .zcode-runtime
+# 本地 Agent 会话产物（plans 等），只存本机、不提交。
+.zcode/
 
 # feishu-channel 本地凭据（勿提交）
 packages/feishu-channel/.env.local
